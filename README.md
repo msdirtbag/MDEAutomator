@@ -23,13 +23,13 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 - Bulk management of MDE threat indicators (IOCs)
 - Designed for multi-tenant use cases
 - Azure Key Vault secret management + manual `$SPNSECRET` flexibility
-- Ability to deliver key configuration settings not available in Endpoint Security Profiles via PowerShell
+- Ability to deliver key configuration settings via PowerShell that are not available in Endpoint Security Profiles. 
 - Convenient upload of endpoint packages/files to Azure Storage
 
 ## Azure Resources Deployed
 
 - Application Insights
-- Azure Function (Premium)
+- Azure Function
 - App Service Plan (EP1)
 - Azure Storage
 - Azure Key Vault
