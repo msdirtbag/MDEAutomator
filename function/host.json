@@ -1,0 +1,36 @@
+{
+  "version": "2.0",
+  "functionTimeout": "-1",
+  "managedDependency": {
+    "enabled": true
+  },
+  "logging": {
+    "applicationInsights": {
+      "samplingSettings": {
+        "isEnabled": true,
+        "maxTelemetryItemsPerSecond": 20,
+        "evaluationInterval": "01:00:00",
+        "initialSamplingPercentage": 100.0,
+        "samplingPercentageIncreaseTimeout": "00:00:01",
+        "samplingPercentageDecreaseTimeout": "00:00:01",
+        "minSamplingPercentage": 0.1,
+        "maxSamplingPercentage": 100.0,
+        "movingAverageRatio": 1.0
+      },
+      "enableLiveMetrics": true,
+      "enablePerformanceCountersCollection": true,
+      "httpAutoCollectionOptions": {
+        "enableHttpTriggerExtendedInfoCollection": true,
+        "enableW3CDistributedTracing": true,
+        "enableResponseHeaderInjection": true
+      }
+    }
+  },
+  "singleton": {
+    "lockPeriod": "00:00:15",
+    "listenerLockPeriod": "00:01:00",
+    "listenerLockRecoveryPollingInterval": "00:01:00",
+    "lockAcquisitionTimeout": "00:01:00",
+    "lockAcquisitionPollingInterval": "00:00:03"
+  }
+}
