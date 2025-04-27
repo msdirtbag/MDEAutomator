@@ -17,3 +17,8 @@ jobs:
         run: |
           powershell Compress-Archive -Path function\* -DestinationPath payloads\MDEAutomator.zip -Force
 
+      - name: Upload zipped function as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MDEAutomator
+          path: payloads/MDEAutomator.zip
