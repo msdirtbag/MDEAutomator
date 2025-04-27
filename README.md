@@ -1,4 +1,5 @@
-# MDEAutomator
+# MDEAutomator RC1
+
 
 MDEAutomator is a modular, serverless solution for endpoint management and incident response in Microsoft Defender for Endpoint (MDE) environments. It leverages Azure Function Apps and a custom PowerShell module to orchestrate large-scale security operations, automate response actions, and manage threat intelligence at scale.
 
@@ -109,6 +110,15 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
 ## Usage
 
 Below are example usage patterns for the MDEAutomator PowerShell module.
+
+
+### Importing
+```powershell
+# Import MDEAutomator module
+Import-Module -Name ./MDEAutomator -ErrorAction Stop -Force
+
+```
+> **Note:** PowerShell Gallery support is planned & in-progress
 
 ### Authentication Examples
 
