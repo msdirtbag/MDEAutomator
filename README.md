@@ -1,7 +1,7 @@
 # MDEAutomator RC1
 
 
-MDEAutomator is a modular, serverless solution for endpoint management and incident response in Microsoft Defender for Endpoint (MDE) environments. It leverages Azure Function Apps and a custom PowerShell module to orchestrate large-scale security operations, automate response actions, and manage threat intelligence at scale.
+MDEAutomator is a modular, serverless solution for endpoint management and incident response in Microsoft Defender for Endpoint (MDE) environments. It leverages Azure Function Apps and a custom PowerShell module to orchestrate large MDE deployments, automate response actions, and manage threat indicators at scale.
 
 ## Core Components
 
@@ -13,10 +13,6 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
   - **MDEOrchestrator**: Automates bulk management of Live Response commands delivered to endpoints.
   - **MDEProfiles**: Automates bulk delivery of custom PowerShell scripts to configure policy on MDE endpoints.
   - **MDETIManager**: Automates the management of Threat Indicators in MDE.
-
-## Solution Overview
-
-MDEAutomator enables scalable, automated security operations in MDE environments by integrating with Azure Function Apps and providing a flexible PowerShell module for bulk actions, investigation, and threat intelligence management.
 
 ## Key Features
 
