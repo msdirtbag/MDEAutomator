@@ -45,9 +45,10 @@ MDEAutomator Estimated Monthly Azure Cost: $180 USD
 1. Create Entra ID Service Principal (App Registration)
    ![Deploy](./media/createspn.png)
 
+> **Note:** Select Multitenant if you plan to leverage to service multiple tenants.
 
 2. Add Required API permissions to the Service Principal
-   ![Deploy](./media/spnperms.png)
+   ![Perms](./media/spnperms.png)
 
    Required WindowsDefenderATP API Permissions:
 
@@ -66,10 +67,10 @@ MDEAutomator Estimated Monthly Azure Cost: $180 USD
    - Ti.ReadWrite
 
 3. Generate SPN Secret (securely store for post-deployyment configuration)
-   ![Deploy](./media/createspn.png)
+   ![Generate](./media/createspn.png)
 
 4. Enable Unsigned Script Execution & Live Response for Servers and Workstations in MDE Advanced Settings. (See Security Notes Section of this README)
-   ![Deploy](./media/unsigned.png)
+   ![Unsigned](./media/unsigned.png)
 
 ## Deployment
 
@@ -84,6 +85,7 @@ MDEAutomator Estimated Monthly Azure Cost: $180 USD
 2. Add "SPNSECRET" to Azure Key Vault
 
    Steps:
+
    a. Enable Public Access to MDEAutomator's Azure Key Vault
 
    b. Create secret named "SPNSECRET" with the value generated during SPN provisioning
@@ -96,10 +98,9 @@ MDEAutomator Estimated Monthly Azure Cost: $180 USD
 
 ## Integration
 
-- [Calling Azure Functions via HTTP](https://www.azadvertizer.net/azpolicyadvertizer/3e9965dc-cc13-47ca-8259-a4252fd0cf7b.html)
-- [Tests](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/logs-data-export?tabs=portal#create-or-update-a-data-export-rule)
-- [Swagger](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/logs-data-export?tabs=portal#create-or-update-a-data-export-rule)
-- [How to customize and republish](https://learn.microsoft.com/en-us/defender-endpoint/api/raw-data-export-storage)
+- [Calling Azure Functions via HTTP](https://learn.microsoft.com/en-us/azure/azure-functions/functions-bindings-http-webhook-trigger)
+- [Example Requests](https://github.com/msdirtbag/MDEAutomator/tree/main/tests)
+- [How to customize and republish](https://learn.microsoft.com/en-us/azure/azure-functions/run-functions-from-deployment-package#manually-uploading-a-package-to-blob-storage)
 
 
 ## Use cases
