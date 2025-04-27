@@ -3,6 +3,8 @@
 
 MDEAutomator is a modular, serverless solution for endpoint management and incident response in Microsoft Defender for Endpoint (MDE) environments. It leverages Azure Function Apps and a custom PowerShell module to orchestrate large MDE deployments, automate response actions, and manage threat indicators at scale.
 
+![main](./media/main.png)
+
 ## Core Components
 
 - **MDEAutomator PowerShell Module**  
@@ -223,7 +225,7 @@ Invoke-WebRequest -Uri $downloadUrl -OutFile "C:\Temp\log.txt"
 MDEAutomator could be misused by a threat actor and quickly become a weapon of mass destruction.
 
 - Be mindful of secret management. Azure Key Vault with public access disabled is highly recommended.
-- Clone the repo and use an Azure Trusted Signing account to sign all PowerShell in this repo with **your** signing key. There is a signing script included in the repo named `signscripts.ps1` that can assist with this. Once this is done, redeploy the zip with the signed PowerShell to the Azure Function. This allows you to disable unsigned script execution in MDE Advanced Settings with no loss of functionality.
+- Clone the repo and use an Azure Trusted Signing account to sign all PowerShell in this repo with **your** signing key. There is a signing script included in the payloads subfolder in the repo named `signscripts.ps1` that can assist with this. Once this is done, redeploy the zip with the signed PowerShell to the Azure Function. This allows you to disable unsigned script execution in MDE Advanced Settings with no loss of functionality.
 
 [Azure Trusted Signing](https://learn.microsoft.com/en-us/azure/trusted-signing/quickstart)
 
@@ -243,7 +245,8 @@ We welcome contributions! Please open an issue or submit a pull request on [GitH
 
 ---
 
-**Acknowledgements:**  
+## Acknowledgements
+
 Made possible by the BlueVoyant Digital Forensics & Incident Response team. For assistance, contact incident@bluevoyant.com.
 
 ## References
