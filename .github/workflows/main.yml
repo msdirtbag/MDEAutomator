@@ -1,1 +1,19 @@
+name: Zip Function Folder for Publishing
+
+on:
+  push:
+    paths:
+      - 'function/**'
+
+jobs:
+  zip-function:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Zip function folder
+        run: |
+          powershell Compress-Archive -Path function\* -DestinationPath payloads\MDEAutomator.zip -Force
 
