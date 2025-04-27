@@ -38,11 +38,59 @@ MDEAutomator does......
 - Log Analytics Workspace (internal)
 - User Managed Identity
 
+MDEAutomator Estimated Monthly Azure Cost: $180 USD
+
+## Prerequistants
+
+1. Create Entra ID Service Principal (App Registration)
+   ![Deploy](./media/createspn.png)
+
+
+2. Add Required API permissions to the Service Principal
+   ![Deploy](./media/spnperms.png)
+
+   Required WindowsDefenderATP API Permissions:
+
+   - AdvancedQuery.Read.All
+   - Alert.Read.All
+   - File.Read.All
+   - Ip.Read.All
+   - Library.Manage
+   - Machine.CollectForensics
+   - Machine.Isolate
+   - Machine.LiveResponse
+   - Machine.Offboard
+   - Machine.ReadWrite.All
+   - Machine.RestrictExecution
+   - Machine.Scan
+   - Ti.ReadWrite
+
+3. Generate SPN Secret (securely store for post-deployyment configuration)
+   ![Deploy](./media/createspn.png)
+
+4. Enable Unsigned Script Execution & Live Response for Servers and Workstations in MDE Advanced Settings. (See Security Notes Section of this README)
+   ![Deploy](./media/unsigned.png)
+
 ## Deployment
 
 1. Click the "Deploy to Azure" button below.
 
    [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fmsdirtbag%2FMDEAutomator%2Frefs%2Fheads%2Fmain%2FIaC%2FMDEAutomator.json)
+
+   ![Deploy](./media/deployment.png)
+
+   > **Note:** After deployment, you may need to restart the Azure Function for the Function Apps to load properly. 
+
+2. Add "SPNSECRET" to Azure Key Vault
+
+   Steps:
+   a. Enable Public Access to MDEAutomator's Azure Key Vault
+
+   b. Create secret named "SPNSECRET" with the value generated during SPN provisioning
+   ![Secret](./media/secret.png)
+
+   c. Disable Public Access to Azure Key Vault
+
 
 2. Configure your front-end application to call the Function Apps
 
@@ -165,6 +213,25 @@ Invoke-MachineOffboard -token $token -DeviceIds @("<DeviceId>")
 $downloadUrl = Invoke-GetFile -token $token -filePath "C:\Windows\Temp\log.txt" -DeviceIds @("<DeviceId>")
 Invoke-WebRequest -Uri $downloadUrl -OutFile "C:\Temp\log.txt"
 ```
+## Security Notes
+
+MDEAutomator could be misused by a Threat Actor and quickly become a weapon of mass distruction. 
+
+-Be mindful of secret management. Azure Key Vault with Public Access Disabled is highly recommended. 
+
+-Clone Repo & Use Azure Trusted Signing account to sign all of the PowerShell in this repo with YOUR signing key. There is signing script included in the repo named "signscripts.ps1" that can assist with this. Once this done, redeploy the zip with the signed PowerShell to the Azure Function. This allows you to disable Unsigned Script Execution in MDE Advanced Settings with no loss of functionality.
+
+[Azure Trusted Signing](https://learn.microsoft.com/en-us/azure/trusted-signing/quickstart)
+
+> **Note:** At this time Trusted Signing is only available to organizations based in the USA and Canada that have a verifiable history of three years or more.
+
+---
+
+## Disclaimer
+
+This software is provided "as is", without warranty of any kind, express or implied. The author and contributors are not responsible for any damages, losses, or issues arising from the use of this software. Use at your own risk.
+
+---
 
 ## Contributing
 
@@ -183,4 +250,3 @@ Made possible by the BlueVoyant Digital Forensics & Incident Response team. For 
 - [Azure Cloud Shell Deployment Guide](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deploy-cloud-shell)
 - [GitHub Actions Deployment Guide](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deploy-github-actions)
 
-> **Note:** After deployment, you may need to restart Azure Functions for full operation.
