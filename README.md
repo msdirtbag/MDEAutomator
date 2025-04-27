@@ -15,18 +15,17 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 
 ## Solution Overview
 
-MDEAutomator does......
-
+MDEAutomator enables scalable, automated security operations in MDE environments by integrating with Azure Function Apps and providing a flexible PowerShell module for bulk actions, investigation, and threat intelligence management.
 
 ## Key Features
 
 - Portable PowerShell module
 - Bulk automation of MDE response actions and live response actions
 - Bulk management of MDE threat indicators (IOCs)
-- Designed for multi-tenant use-cases
-- Azure Key Vault secret management + manual $SPNSECRET flexibility
+- Designed for multi-tenant use cases
+- Azure Key Vault secret management + manual `$SPNSECRET` flexibility
 - Ability to deliver key configuration settings not available in Endpoint Security Profiles via PowerShell
-- Convient upload of endpoint packages/files to Azure storage
+- Convenient upload of endpoint packages/files to Azure Storage
 
 ## Azure Resources Deployed
 
@@ -38,16 +37,16 @@ MDEAutomator does......
 - Log Analytics Workspace (internal)
 - User Managed Identity
 
-MDEAutomator Estimated Monthly Azure Cost: $180 USD
+MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
 
-## Prerequistants
+## Prerequisites
 
-1. Create Entra ID Service Principal (App Registration)
+1. Create Entra ID Service Principal (App Registration)  
    ![Deploy](./media/createspn.png)
 
-> **Note:** Select Multitenant if you plan to leverage to service multiple tenants.
+   > **Note:** Select Multitenant if you plan to leverage this to service multiple tenants.
 
-2. Add Required API permissions to the Service Principal
+2. Add required API permissions to the Service Principal  
    ![Perms](./media/spnperms.png)
 
    Required WindowsDefenderATP API Permissions:
@@ -66,10 +65,10 @@ MDEAutomator Estimated Monthly Azure Cost: $180 USD
    - Machine.Scan
    - Ti.ReadWrite
 
-3. Generate SPN Secret (securely store for post-deployyment configuration)
+3. Generate SPN Secret (securely store for post-deployment configuration)  
    ![Generate](./media/createspn.png)
 
-4. Enable Unsigned Script Execution & Live Response for Servers and Workstations in MDE Advanced Settings. (See Security Notes Section of this README)
+4. Enable Unsigned Script Execution & Live Response for Servers and Workstations in MDE Advanced Settings. (See Security Notes section of this README)  
    ![Unsigned](./media/unsigned.png)
 
 ## Deployment
@@ -80,21 +79,20 @@ MDEAutomator Estimated Monthly Azure Cost: $180 USD
 
    ![Deploy](./media/deployment.png)
 
-   > **Note:** After deployment, you may need to restart the Azure Function for the Function Apps to load properly. 
+   > **Note:** After deployment, you may need to restart the Azure Function for the Function Apps to load properly.
 
 2. Add "SPNSECRET" to Azure Key Vault
 
    Steps:
 
-   a. Enable Public Access to MDEAutomator's Azure Key Vault
+   a. Enable public access to MDEAutomator's Azure Key Vault
 
-   b. Create secret named "SPNSECRET" with the value generated during SPN provisioning
-   ![Secret](./media/secret.png)
+   b. Create a secret named "SPNSECRET" with the value generated during SPN provisioning  
+      ![Secret](./media/secret.png)
 
-   c. Disable Public Access to Azure Key Vault
+   c. Disable public access to Azure Key Vault
 
-
-2. Configure your front-end application to call the Function Apps
+3. Configure your front-end application to call the Function Apps
 
 ## Integration
 
@@ -102,12 +100,11 @@ MDEAutomator Estimated Monthly Azure Cost: $180 USD
 - [Example Requests](https://github.com/msdirtbag/MDEAutomator/tree/main/tests)
 - [How to customize and republish](https://learn.microsoft.com/en-us/azure/azure-functions/run-functions-from-deployment-package#manually-uploading-a-package-to-blob-storage)
 
-
-## Use cases
+## Use Cases
 
 - Use the PowerShell module locally for bulk automation and investigation tasks.
-- Use the PowerShell module in Azure Functions
-- Use the PowerShell module in Azure Automation
+- Use the PowerShell module in Azure Functions.
+- Use the PowerShell module in Azure Automation.
 
 ## Usage
 
@@ -214,17 +211,17 @@ Invoke-MachineOffboard -token $token -DeviceIds @("<DeviceId>")
 $downloadUrl = Invoke-GetFile -token $token -filePath "C:\Windows\Temp\log.txt" -DeviceIds @("<DeviceId>")
 Invoke-WebRequest -Uri $downloadUrl -OutFile "C:\Temp\log.txt"
 ```
+
 ## Security Notes
 
-MDEAutomator could be misused by a Threat Actor and quickly become a weapon of mass distruction. 
+MDEAutomator could be misused by a threat actor and quickly become a weapon of mass destruction.
 
--Be mindful of secret management. Azure Key Vault with Public Access Disabled is highly recommended. 
-
--Clone Repo & Use Azure Trusted Signing account to sign all of the PowerShell in this repo with YOUR signing key. There is signing script included in the repo named "signscripts.ps1" that can assist with this. Once this done, redeploy the zip with the signed PowerShell to the Azure Function. This allows you to disable Unsigned Script Execution in MDE Advanced Settings with no loss of functionality.
+- Be mindful of secret management. Azure Key Vault with public access disabled is highly recommended.
+- Clone the repo and use an Azure Trusted Signing account to sign all PowerShell in this repo with **your** signing key. There is a signing script included in the repo named `signscripts.ps1` that can assist with this. Once this is done, redeploy the zip with the signed PowerShell to the Azure Function. This allows you to disable unsigned script execution in MDE Advanced Settings with no loss of functionality.
 
 [Azure Trusted Signing](https://learn.microsoft.com/en-us/azure/trusted-signing/quickstart)
 
-> **Note:** At this time Trusted Signing is only available to organizations based in the USA and Canada that have a verifiable history of three years or more.
+> **Note:** At this time, Trusted Signing is only available to organizations based in the USA and Canada that have a verifiable history of three years or more.
 
 ---
 
@@ -250,4 +247,3 @@ Made possible by the BlueVoyant Digital Forensics & Incident Response team. For 
 - [Azure PowerShell Deployment Guide](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deploy-powershell)
 - [Azure Cloud Shell Deployment Guide](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deploy-cloud-shell)
 - [GitHub Actions Deployment Guide](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deploy-github-actions)
-
