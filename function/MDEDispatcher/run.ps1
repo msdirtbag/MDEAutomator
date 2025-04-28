@@ -69,7 +69,25 @@ try {
                     Invoke-MachineOffboard -token $using:token -DeviceIds $deviceId 
                 }
                 "InvokeCollectInvestigationPackage" { 
-                    Invoke-CollectInvestigationPackage -token $using:token -DeviceIds $deviceId -StorageAccountName $using:StorageAccountName
+                    $resultJson = Invoke-CollectInvestigationPackage -token $using:token -DeviceIds $deviceId
+                    $resultObj = $resultJson | ConvertFrom-Json
+
+                    if ($resultObj.Status -eq "Success" -and $resultObj.PackageUri) {
+                        $packageUri = $resultObj.PackageUri
+                        $localPath = Join-Path $env:TEMP "$($deviceId)_investigation.zip"
+                        Invoke-WebRequest -Uri $packageUri -OutFile $localPath
+
+                        # Upload to Azure Blob Storage (requires Az module and storage context)
+                        $storageAccountName = $using:StorageAccountName
+                        $containerName = "packages"
+                        $blobName = Split-Path $localPath -Leaf
+
+                        $ctx = (Get-AzStorageAccount -Name $storageAccountName).Context
+                        Set-AzStorageBlobContent -File $localPath -Container $containerName -Blob $blobName -Context $ctx | Out-Null
+
+                    }
+
+                    $resultObj | ConvertTo-Json -Depth 10
                 }
                 default { 
                     throw "Invalid function specified: $using:Function"

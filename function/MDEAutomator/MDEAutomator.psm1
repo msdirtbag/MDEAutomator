@@ -62,24 +62,37 @@ Function Connect-MDE {
         [Parameter(Mandatory=$false)]
         [string] $TenantId
     )
+    Write-Host "Connecting to MDE (this may take a few minutes)"
+
     if (-not $TenantId) {
         $TenantId = (Get-AzContext).Tenant.Id
     }
-    if (-not (Get-Module -ListAvailable -Name Az.KeyVault)) {
-        Write-Host "Az PowerShell module not found. Installing for first use..."
-        Install-Module -Name Az -Scope CurrentUser -Force -AllowClobber
-    }
-    if (-not (Get-Module -Name Az.KeyVault)) {
-        Import-Module Az -ErrorAction Stop
-    }
-
-    if (-not (Get-AzContext)) {
-        Write-Host "No Azure session detected. Please sign in."
-        Connect-AzAccount -TenantId $TenantId -ErrorAction Stop
-    }
 
     if (-not $SpnSecret) {
-        $SpnSecret = (Get-AzKeyVaultSecret -VaultName $keyVaultName -Name 'SPNSECRET').SecretValue
+        if ($keyVaultName) {
+            if (-not (Get-Module -ListAvailable -Name Az.Accounts)) {
+                Write-Host "Az.Accounts module not found. Installing for first use..."
+                Install-Module -Name Az.Accounts -Scope CurrentUser -Force -AllowClobber
+            }
+            if (-not (Get-Module -ListAvailable -Name Az.KeyVault)) {
+                Write-Host "Az.KeyVault module not found. Installing for first use..."
+                Install-Module -Name Az.KeyVault -Scope CurrentUser -Force -AllowClobber
+            }
+            if (-not (Get-Module -Name Az.Accounts)) {
+                Import-Module Az.Accounts -ErrorAction Stop
+            }
+            if (-not (Get-Module -Name Az.KeyVault)) {
+                Import-Module Az.KeyVault -ErrorAction Stop
+            }
+            if (-not (Get-AzContext)) {
+                Write-Host "No Azure session detected. Please sign in."
+                Connect-AzAccount -TenantId $TenantId -ErrorAction Stop
+            }
+            $SpnSecret = (Get-AzKeyVaultSecret -VaultName $keyVaultName -Name 'SPNSECRET').SecretValue
+        } else {
+            Write-Error "SpnSecret must be provided if keyVaultName is not specified."
+            throw "SpnSecret must be provided if keyVaultName is not specified."
+        }
     }
 
     if (-not $SpnSecret) {
@@ -252,7 +265,7 @@ function Invoke-FullDiskScan {
             }
         }
     }
-    return $responses | ConvertTo-Json -Depth 10
+    return $responses
 }
 
 function Invoke-UploadLR {
@@ -458,9 +471,7 @@ function Invoke-CollectInvestigationPackage {
         [Parameter(Mandatory = $true)]
         [string]$token,
         [Parameter(Mandatory = $true)]
-        [string[]]$DeviceIds,
-        [Parameter(Mandatory = $true)]
-        [string]$StorageAccountName
+        [string[]]$DeviceIds
     )
     
     Write-Host "Starting investigation package collection for ${DeviceIds.Count} devices"
@@ -484,6 +495,11 @@ function Invoke-CollectInvestigationPackage {
             $actionId = $response.id
             if ([string]::IsNullOrEmpty($actionId)) {
                 Write-Host "No machine action ID received for DeviceId: $DeviceId. Marking as failed and continuing."
+                $responses += [PSCustomObject]@{
+                    DeviceId = $DeviceId
+                    Status = "Failed"
+                    Error = "No action ID received"
+                }
                 continue
             }
             Start-Sleep -Seconds 5
@@ -491,49 +507,29 @@ function Invoke-CollectInvestigationPackage {
 
             if ($statusSucceeded) {
                 Write-Host "Package collection succeeded for DeviceId: $DeviceId"
+                Start-Sleep -Seconds 5
                 
                 $packageUriResponse = Invoke-WithRetry -ScriptBlock {
                     param($uri, $headers)
                     Invoke-RestMethod -Uri $uri -Method Get -Headers $headers -ErrorAction Stop
-                } -ScriptBlockArgs @("https://api.securitycenter.microsoft.com/api/machineactions/$machineActionId/getPackageUri", $headers)
+                } -ScriptBlockArgs @("https://api.securitycenter.microsoft.com/api/machineactions/$actionId/getPackageUri", $headers)
 
                 if ($packageUriResponse.value) {
                     $packageUri = $packageUriResponse.value
                     Write-Host "Package download URL obtained"
-
-                    try {
-                        $packageContent = Invoke-WebRequest -Uri $packageUri -Headers $headers -Method Get -UseBasicParsing
-                        Write-Host "Package downloaded successfully"
-                        
-                        $timestamp = Get-Date -Format "yyyyMMddHHmmss"
-                        $blobName = "$DeviceId-$timestamp.zip"
-                        $localPath = "$env:TEMP\$blobName"
-                        
-                        [System.IO.File]::WriteAllBytes($localPath, $packageContent.Content)
-                        
-                        $ctx = New-AzStorageContext -StorageAccountName $StorageAccountName -UseConnectedAccount
-                        $containerName = "packages"
-                        Set-AzStorageBlobContent -File $localPath -Container $containerName -Blob $blobName -Context $ctx -Force
-                        
-                        Write-Host "Package uploaded to blob storage: $blobName"
-                        Remove-Item $localPath
-                        
-                        $responses += [PSCustomObject]@{
-                            DeviceId = $DeviceId
-                            Status = "Success"
-                            ActionId = $machineActionId
-                            BlobName = $blobName
-                            ContainerName = $containerName
-                        }
+                    $responses += [PSCustomObject]@{
+                        DeviceId = $DeviceId
+                        Status = "Success"
+                        PackageUri = $packageUri
+                        ActionId = $actionId
                     }
-                    catch {
-                        Write-Error "Failed to process package: $($_.Exception.Message)"
-                        $responses += [PSCustomObject]@{
-                            DeviceId = $DeviceId
-                            Status = "Failed"
-                            Error = "Package processing failed: $($_.Exception.Message)"
-                            ActionId = $machineActionId
-                        }
+                } else {
+                    Write-Error "No package URI returned for DeviceId: $DeviceId"
+                    $responses += [PSCustomObject]@{
+                        DeviceId = $DeviceId
+                        Status = "Failed"
+                        Error = "No package URI returned"
+                        ActionId = $actionId
                     }
                 }
             } else {
@@ -542,7 +538,7 @@ function Invoke-CollectInvestigationPackage {
                     DeviceId = $DeviceId
                     Status = "Failed"
                     Error = "Package collection failed or timed out"
-                    ActionId = $machineActionId
+                    ActionId = $actionId
                 }
             }
         } catch {
@@ -555,7 +551,7 @@ function Invoke-CollectInvestigationPackage {
         }
     }
     Write-Host "Collection completed. Total responses: $($responses.Count)"
-    return $responses | ConvertTo-Json -Depth 10
+    return $responses
 }
 
 function Invoke-LRScript {
@@ -574,10 +570,10 @@ function Invoke-LRScript {
         [string] $token
     )
 
-    $results = @()
+    $responses = @()
 
     foreach ($DeviceId in $DeviceIds) {
-        Write-Host "Starting execution for DeviceId: $DeviceId"
+        Write-Host "Starting LRScript execution on DeviceId: $DeviceId"
 
         try {
             $body = @{
@@ -622,41 +618,39 @@ function Invoke-LRScript {
                 $machineActionId = $response.id
                 $statusSucceeded = Get-MachineActionStatus -machineActionId $machineActionId -token $token
                 if (-not $statusSucceeded) {
-                    $results += @{
-                        Success = $false
+                    $responses += [PSCustomObject]@{
                         DeviceId = $DeviceId
-                        MachineActionId = $machineActionId
+                        Status = "Failed"
+                        Error = "Script execution failed or timed out"
+                        ActionId = $machineActionId
                     }
                     continue
                 }
-                $results += @{
-                    Success = $true
+                $responses += [PSCustomObject]@{
                     DeviceId = $DeviceId
-                    MachineActionId = $machineActionId
+                    Status = "Success"
+                    ActionId = $machineActionId
                 }
                 continue
             }
 
-            $results += @{
-                Success = $false
+            $responses += [PSCustomObject]@{
                 DeviceId = $DeviceId
-                Message = "Unexpected response status: $($response.status)"
+                Status = "Failed"
+                Error = "Unexpected response status: $($response.status)"
             }
         }
         catch {
             Write-Error "Error processing DeviceId $DeviceId : $($_.Exception.Message)"
-            $results += @{
-                Success = $false
+            $responses += [PSCustomObject]@{
                 DeviceId = $DeviceId
-                Exception = @{
-                    Type = $_.Exception.GetType().FullName
-                    Message = $_.Exception.Message
-                }
+                Status = "Failed"
+                Error = $_.Exception.Message
             }
         }
     }
-
-    return $results | ConvertTo-Json -Depth 10
+    Write-Host "Live Response script execution completed. Total responses: $($responses.Count)"
+    return $responses
 }
 
 
@@ -740,19 +734,29 @@ Function Get-LiveResponseOutput {
             $scriptOutput = $jsonResponse.script_output
             $scriptErrors = $jsonResponse.script_errors
             Remove-Item -Path $tempFilePath
-            return @{
-                ScriptName = $scriptName
-                ExitCode = $exitCode
+            return [PSCustomObject]@{
+                ScriptName   = $scriptName
+                ExitCode     = $exitCode
                 ScriptOutput = $scriptOutput
                 ScriptErrors = $scriptErrors
+                Status       = "Success"
+                MachineActionId = $machineActionId
             }
         } else {
             Write-Output "Failed to retrieve the download link."
-            return $false
+            return [PSCustomObject]@{
+                Status = "Failed"
+                MachineActionId = $machineActionId
+                Error = "Failed to retrieve the download link."
+            }
         }
     } catch {
         Write-Output "An error occurred: $_"
-        return $false
+        return [PSCustomObject]@{
+            Status = "Failed"
+            MachineActionId = $machineActionId
+            Error = $_.Exception.Message
+        }
     }
 }
 
@@ -773,11 +777,11 @@ function Get-Machines {
     $headers = @{
         "Authorization" = "Bearer $token"
     }
-    $allResults = @()
+    $responses = @()
     try {
         do {
             $response = Invoke-RestMethod -Uri $uri -Method Get -Headers $headers -ErrorAction Stop
-            $allResults += $response.value | ForEach-Object {
+            $responses += $response.value | ForEach-Object {
                 [PSCustomObject]@{
                     Id = $_.id
                     MergedIntoMachineId = $_.mergedIntoMachineId
@@ -815,7 +819,7 @@ function Get-Machines {
             }
             $uri = $response.'@odata.nextLink'
         } while ($uri)
-        return $allResults | ConvertTo-Json -Depth 10
+        return $responses
     } catch {
         Write-Error "Failed to retrieve machines: $_"
     }
@@ -860,7 +864,7 @@ function Get-Actions {
         }
         while ($response.'@odata.nextLink') {
             $response = Invoke-RestMethod -Uri $response.'@odata.nextLink' -Method Get -Headers $headers -ErrorAction Stop
-            $allResults += $response.value | ForEach-Object {
+            $responses += $response.value | ForEach-Object {
                 [PSCustomObject]@{
                     Id = $_.id
                     Type = $_.type
@@ -885,7 +889,7 @@ function Get-Actions {
                 }
             }
         }
-        return $allResults | ConvertTo-Json -Depth 10
+        return $responses
     } catch {
         Write-Error "Failed to retrieve machine actions: $_"
     }
@@ -943,7 +947,7 @@ function Undo-Actions {
         }
     }
     Write-Host "Undo-Actions completed. Total processed: $($responses.Count)"
-    return $responses | ConvertTo-Json -Depth 10
+    return $responses
 }
 
 function Invoke-MachineIsolation {
@@ -1015,7 +1019,7 @@ function Invoke-MachineIsolation {
             }
         }
     }
-    return $responses | ConvertTo-Json -Depth 10
+    return $responses
 }
 
 function Undo-MachineIsolation {
@@ -1087,7 +1091,7 @@ function Undo-MachineIsolation {
             }
         }
     }
-    return $responses | ConvertTo-Json -Depth 10
+    return $responses 
 }
 
 
@@ -1160,7 +1164,7 @@ function Invoke-RestrictAppExecution {
             }
         }
     }
-    return $responses | ConvertTo-Json -Depth 10
+    return $responses
 }
 
 function Undo-RestrictAppExecution {
@@ -1232,7 +1236,7 @@ function Undo-RestrictAppExecution {
             }
         }
     }
-    return $responses | ConvertTo-Json -Depth 10
+    return $responses
 }
 
 function Invoke-TiFile {
@@ -1310,7 +1314,7 @@ function Invoke-TiFile {
         }
     }
 
-    return $responses | ConvertTo-Json -Depth 10
+    return $responses
 }
 
 function Undo-TiFile {
@@ -1397,7 +1401,7 @@ function Undo-TiFile {
         }
     }
 
-    return $responses | ConvertTo-Json -Depth 10
+    return $responses 
 }
 
 function Invoke-TiIP {
@@ -1448,7 +1452,7 @@ function Invoke-TiIP {
             }
         }
     }
-    return $responses | ConvertTo-Json -Depth 10
+    return $responses
 }
 
 function Undo-TiURL {
@@ -1495,7 +1499,7 @@ function Undo-TiURL {
             }
         }
     }
-    return $responses | ConvertTo-Json -Depth 10
+    return $responses
 }
 
 function Invoke-TiURL {
@@ -1538,7 +1542,7 @@ function Invoke-TiURL {
             }
         }
     }
-    return $responses | ConvertTo-Json -Depth 10
+    return $responses
 }
 
 function Undo-TiIP {
@@ -1585,7 +1589,7 @@ function Undo-TiIP {
             }
         }
     }
-    return $responses | ConvertTo-Json -Depth 10
+    return $responses
 }
 function Invoke-TiCert {
     param (
@@ -1630,7 +1634,7 @@ function Invoke-TiCert {
         }
     }
 
-    return $responses | ConvertTo-Json -Depth 10
+    return $responses
 }
 
 function Undo-TiCert {
@@ -1680,7 +1684,7 @@ function Undo-TiCert {
         }
     }
 
-    return $responses | ConvertTo-Json -Depth 10
+    return $responses
 }
 
 function Invoke-MachineOffboard {
@@ -1772,7 +1776,7 @@ function Invoke-MachineOffboard {
         }
     }
 
-    return $responses | ConvertTo-Json -Depth 10
+    return $responses
 }
 
 # Export the functions
