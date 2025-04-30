@@ -962,6 +962,7 @@ function Invoke-MachineIsolation {
     }
     $body = @{
         "Comment" = "MDEAutomator"
+        "IsolationType" = "Selective"
     }
     $responses = @()
 
@@ -1085,6 +1086,151 @@ function Undo-MachineIsolation {
             }
         } catch {
             Write-Error "Failed to unisolate DeviceId: $DeviceId $_"
+            $responses += [PSCustomObject]@{
+                DeviceId = $DeviceId
+                Error = $_.Exception.Message
+            }
+        }
+    }
+    return $responses 
+}
+
+function Invoke-ContainDevice {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$token,
+        [Parameter(Mandatory = $true)]
+        [string[]]$DeviceIds
+    )
+    $headers = @{
+        "Authorization" = "Bearer $token"
+    }
+    $body = @{
+        "Comment" = "MDEAutomator"
+        "IsolationType" = "UnManagedDevice"
+    }
+    $responses = @()
+
+    foreach ($DeviceId in $DeviceIds) {
+        $uri = "https://api.securitycenter.microsoft.com/api/machines/$DeviceId/isolate"
+        try {
+            $response = Invoke-WithRetry -ScriptBlock {
+                Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body ($body | ConvertTo-Json) -ContentType "application/json" -ErrorAction Stop
+            }
+
+            $actionId = $response.id
+            if ([string]::IsNullOrEmpty($response.id)) {
+                Write-Host "No machine action ID received for DeviceId: $DeviceId. Marking as failed and continuing."
+                continue
+            }
+            Start-Sleep -Seconds 5
+            $statusSucceeded = Get-MachineActionStatus -machineActionId $actionId -token $token
+
+            if ($statusSucceeded) {
+                Write-Host "Successfully contained DeviceId: $DeviceId"
+            } else {
+                Write-Error "Failed to contain DeviceId: $DeviceId"
+            }
+
+            $responses += [PSCustomObject]@{
+                DeviceId = $DeviceId
+                Response = [PSCustomObject]@{
+                    Id = $response.id
+                    Type = $response.type
+                    Title = $response.title
+                    Requestor = $response.requestor
+                    RequestorComment = $response.requestorComment
+                    Status = if ($statusSucceeded) { "Succeeded" } else { "Failed" }
+                    MachineId = $response.machineId
+                    ComputerDnsName = $response.computerDnsName
+                    CreationDateTimeUtc = $response.creationDateTimeUtc
+                    LastUpdateDateTimeUtc = $response.lastUpdateDateTimeUtc
+                    CancellationRequestor = $response.cancellationRequestor
+                    CancellationComment = $response.cancellationComment
+                    CancellationDateTimeUtc = $response.cancellationDateTimeUtc
+                    ErrorHResult = $response.errorHResult
+                    Scope = $response.scope
+                    ExternalId = $response.externalId
+                    RequestSource = $response.requestSource
+                    RelatedFileInfo = $response.relatedFileInfo
+                    Commands = $response.commands
+                    TroubleshootInfo = $response.troubleshootInfo
+                }
+            }
+        } catch {
+            Write-Error "Failed to initiate containment for DeviceId: $DeviceId $_"
+            $responses += [PSCustomObject]@{
+                DeviceId = $DeviceId
+                Error = $_.Exception.Message
+            }
+        }
+    }
+    return $responses
+}
+
+function Undo-ContainDevice {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$token,
+        [Parameter(Mandatory = $true)]
+        [string[]]$DeviceIds
+    )
+    $headers = @{
+        "Authorization" = "Bearer $token"
+    }
+    $body = @{
+        "Comment" = "MDEAutomator"
+    }
+    $responses = @()
+
+    foreach ($DeviceId in $DeviceIds) {
+        $uri = "https://api.securitycenter.microsoft.com/api/machines/$DeviceId/unisolate"
+        try {
+            $response = Invoke-WithRetry -ScriptBlock {
+                Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body ($body | ConvertTo-Json) -ContentType "application/json" -ErrorAction Stop
+            }
+
+            $actionId = $response.id
+            if ([string]::IsNullOrEmpty($response.id)) {
+                Write-Host "No machine action ID received for DeviceId: $DeviceId. Marking as failed and continuing."
+                continue
+            }
+            Start-Sleep -Seconds 5
+            $statusSucceeded = Get-MachineActionStatus -machineActionId $actionId -token $token
+
+            if ($statusSucceeded) {
+                Write-Host "Successfully uncontained DeviceId: $DeviceId"
+            } else {
+                Write-Error "Failed to uncontain DeviceId: $DeviceId"
+            }
+
+            $responses += [PSCustomObject]@{
+                DeviceId = $DeviceId
+                Response = [PSCustomObject]@{
+                    Id = $response.id
+                    Type = $response.type
+                    Title = $response.title
+                    Requestor = $response.requestor
+                    RequestorComment = $response.requestorComment
+                    Status = if ($statusSucceeded) { "Succeeded" } else { "Failed" }
+                    MachineId = $response.machineId
+                    ComputerDnsName = $response.computerDnsName
+                    CreationDateTimeUtc = $response.creationDateTimeUtc
+                    LastUpdateDateTimeUtc = $response.lastUpdateDateTimeUtc
+                    CancellationRequestor = $response.cancellationRequestor
+                    CancellationComment = $response.cancellationComment
+                    CancellationDateTimeUtc = $response.cancellationDateTimeUtc
+                    ErrorHResult = $response.errorHResult
+                    Scope = $response.scope
+                    ExternalId = $response.externalId
+                    RequestSource = $response.requestSource
+                    RelatedFileInfo = $response.relatedFileInfo
+                    Commands = $response.commands
+                    TroubleshootInfo = $response.troubleshootInfo
+                }
+            }
+        } catch {
+            Write-Error "Failed to uncontain DeviceId: $DeviceId $_"
             $responses += [PSCustomObject]@{
                 DeviceId = $DeviceId
                 Error = $_.Exception.Message
@@ -1780,7 +1926,7 @@ function Invoke-MachineOffboard {
 }
 
 # Export the functions
-Export-ModuleMember -Function Connect-MDE, Get-AccessToken, Get-Machines, Get-Actions, Undo-Actions, Invoke-MachineIsolation, Undo-MachineIsolation, 
+Export-ModuleMember -Function Connect-MDE, Get-AccessToken, Get-Machines, Get-Actions, Undo-Actions, Invoke-MachineIsolation, Undo-MachineIsolation, Invoke-ContainDevice, Undo-ContainDevice,
     Invoke-RestrictAppExecution, Undo-RestrictAppExecution, Invoke-TiFile, Undo-TiFile, Invoke-TiCert, Undo-TiCert, Invoke-TiIP, Undo-TiIP, 
     Invoke-TiURL, Undo-TiURL, Invoke-MachineOffboard, Get-RequestParam, Get-SecretFromKeyVault, 
     Invoke-WithRetry, Invoke-UploadLR, Invoke-PutFile, Invoke-GetFile, Invoke-CollectInvestigationPackage, Invoke-LRScript, 

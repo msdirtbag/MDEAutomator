@@ -34,6 +34,7 @@
 
         # Response Actions
         'Invoke-MachineIsolation', 'Undo-MachineIsolation'
+        'Invoke-ContainDevice', 'Undo-ContainDevice'
         'Invoke-RestrictAppExecution', 'Undo-RestrictAppExecution'
         'Invoke-MachineOffboard'
         'Invoke-FullDiskScan'
