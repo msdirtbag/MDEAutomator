@@ -26,30 +26,6 @@ resource managedidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2024-
   location: location
 }
 
-//Log Analytics Workspace
-resource laworkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
-  name: 'log-mdeautomator-${environmentid}'
-  location: location
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${managedidentity.id}': {}
-    }
-  }
-  properties: {
-    features: {
-      disableLocalAuth: true
-      enableDataExport: true
-    }
-    publicNetworkAccessForIngestion: 'Disabled'
-    publicNetworkAccessForQuery: 'Enabled'
-    retentionInDays: 90
-    sku: {
-      name: 'PerGB2018'
-    }
-  }
-}
-
 //Key Vault
 resource keyvault 'Microsoft.KeyVault/vaults@2024-11-01' = {
   name: 'kv-mdeauto-${environmentid}'
@@ -212,9 +188,7 @@ resource appinsights01 'Microsoft.Insights/components@2020-02-02' = {
   kind: 'web'
   properties: {
     Application_Type: 'web'
-    WorkspaceResourceId: laworkspace.id
     RetentionInDays: 30
-    IngestionMode: 'LogAnalytics'
   }
 }
 

@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.35.1.17967",
-      "templateHash": "7970390184036398358"
+      "templateHash": "18315417161078529371"
     }
   },
   "parameters": {
@@ -34,33 +34,6 @@
       "apiVersion": "2024-11-30",
       "name": "[format('umi-mdeautomator-{0}', variables('environmentid'))]",
       "location": "[variables('location')]"
-    },
-    {
-      "type": "Microsoft.OperationalInsights/workspaces",
-      "apiVersion": "2023-09-01",
-      "name": "[format('log-mdeautomator-{0}', variables('environmentid'))]",
-      "location": "[variables('location')]",
-      "identity": {
-        "type": "UserAssigned",
-        "userAssignedIdentities": {
-          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid'))))]": {}
-        }
-      },
-      "properties": {
-        "features": {
-          "disableLocalAuth": true,
-          "enableDataExport": true
-        },
-        "publicNetworkAccessForIngestion": "Disabled",
-        "publicNetworkAccessForQuery": "Enabled",
-        "retentionInDays": 90,
-        "sku": {
-          "name": "PerGB2018"
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid')))]"
-      ]
     },
     {
       "type": "Microsoft.KeyVault/vaults",
@@ -248,13 +221,8 @@
       "kind": "web",
       "properties": {
         "Application_Type": "web",
-        "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid')))]",
-        "RetentionInDays": 30,
-        "IngestionMode": "LogAnalytics"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid')))]"
-      ]
+        "RetentionInDays": 30
+      }
     },
     {
       "type": "Microsoft.Web/serverfarms",
