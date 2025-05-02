@@ -52,7 +52,7 @@ resource laworkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
 
 //Key Vault
 resource keyvault 'Microsoft.KeyVault/vaults@2024-11-01' = {
-  name: 'kv-mdeautomator-${environmentid}'
+  name: 'kv-mdeauto-${environmentid}'
   location: location
   properties: {
     enableSoftDelete: true

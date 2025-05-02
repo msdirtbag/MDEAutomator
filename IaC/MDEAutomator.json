@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.35.1.17967",
-      "templateHash": "12240536010047679371"
+      "templateHash": "7970390184036398358"
     }
   },
   "parameters": {
@@ -65,7 +65,7 @@
     {
       "type": "Microsoft.KeyVault/vaults",
       "apiVersion": "2024-11-01",
-      "name": "[format('kv-mdeautomator-{0}', variables('environmentid'))]",
+      "name": "[format('kv-mdeauto-{0}', variables('environmentid'))]",
       "location": "[variables('location')]",
       "properties": {
         "enableSoftDelete": true,
@@ -352,7 +352,7 @@
             },
             {
               "name": "AZURE_KEYVAULT",
-              "value": "[format('kv-mdeautomator-{0}', variables('environmentid'))]"
+              "value": "[format('kv-mdeauto-{0}', variables('environmentid'))]"
             },
             {
               "name": "SUBSCRIPTION_ID",
@@ -376,7 +376,7 @@
       "dependsOn": [
         "[resourceId('Microsoft.Insights/components', format('appi-mdeauto{0}', variables('environmentid')))]",
         "[resourceId('Microsoft.Web/serverfarms', format('asp-mdeautomator-{0}', variables('environmentid')))]",
-        "[resourceId('Microsoft.KeyVault/vaults', format('kv-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.KeyVault/vaults', format('kv-mdeauto-{0}', variables('environmentid')))]",
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid')))]",
         "[resourceId('Microsoft.Storage/storageAccounts', format('stfunc{0}', variables('environmentid')))]",
         "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]"
