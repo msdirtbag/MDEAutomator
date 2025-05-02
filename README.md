@@ -33,7 +33,6 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 - App Service Plan (EP1)
 - Azure Storage
 - Azure Key Vault
-- Log Analytics Workspace (internal)
 - User Managed Identity
 
 MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
