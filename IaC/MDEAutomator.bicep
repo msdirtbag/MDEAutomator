@@ -8,10 +8,14 @@ targetScope = 'resourceGroup'
 //Variables
 var blobrole = '/providers/Microsoft.Authorization/roleDefinitions/ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var kvrole = '/providers/Microsoft.Authorization/roleDefinitions/4633458b-17de-408a-b874-0445c86b69e6'
+var location = resourceGroup().location
+var environmentid = uniqueString(subscription().id, resourceGroup().id, tenant().tenantId, env)
+
 
 //Parameters
-param location string
-param environmentid string
+@description('Chose a variable for the environment. Example: dev, test, soc')
+param env string
+@description('Specify the ClientID of the Service Principal that will be used')
 param spnid string
 
 //Resources

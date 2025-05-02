@@ -7,7 +7,7 @@
     # Module Info
     Author            = 'msdirtbag'
     Copyright         = '(c) All Rights Reserved.'
-    Description       = 'https://github.com/msdirtbag/MDEAutomator'
+    Description       = 'Microsoft Defender for Endpoint Automation Module'
     PowerShellVersion = '7.4'
 
     # Export Settings
@@ -36,7 +36,6 @@
         'Invoke-MachineIsolation', 'Undo-MachineIsolation'
         'Invoke-ContainDevice', 'Undo-ContainDevice'
         'Invoke-RestrictAppExecution', 'Undo-RestrictAppExecution'
-        'Invoke-MachineOffboard'
         'Invoke-FullDiskScan'
         'Invoke-CollectInvestigationPackage'
 

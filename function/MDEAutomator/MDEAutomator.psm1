@@ -24,6 +24,7 @@ function Get-SecretFromKeyVault {
 
     return $secretValue
 }
+
 function Get-AccessToken {
     param(
         [Parameter(Mandatory = $true)]
@@ -51,6 +52,7 @@ function Get-AccessToken {
         exit 1
     }
 }
+
 Function Connect-MDE {
     param (
         [Parameter(Mandatory=$false)]
@@ -170,7 +172,7 @@ function Invoke-WithRetry {
                 Write-Warning "Rate limit exceeded. Waiting $currentDelaySeconds seconds before retrying..."
             } elseif ($statusCode -ge 400 -and $statusCode -lt 500) {
                 if ($statusCode -ne 429) {
-                    Write-Warning "MDE says endpoint is unavailable. Marking as skipped."
+                    Write-Warning "MDE says endpoint is unavailable"
                     return [PSCustomObject]@{
                         Status = "Skipped"
                         StatusCode = $statusCode
@@ -418,8 +420,9 @@ function Invoke-GetFile {
     $headers = @{
         "Authorization" = "Bearer $token"
     }
+    $responses = @()
     foreach ($DeviceId in $DeviceIds) {
-        Write-Host "[DEBUG] Starting GetFile on DeviceId: $DeviceId"
+        Write-Host "Starting GetFile on DeviceId: $DeviceId"
         $body = @{
             "Commands" = @(
                 @{
@@ -432,20 +435,19 @@ function Invoke-GetFile {
             "Comment" = "MDEAutomator"
         } | ConvertTo-Json -Depth 10
 
-        Write-Host "[DEBUG] Request URI: https://api.securitycenter.microsoft.com/api/machines/$DeviceId/runliveresponse"
-        Write-Host "[DEBUG] Request Headers: $($headers | ConvertTo-Json -Depth 5)"
-        Write-Host "[DEBUG] Request Body: $body"
-
         try {
             $response = Invoke-WithRetry -ScriptBlock {
                 Invoke-RestMethod -Uri "https://api.securitycenter.microsoft.com/api/machines/$DeviceId/runliveresponse" -Method Post -Headers $headers -Body $body -ContentType "application/json" -ErrorAction Stop
             }
 
-            Write-Host "[DEBUG] Response: $($response | ConvertTo-Json -Depth 10)"
-
             $actionId = $response.id
             if ([string]::IsNullOrEmpty($actionId)) {
-                Write-Host "[DEBUG] No machine action ID received for DeviceId: $DeviceId. Marking as failed and continuing."
+                Write-Host "No machine action ID received for DeviceId: $DeviceId. Marking as failed and continuing."
+                $responses += [PSCustomObject]@{
+                    DeviceId = $DeviceId
+                    Status = "Failed"
+                    Error = "No machine action ID received"
+                }
                 continue
             }
             Start-Sleep -Seconds 5
@@ -453,17 +455,31 @@ function Invoke-GetFile {
 
             if ($statusSucceeded) {
                 $downloadUri = "https://api.securitycenter.microsoft.com/api/machineactions/$actionId/GetLiveResponseResultDownloadLink(index=0)"
-                Write-Host "[DEBUG] Download URI: $downloadUri"
-                return $downloadUri
+                $responses += [PSCustomObject]@{
+                    DeviceId = $DeviceId
+                    Status = "Success"
+                    DownloadUri = $downloadUri
+                    ActionId = $actionId
+                }
             } else {
-                Write-Error "[DEBUG] Action failed or timed out for DeviceId: $DeviceId"
-                return $null
+                Write-Error "Action failed or timed out for DeviceId: $DeviceId"
+                $responses += [PSCustomObject]@{
+                    DeviceId = $DeviceId
+                    Status = "Failed"
+                    Error = "Action failed or timed out"
+                    ActionId = $actionId
+                }
             }
         } catch {
-            Write-Error "[DEBUG] Exception occurred while processing DeviceId: $DeviceId. Error: $($_.Exception.Message)"
-            return $null
+            Write-Error "Exception occurred while processing DeviceId: $DeviceId. Error: $($_.Exception.Message)"
+            $responses += [PSCustomObject]@{
+                DeviceId = $DeviceId
+                Status = "Failed"
+                Error = $_.Exception.Message
+            }
         }
     }
+    return $responses
 }
 
 function Invoke-CollectInvestigationPackage {
@@ -474,7 +490,6 @@ function Invoke-CollectInvestigationPackage {
         [string[]]$DeviceIds
     )
     
-    Write-Host "Starting investigation package collection for ${DeviceIds.Count} devices"
     $headers = @{
         "Authorization" = "Bearer $token"
     }
@@ -482,7 +497,6 @@ function Invoke-CollectInvestigationPackage {
 
     foreach ($DeviceId in $DeviceIds) {
         try {
-            Write-Host "Processing DeviceId: $DeviceId"
             $body = @{
                 "Comment" = "MDEAutomator"
             }
@@ -516,7 +530,6 @@ function Invoke-CollectInvestigationPackage {
 
                 if ($packageUriResponse.value) {
                     $packageUri = $packageUriResponse.value
-                    Write-Host "Package download URL obtained"
                     $responses += [PSCustomObject]@{
                         DeviceId = $DeviceId
                         Status = "Success"
@@ -550,7 +563,6 @@ function Invoke-CollectInvestigationPackage {
             }
         }
     }
-    Write-Host "Collection completed. Total responses: $($responses.Count)"
     return $responses
 }
 
@@ -612,7 +624,7 @@ function Invoke-LRScript {
             } -ScriptBlockArgs @($DeviceId, $token, $body) -AllowNullResponse $true
 
             if ($response.status -eq "Pending") {
-                Write-Host "Automating device: $($response.id)"
+                Write-Host "Running Live Response script on DeviceId: $($response.id)"
                 Start-Sleep -Seconds 5
 
                 $machineActionId = $response.id
@@ -653,7 +665,6 @@ function Invoke-LRScript {
     return $responses
 }
 
-
 Function Get-MachineActionStatus {
     param (
         [Parameter(Mandatory=$true)]
@@ -667,7 +678,7 @@ Function Get-MachineActionStatus {
         "Authorization" = "Bearer $token"
     }
 
-    $timeout = New-TimeSpan -Minutes 10
+    $timeout = New-TimeSpan -Minutes 11
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
     while ($stopwatch.Elapsed -lt $timeout) {
@@ -864,7 +875,7 @@ function Get-Actions {
         }
         while ($response.'@odata.nextLink') {
             $response = Invoke-RestMethod -Uri $response.'@odata.nextLink' -Method Get -Headers $headers -ErrorAction Stop
-            $responses += $response.value | ForEach-Object {
+            $allResults += $response.value | ForEach-Object {
                 [PSCustomObject]@{
                     Id = $_.id
                     Type = $_.type
@@ -889,7 +900,7 @@ function Get-Actions {
                 }
             }
         }
-        return $responses
+        return $allResults
     } catch {
         Write-Error "Failed to retrieve machine actions: $_"
     }
@@ -900,8 +911,7 @@ function Undo-Actions {
         [string]$token
     )
 
-    $allActionsJson = Get-Actions -token $token
-    $allActions = $allActionsJson | ConvertFrom-Json
+    $allActions = Get-Actions -token $token
     $pendingActions = $allActions | Where-Object { $_.Status -eq "Pending" }
 
     Write-Host "Found $($pendingActions.Count) pending actions to cancel."
@@ -918,11 +928,8 @@ function Undo-Actions {
             "Comment" = "MDEAutomator"
         } | ConvertTo-Json
 
-        Write-Host "Canceling action $actionId"
-
         try {
-            $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body -ErrorAction Stop
-            Write-Host "Cancel response: $($response | ConvertTo-Json -Depth 10)"
+            $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body
             $responses += [PSCustomObject]@{
                 ActionId = $actionId
                 Status = "Canceled"
@@ -1341,7 +1348,7 @@ function Undo-RestrictAppExecution {
                 continue
             }
             Start-Sleep -Seconds 5
-            $statusSucceeded = Get-MachineActionStatus -machineActionId $actionId -token $tokenn
+            $statusSucceeded = Get-MachineActionStatus -machineActionId $actionId -token $token
 
             if ($statusSucceeded) {
                 Write-Host "Successfully unrestricted code execution on DeviceId: $DeviceId"
@@ -1833,101 +1840,9 @@ function Undo-TiCert {
     return $responses
 }
 
-function Invoke-MachineOffboard {
-    param (
-        [Parameter(Mandatory = $true)]
-        [string]$token,
-        [Parameter(Mandatory = $true)]
-        [string[]]$DeviceIds
-    )
-    $headers = @{
-        "Authorization" = "Bearer $token"
-    }
-    $body = @{
-        "Comment" = "MDEAutomator"
-    }
-    $responses = @()
-
-    foreach ($DeviceId in $DeviceIds) {
-        $uri = "https://api.securitycenter.microsoft.com/api/machines/$DeviceId/offboard"
-        try {
-            Write-Host "Attempting to offboard DeviceId: $DeviceId"
-
-            $response = $null
-            try {
-                $response = Invoke-WithRetry -ScriptBlock {
-                    Invoke-RestMethod -Uri $using:uri -Method Post -Headers $using:headers -Body ($using:body | ConvertTo-Json) -ContentType "application/json" -ErrorAction Stop
-                }
-            }
-            catch {
-                if ($_.Exception.Response.StatusCode -eq 400 -and 
-                    $_.Exception.Response.Content -match '"code":\s*"ActiveRequestAlreadyExists"') {
-                    Write-Host "Action already in progress for DeviceId: $DeviceId"
-                    $responses += [PSCustomObject]@{
-                        DeviceId = $DeviceId
-                        Response = [PSCustomObject]@{
-                            Status = "InProgress"
-                            Message = "Action already in progress"
-                        }
-                    }
-                    continue
-                }
-                throw 
-            }
-            
-            if ([string]::IsNullOrEmpty($response.id)) {
-                Write-Host "No machine action ID received for DeviceId: $DeviceId"
-                $responses += [PSCustomObject]@{
-                    DeviceId = $DeviceId
-                    Response = [PSCustomObject]@{
-                        Status = "Failed"
-                        Message = "No action ID received"
-                    }
-                }
-                continue
-            }
-
-            $actionId = $response.id
-            if ([string]::IsNullOrEmpty($response.id)) {
-                Write-Host "No machine action ID received for DeviceId: $DeviceId. Marking as failed and continuing."
-                continue
-            }
-            Start-Sleep -Seconds 5
-            $statusSucceeded = Get-MachineActionStatus -machineActionId $actionId -token $token
-
-            $responses += [PSCustomObject]@{
-                DeviceId = $DeviceId
-                Response = [PSCustomObject]@{
-                    Id = $response.id
-                    Type = $response.type
-                    Title = $response.title
-                    Status = if ($statusSucceeded) { "Succeeded" } else { "Failed" }
-                    MachineId = $response.machineId
-                    ComputerDnsName = $response.computerDnsName
-                    CreationDateTimeUtc = $response.creationDateTimeUtc
-                }
-            }
-
-            Write-Host "Offboarding status for DeviceId $DeviceId : $(if ($statusSucceeded) { 'Succeeded' } else { 'Failed' })"
-
-        } catch {
-            Write-Error "Failed to offboard DeviceId: $DeviceId. Error: $_"
-            $responses += [PSCustomObject]@{
-                DeviceId = $DeviceId
-                Response = [PSCustomObject]@{
-                    Status = "Error"
-                    Message = $_.Exception.Message
-                }
-            }
-        }
-    }
-
-    return $responses
-}
-
 # Export the functions
 Export-ModuleMember -Function Connect-MDE, Get-AccessToken, Get-Machines, Get-Actions, Undo-Actions, Invoke-MachineIsolation, Undo-MachineIsolation, Invoke-ContainDevice, Undo-ContainDevice,
     Invoke-RestrictAppExecution, Undo-RestrictAppExecution, Invoke-TiFile, Undo-TiFile, Invoke-TiCert, Undo-TiCert, Invoke-TiIP, Undo-TiIP, 
-    Invoke-TiURL, Undo-TiURL, Invoke-MachineOffboard, Get-RequestParam, Get-SecretFromKeyVault, 
+    Invoke-TiURL, Undo-TiURL, Get-RequestParam, Get-SecretFromKeyVault, 
     Invoke-WithRetry, Invoke-UploadLR, Invoke-PutFile, Invoke-GetFile, Invoke-CollectInvestigationPackage, Invoke-LRScript, 
     Get-MachineActionStatus, Get-LiveResponseOutput, Invoke-FullDiskScan

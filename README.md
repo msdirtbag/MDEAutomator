@@ -209,7 +209,7 @@ Invoke-TiCert -token $token -Sha1s @("<SHA1Thumbprint>")
 Undo-TiCert -token $token -Sha1s @("<SHA1Thumbprint>")
 ```
 
-### Device Offboarding and File Download
+### Common Operations
 
 ```powershell
 # Offboard a device from Defender for Endpoint
@@ -218,6 +218,10 @@ Invoke-MachineOffboard -token $token -DeviceIds @("<DeviceId>")
 # Download a file from a device and save locally
 $downloadUrl = Invoke-GetFile -token $token -filePath "C:\Windows\Temp\log.txt" -DeviceIds @("<DeviceId>")
 Invoke-WebRequest -Uri $downloadUrl -OutFile "C:\Temp\log.txt"
+
+$DeviceIds = Get-Machines -token $token | Select-Object -ExpandProperty Id
+Invoke-LRScript -DeviceIds $DeviceIds -scriptName 'awesome.ps1' -token $token
+
 ```
 
 ## Security Notes

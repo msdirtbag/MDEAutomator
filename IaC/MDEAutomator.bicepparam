@@ -1,6 +1,5 @@
 using './MDEAutomator.bicep'
 
-param location = ''
-param environmentid = ''
+param env = ''
 param spnid = ''
 
