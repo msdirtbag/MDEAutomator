@@ -1,3 +1,78 @@
+<#
+.SYNOPSIS
+    MDEAutomator PowerShell Module - Automates Microsoft Defender for Endpoint (MDE) API operations.
+
+.DESCRIPTION
+    This module provides a set of functions to automate common Microsoft Defender for Endpoint (MDE) tasks via the MDE API, including device management, live response actions, threat indicator management, and more. It supports robust error handling, retry logic, and integration with Azure Key Vault for secure secret management.
+
+.FUNCTIONS
+    Connect-MDE
+        Authenticates to MDE using a Service Principal, optionally retrieving secrets from Azure Key Vault.
+
+    Get-Machines
+        Retrieves a list of onboarded and active devices from MDE, with optional filtering.
+
+    Get-Actions
+        Retrieves recent machine actions performed in MDE.
+
+    Undo-Actions
+        Cancels all pending machine actions in MDE.
+
+    Invoke-MachineIsolation / Undo-MachineIsolation
+        Isolates or unisolates specified devices in MDE.
+
+    Invoke-ContainDevice / Undo-ContainDevice
+        Contains or uncontains specified unmanaged devices in MDE.
+
+    Invoke-RestrictAppExecution / Undo-RestrictAppExecution
+        Restricts or unrestricts application execution on specified devices.
+        
+    Invoke-CollectInvestigationPackage
+        Collects an investigation package from specified devices.
+
+    Invoke-TiFile / Undo-TiFile
+        Creates or deletes file hash-based custom threat indicators.
+
+    Invoke-TiCert / Undo-TiCert
+        Creates or deletes certificate thumbprint-based custom threat indicators.
+
+    Invoke-TiIP / Undo-TiIP
+        Creates or deletes IP address-based custom threat indicators.
+
+    Invoke-TiURL / Undo-TiURL
+        Creates or deletes URL/domain-based custom threat indicators.
+
+    Invoke-UploadLR
+        Uploads a script file to the MDE Live Response library.
+
+    Invoke-PutFile
+        Pushes a file from the Live Response library to specified devices.
+
+    Invoke-GetFile
+        Retrieves a file from specified devices using Live Response.
+
+    Invoke-LRScript
+        Executes a Live Response script on specified devices.
+
+.PARAMETERS
+    Most functions require an OAuth2 access token (`$token`) obtained via Connect-MDE.
+    Device-specific functions require one or more device IDs (`$DeviceIds`).
+    Threat indicator functions require indicator values (e.g., `$Sha1s`, `$Sha256s`, `$IPs`, `$URLs`).
+
+.NOTES
+    - Requires PowerShell 5.1+ and the Az.Accounts/Az.KeyVault modules for Key Vault integration.
+    - All API calls are made to the Microsoft Defender for Endpoint API (https://api.securitycenter.microsoft.com).
+    - Error handling and retry logic are built-in for robust automation.
+    - For more information, see the official Microsoft Defender for Endpoint API documentation.
+
+.AUTHOR
+    github.com/msdirtbag
+
+.VERSION
+    1.0.0
+
+#>
+
 Function Get-RequestParam {
     param (
         [string]$Name,

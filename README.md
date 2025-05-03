@@ -125,7 +125,8 @@ $token = Connect-MDE -SpnId "<AppId>" -SpnSecret (Read-Host -AsSecureString)
 $token = Connect-MDE -SpnId "<AppId>" -keyVaultName "<KeyVaultName>"
 
 # Option 4: Retrieving SPNSECRET from Azure Key Vault and specifying TenantId
-$token = Connect-MDE -SpnId "<AppId>" -TenantId "<TenantId>" -keyVaultName "<KeyVaultName>"
+$token = Connect-MDE -SpnId "<AppId>" -keyVaultName "<KeyVaultName>" -TenantId "<TenantId>"
+
 ```
 
 ### Common Operations
@@ -157,8 +158,37 @@ Get-Actions -token $token
 
 # Cancel all current pending machine actions
 Undo-Actions -token $token
-```
 
+# Offboard a device from Defender for Endpoint
+Invoke-MachineOffboard -token $token -DeviceIds @("<DeviceId>")
+
+# Download a file from a device and save locally
+$downloadUrl = Invoke-GetFile -token $token -filePath "C:\Windows\Temp\log.txt" -DeviceIds @("<DeviceId>")
+Invoke-WebRequest -Uri $downloadUrl -OutFile "C:\Temp\log.txt"
+
+# Run Script on every device
+$DeviceIds = Get-Machines -token $token | Select-Object -ExpandProperty Id
+Invoke-LRScript -DeviceIds $DeviceIds -scriptName 'awesome.ps1' -token $token
+
+# Retrieve all devices with a specific tag
+$taggedDevices = Get-Machines -token $token -filter "contains(machineTags, 'Critical')"
+
+# Run a custom script on all devices in a specific RBAC group
+$groupDevices = Get-Machines -token $token | Where-Object { $_.RbacGroupName -eq 'Tier1 Servers' } | Select-Object -ExpandProperty Id
+Invoke-LRScript -DeviceIds $groupDevices -scriptName 'audit.ps1' -token $token
+
+# Collect investigation packages from all devices seen in the last 24 hours
+$recentDevices = Get-Machines -token $token | Where-Object { (Get-Date($_.LastSeen) -gt (Get-Date).AddDays(-1)) } | Select-Object -ExpandProperty Id
+Invoke-CollectInvestigationPackage -token $token -DeviceIds $recentDevices
+
+# Restrict application execution on all endpoints with a high risk score
+$highRiskDevices = Get-Machines -token $token | Where-Object { $_.RiskScore -eq 'High' } | Select-Object -ExpandProperty Id
+Invoke-RestrictAppExecution -token $token -DeviceIds $highRiskDevices
+
+# Get the status of all recent machine actions and export to CSV
+Get-Actions -token $token | Export-Csv -Path "C:\Temp\MDEActions.csv" -NoTypeInformation
+
+```
 ### Response Actions
 
 ```powershell
@@ -201,23 +231,8 @@ Invoke-TiCert -token $token -Sha1s @("<SHA1Thumbprint>")
 
 # Remove a certificate thumbprint threat indicator
 Undo-TiCert -token $token -Sha1s @("<SHA1Thumbprint>")
-```
-
-### Common Operations
-
-```powershell
-# Offboard a device from Defender for Endpoint
-Invoke-MachineOffboard -token $token -DeviceIds @("<DeviceId>")
-
-# Download a file from a device and save locally
-$downloadUrl = Invoke-GetFile -token $token -filePath "C:\Windows\Temp\log.txt" -DeviceIds @("<DeviceId>")
-Invoke-WebRequest -Uri $downloadUrl -OutFile "C:\Temp\log.txt"
-
-$DeviceIds = Get-Machines -token $token | Select-Object -ExpandProperty Id
-Invoke-LRScript -DeviceIds $DeviceIds -scriptName 'awesome.ps1' -token $token
 
 ```
-
 ## Security Notes
 
 MDEAutomator could be misused by a threat actor and quickly become a weapon of mass destruction.
