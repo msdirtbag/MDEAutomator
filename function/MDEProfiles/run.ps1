@@ -6,13 +6,13 @@ using namespace System.Net
 param($Request)
 
 try {
-    # Get parameters
+    # Extract and validate parameters from the incoming HTTP request
     $TenantId   = Get-RequestParam -Name "TenantId"   -Request $Request
     $DeviceIds  = Get-RequestParam -Name "DeviceIds"  -Request $Request
     $allDevices = Get-RequestParam -Name "allDevices" -Request $Request
     $ps1Name    = Get-RequestParam -Name "ps1Name"    -Request $Request
 
-    # Validate parameters
+    # Validate required parameters
     $missingParams = @()
     if ([string]::IsNullOrEmpty($TenantId))   { $missingParams += "TenantId" }
     if ([string]::IsNullOrEmpty($DeviceIds) -and $allDevices -ne $true) { $missingParams += "DeviceIds" }
@@ -31,19 +31,18 @@ try {
     Write-Host "allDevices: $allDevices"
     Write-Host "ps1Name: $ps1Name"
 
-    # Get environment variables
-    $spnId       = [System.Environment]::GetEnvironmentVariable('SPNID', 'Process')
-    $keyVaultName= [System.Environment]::GetEnvironmentVariable('AZURE_KEYVAULT', 'Process')
+    # Retrieve environment variables for authentication
+    $spnId        = [System.Environment]::GetEnvironmentVariable('SPNID', 'Process')
+    $keyVaultName = [System.Environment]::GetEnvironmentVariable('AZURE_KEYVAULT', 'Process')
 
-    # Connect to MDE
+    # Connect to MDE and get an access token
     $token = Connect-MDE -TenantId $TenantId -SpnId $spnId -keyVaultName $keyVaultName
-    Write-Host "Successfully retrieved access token for MDE."
 
-    # Get all devices if requested
+    # Device discovery: get all Windows devices if requested
     if ($allDevices -eq $true) {
         Write-Host "Getting all devices"
         $Filter = "contains(osPlatform, 'Windows')"
-        $machines = Get-Machines -token $token -Filter $Filter | ConvertFrom-Json
+        $machines = Get-Machines -token $token -Filter $Filter
         if ($null -ne $machines) {
             $DeviceIds = @($machines | ForEach-Object { $_.Id })
         } else {
@@ -53,7 +52,7 @@ try {
         Write-Host "DeviceIds: $($DeviceIds -join ' ')"
     }
 
-    # Normalize $DeviceIds to always be an array of strings
+    # Normalize DeviceIds to always be an array of strings
     if ($null -eq $DeviceIds) {
         $DeviceIds = @()
     } elseif ($DeviceIds -is [string]) {
@@ -64,6 +63,7 @@ try {
         $DeviceIds = @("$DeviceIds")
     }
 
+    # If no devices to process, return early
     if ($DeviceIds.Count -eq 0) {
         Write-Host "No DeviceIds to process."
         Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
@@ -73,54 +73,36 @@ try {
         return
     }
 
-    # Upload the specified script to Tenant Library
-    Invoke-UploadLR -token $token -fileName $ps1Name -folderName "./MDEProfiles"
+    # Upload the specified script to the Tenant Library
+    $scriptPath = Join-Path -Path $PSScriptRoot -ChildPath ".\$ps1Name"
+    Invoke-UploadLR -token $token -filePath $scriptPath
     Write-Host "Successfully uploaded file: $ps1Name"
 
-    # Use ForEach-Object -Parallel to run the script on all devices
+    # Set concurrency limit for parallel execution
+    $throttleLimit = 10
+
+    # Run the script on all devices in parallel and collect results
     Write-Host "Invoking LRScript for all DeviceIds..."
-
-    # Concurrency limit for parallel execution
-    $throttleLimit = 5 
-
-    if ($DeviceIds.Count -gt 0) {
-        $lrResultsFlat = $DeviceIds | ForEach-Object -Parallel {
-            param($_)
-            $DeviceId = $_
-            Write-Host "Running LRScript for DeviceId: $DeviceId"
-            Import-Module "$using:PSScriptRoot\..\MDEAutomator\MDEAutomator.psm1" -Force
-            try {
-                $jsonResult = Invoke-LRScript -DeviceIds @($DeviceId) -scriptName $using:ps1Name -token $using:token
-                $result = $jsonResult | ConvertFrom-Json
-                if ($result -is [System.Collections.IEnumerable]) {
-                    return $result
-                } else {
-                    return @($result)
-                }
-            } catch {
-                return [PSCustomObject]@{
-                    DeviceId = $DeviceId
-                    Success = $false
-                    Transcript = "Exception: $($_.Exception.Message)"
-                }
+    $lrResults = $DeviceIds | ForEach-Object -Parallel {
+        param($_)
+        $DeviceId = $_
+        Write-Host "Running LRScript for DeviceId: $DeviceId"
+        Import-Module "$using:PSScriptRoot\..\MDEAutomator\MDEAutomator.psm1" -Force
+        try {
+            $results = Invoke-LRScript -DeviceIds @($DeviceId) -scriptName $using:ps1Name -token $using:token
+            # Always return an array for consistency
+            foreach ($res in $results) { $res }
+        } catch {
+            return [PSCustomObject]@{
+                DeviceId = $DeviceId
+                Success = $false
+                Transcript = "Exception: $($_.Exception.Message)"
             }
-        } -ThrottleLimit $throttleLimit
-    } else {
-        $lrResultsFlat = @()
-    }
-
-    # Flatten results if needed
-    $lrResultsFlat2 = @()
-    foreach ($r in $lrResultsFlat) {
-        if ($r -is [System.Collections.IEnumerable]) {
-            $lrResultsFlat2 += $r
-        } else {
-            $lrResultsFlat2 += @($r)
         }
-    }
+    } -ThrottleLimit $throttleLimit
 
-    # Fetch output in parallel as well, again enumerate explicitly
-    $outputResults = $lrResultsFlat2 | ForEach-Object -Parallel {
+    # Fetch output for each device in parallel
+    $outputResults = $lrResults | ForEach-Object -Parallel {
         param($_)
         $res = $_
         Import-Module "$using:PSScriptRoot\..\MDEAutomator\MDEAutomator.psm1" -Force
@@ -145,7 +127,7 @@ try {
                     $outputObj.ExitCode     = $scriptOutput.ExitCode
                     $outputObj.ScriptOutput = $scriptOutput.ScriptOutput
                     $outputObj.ScriptErrors = $scriptOutput.ScriptErrors
-                    $outputObj.Transcript   = $scriptOutput | ConvertTo-Json -Depth 10
+                    $outputObj.Transcript   = $scriptOutput
                 } else {
                     $outputObj.Success = $false
                     $outputObj.Transcript = "Failed to retrieve script output"
@@ -162,11 +144,13 @@ try {
 
     Write-Host "Final Aggregated Results: $($outputResults | ConvertTo-Json -Depth 100)"
 
+    # Return the results as the HTTP response
     Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
         StatusCode = [HttpStatusCode]::OK
         Body = $outputResults | ConvertTo-Json -Depth 100
     })
 } catch {
+    # Handle any unhandled exceptions in the function app
     Write-Host "Unhandled exception: $($_.Exception.Message)"
     Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
         StatusCode = [HttpStatusCode]::InternalServerError

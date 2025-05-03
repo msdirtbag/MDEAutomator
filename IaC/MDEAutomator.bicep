@@ -43,7 +43,7 @@ resource keyvault 'Microsoft.KeyVault/vaults@2024-11-01' = {
       defaultAction: 'Deny'
     }  
     tenantId: subscription().tenantId
-    publicNetworkAccess: 'Disabled'
+    publicNetworkAccess: 'Enabled'
   }
 }
 

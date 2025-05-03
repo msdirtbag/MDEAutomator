@@ -6,25 +6,26 @@ using namespace System.Net
 param($Request)
 
 try {
+    # Extract parameters from the incoming HTTP request
     $TenantId   = Get-RequestParam -Name "TenantId"   -Request $Request
     $Function   = Get-RequestParam -Name "Function"   -Request $Request
     $DeviceIds  = Get-RequestParam -Name "DeviceIds"  -Request $Request
     $allDevices = Get-RequestParam -Name "allDevices" -Request $Request
     $Filter     = Get-RequestParam -Name "Filter"     -Request $Request
     $scriptName = Get-RequestParam -Name "scriptName" -Request $Request
-    $folderName = Get-RequestParam -Name "folderName" -Request $Request
     $filePath   = Get-RequestParam -Name "filePath"   -Request $Request
     $fileName   = Get-RequestParam -Name "fileName"   -Request $Request
     $StorageAccountName = Get-RequestParam -Name "StorageAccountName" -Request $Request
 
+    # Retrieve environment variables for authentication
     $spnId        = [System.Environment]::GetEnvironmentVariable('SPNID', 'Process')
     $keyVaultName = [System.Environment]::GetEnvironmentVariable('AZURE_KEYVAULT', 'Process')
     $token        = Connect-MDE -TenantId $TenantId -SpnId $spnId -keyVaultName $keyVaultName
 
-    # Get all devices if requested
+    # Device discovery: get all or filtered devices if requested
     if ($allDevices -eq $true) {
         Write-Host "Getting all devices"
-        $machines = Get-Machines -token $token | ConvertFrom-Json
+        $machines = Get-Machines -token $token
         if ($null -ne $machines) {
             $DeviceIds = @($machines | ForEach-Object { $_.Id })
         } else {
@@ -33,10 +34,9 @@ try {
         Write-Host "Machines returned: $($machines.Count)"
         Write-Host "DeviceIds: $($DeviceIds -join ' ')"
     }
-    # If a filter is specified (and not all devices), get filtered devices
     elseif ($null -ne $Filter -and $Filter -ne "") {
         Write-Host "Getting devices with filter: $Filter"
-        $machines = Get-Machines -token $token -Filter $Filter | ConvertFrom-Json
+        $machines = Get-Machines -token $token -Filter $Filter
         if ($null -ne $machines) {
             $DeviceIds = @($machines | ForEach-Object { $_.Id })
         } else {
@@ -46,7 +46,7 @@ try {
         Write-Host "DeviceIds: $($DeviceIds -join ' ')"
     }
 
-    # Normalize $DeviceIds to always be an array of strings
+    # Normalize DeviceIds to always be an array of strings
     if ($null -eq $DeviceIds) {
         $DeviceIds = @()
     } elseif ($DeviceIds -is [string]) {
@@ -57,6 +57,7 @@ try {
         $DeviceIds = @("$DeviceIds")
     }
 
+    # If no devices to process, return early
     if ($DeviceIds.Count -eq 0) {
         Write-Host "No DeviceIds to process."
         Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
@@ -66,101 +67,112 @@ try {
         return
     }
 
-    $throttleLimit = 10
+    $throttleLimit = 10 # Limit parallelism for Azure Function best practices
 
-    # Use ForEach-Object -Parallel for concurrent orchestration
+    # Main orchestration: process each device in parallel
     $orchestratorResults = $DeviceIds | ForEach-Object -Parallel {
         param($_)
         $DeviceId = $_
         Import-Module "$using:PSScriptRoot\..\MDEAutomator\MDEAutomator.psm1" -Force
         try {
             switch ($using:Function) {
-                "InvokeUploadLR" {
-                    if (-not $using:filePath) { throw "filePath parameter is required for Invoke-UploadLR" }
-                    $result = Invoke-UploadLR -token $using:token -filePath -$using:filePath
-                    return [PSCustomObject]@{
-                        Success  = $true
-                        Result   = $result
-                    }
-                }
+                # Run a Live Response script on the device and fetch transcript
                 "InvokeLRScript" {
                     if (-not $using:scriptName) { throw "scriptName parameter is required for Invoke-LRScript" }
-                    $jsonResult = Invoke-LRScript -token $using:token -DeviceIds @($DeviceId) -scriptName $using:scriptName
-                    $results = $jsonResult | ConvertFrom-Json
                     $output = @()
+                    $results = Invoke-LRScript -token $using:token -DeviceIds @($DeviceId) -scriptName $using:scriptName
                     foreach ($res in $results) {
-                        $isSuccess = $res.Success
+                        $transcript = $null
+                        if ($res.Success -and $res.MachineActionId) {
+                            try {
+                                $transcriptObj = Get-LiveResponseOutput -machineActionId $res.MachineActionId -token $using:token
+                                $transcript = $transcriptObj
+                            } catch {
+                                $transcript = "Failed to get transcript: $($_.Exception.Message)"
+                            }
+                        }
                         $output += [PSCustomObject]@{
-                            DeviceId        = $DeviceId
+                            DeviceId        = $res.DeviceId
                             MachineActionId = $res.MachineActionId
-                            Success         = $isSuccess
+                            Success         = $res.Success
+                            Transcript      = $transcript
                         }
                     }
                     return $output
                 }
+                # Push a file to the device
                 "InvokePutFile" {
                     if (-not $using:fileName) { throw "fileName parameter is required for Invoke-PutFile" }
-                    $result = Invoke-PutFile -token $using:token -DeviceIds @($DeviceId) -fileName $using:fileName
-                    return [PSCustomObject]@{
-                        DeviceId = $DeviceId
-                        Success  = $true
-                        Result   = $result
+                    $output = @()
+                    $results = Invoke-PutFile -token $using:token -DeviceIds @($DeviceId) -fileName $using:fileName
+                    foreach ($res in $results) {
+                        $output += $res
                     }
+                    return $output
                 }
+                # Download a file from the device and upload to Azure Blob Storage
                 "InvokeGetFile" {
                     if (-not $using:filePath) { throw "filePath parameter is required for Invoke-GetFile" }
-                    $downloadUri = Invoke-GetFile -token $using:token -DeviceIds @($DeviceId) -filePath $using:filePath
+                    $output = @()
+                    $results = Invoke-GetFile -token $using:token -DeviceIds @($DeviceId) -filePath $using:filePath
 
-                    if ($downloadUri) {
-                        try {
-                            # Download the file from the returned URI
-                            $tempFile = [System.IO.Path]::GetTempFileName()
-                            Invoke-WebRequest -Uri $downloadUri -OutFile $tempFile
+                    Write-Host "Invoke-GetFile returned $($results.Count) results for DeviceId: $DeviceId"
+                    foreach ($res in $results) {
+                        Write-Host "Processing result: $($res | ConvertTo-Json -Compress)"
+                        if ($res.Status -eq "Success" -and $res.DownloadUri) {
+                            try {
+                                Write-Host "Attempting download from $($res.DownloadUri) for DeviceId: $DeviceId"
+                                # Download file from device
+                                $tempFile = [System.IO.Path]::GetTempFileName()
+                                Invoke-WebRequest -Uri $res.DownloadUri -OutFile $tempFile
 
-                            # Generate a blob name
-                            $timestamp = Get-Date -Format "yyyyMMddHHmmss"
-                            $blobName = "$DeviceId-$timestamp.zip"
+                                Write-Host "Downloaded file to $tempFile"
+                                # Generate a unique blob name for storage
+                                $timestamp = Get-Date -Format "yyyyMMddHHmmss"
+                                $blobName = "$DeviceId-$timestamp.zip"
 
-                            if (-not $StorageAccountName -or $StorageAccountName -eq "") {
-                                $StorageAccountName = [System.Environment]::GetEnvironmentVariable('STORAGE_ACCOUNT', 'Process')
+                                # Use Entra ID (Managed Identity) authentication for Azure Function
+                                $ctx = New-AzStorageContext -StorageAccountName $using:StorageAccountName -UseConnectedAccount
+                                $containerName = "files"
+                                Write-Host "Uploading file to Azure Blob Storage: $blobName in container $containerName"
+                                Set-AzStorageBlobContent -File $tempFile -Container $containerName -Blob $blobName -Context $ctx -Force
+
+                                # Clean up temp file
+                                Remove-Item $tempFile -Force
+                                Write-Host "cleaned up temp file: $tempFile"
+
+                                $output += [PSCustomObject]@{
+                                    DeviceId = $DeviceId
+                                    Success  = $true
+                                    BlobName = $blobName
+                                    ContainerName = $containerName
+                                    DownloadUri = $res.DownloadUri
+                                }
+                            } catch {
+                                $output += [PSCustomObject]@{
+                                    DeviceId = $DeviceId
+                                    Success  = $false
+                                    Error    = "Failed to upload file to blob storage: $($_.Exception.Message)"
+                                    DownloadUri = $res.DownloadUri
+                                }
                             }
-
-                            # Upload to Azure Blob Storage 
-                            $ctx = New-AzStorageContext -StorageAccountName $using:StorageAccountName -UseConnectedAccount
-                            $containerName = "files"
-                            Set-AzStorageBlobContent -File $tempFile -Container $containerName -Blob $blobName -Context $ctx -Force
-
-                            # Remove temp file
-                            Remove-Item $tempFile -Force
-
-                            return [PSCustomObject]@{
-                                DeviceId = $DeviceId
-                                Success  = $true
-                                BlobName = $blobName
-                                ContainerName = $containerName
-                                DownloadUri = $downloadUri
-                            }
-                        } catch {
-                            return [PSCustomObject]@{
+                        } else {
+                            $output += [PSCustomObject]@{
                                 DeviceId = $DeviceId
                                 Success  = $false
-                                Error    = "Failed to upload file to blob storage: $($_.Exception.Message)"
-                                DownloadUri = $downloadUri
+                                Error    = $res.Error
+                                DownloadUri = $res.DownloadUri
                             }
                         }
-                    } else {
-                        return [PSCustomObject]@{
-                            DeviceId = $DeviceId
-                            Success  = $false
-                            Error    = "No download URI returned from Invoke-GetFile"
-                        }
                     }
+                    return $output
                 }
                 default {
                     throw "Invalid function specified: $using:Function"
                 }
             }
         } catch {
+            # Handle and log errors for each device
             Write-Host "Error processing DeviceId: $DeviceId"
             Write-Host "Exception: $($_.Exception.Message)"
             return [PSCustomObject]@{
@@ -171,23 +183,19 @@ try {
         }
     } -ThrottleLimit $throttleLimit
 
-    $flatResults = @()
-    foreach ($r in $orchestratorResults) {
-        if ($r -is [System.Collections.IEnumerable]) {
-            $flatResults += $r
-        } else {
-            $flatResults += @($r)
-        }
-    }
+    # No need to flatten, just use the results directly
+    $finalResults = $orchestratorResults
 
-    Write-Host "Final Orchestrator Results: $($flatResults | ConvertTo-Json -Depth 100)"
+    Write-Host "Final Orchestrator Results: $($finalResults | ConvertTo-Json -Depth 100)"
 
+    # Return the results as the HTTP response
     Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
         StatusCode = [HttpStatusCode]::OK
-        Body = $flatResults | ConvertTo-Json -Depth 100
+        Body = $finalResults | ConvertTo-Json -Depth 100
     })
 }
 catch {
+    # Handle any unhandled exceptions in the function app
     Write-Host "Unhandled exception: $($_.Exception.Message)"
     Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
         StatusCode = [HttpStatusCode]::InternalServerError

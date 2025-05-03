@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.35.1.17967",
-      "templateHash": "18315417161078529371"
+      "templateHash": "2137204054266914071"
     }
   },
   "parameters": {
@@ -53,7 +53,7 @@
           "defaultAction": "Deny"
         },
         "tenantId": "[subscription().tenantId]",
-        "publicNetworkAccess": "Disabled"
+        "publicNetworkAccess": "Enabled"
       }
     },
     {

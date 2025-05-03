@@ -605,7 +605,6 @@ function Invoke-LRScript {
 
             $response = Invoke-WithRetry -ScriptBlock {
                 param($DeviceId, $token, $body)
-                
                 try {
                     Invoke-RestMethod -Uri "https://api.securitycenter.microsoft.com/api/machines/$DeviceId/runliveresponse" `
                         -Method Post `
@@ -629,35 +628,26 @@ function Invoke-LRScript {
 
                 $machineActionId = $response.id
                 $statusSucceeded = Get-MachineActionStatus -machineActionId $machineActionId -token $token
-                if (-not $statusSucceeded) {
-                    $responses += [PSCustomObject]@{
-                        DeviceId = $DeviceId
-                        Status = "Failed"
-                        Error = "Script execution failed or timed out"
-                        ActionId = $machineActionId
-                    }
-                    continue
-                }
                 $responses += [PSCustomObject]@{
-                    DeviceId = $DeviceId
-                    Status = "Success"
-                    ActionId = $machineActionId
+                    DeviceId        = $DeviceId
+                    MachineActionId = $machineActionId
+                    Success         = [bool]$statusSucceeded
                 }
                 continue
             }
 
             $responses += [PSCustomObject]@{
-                DeviceId = $DeviceId
-                Status = "Failed"
-                Error = "Unexpected response status: $($response.status)"
+                DeviceId        = $DeviceId
+                MachineActionId = $null
+                Success         = $false
             }
         }
         catch {
             Write-Error "Error processing DeviceId $DeviceId : $($_.Exception.Message)"
             $responses += [PSCustomObject]@{
-                DeviceId = $DeviceId
-                Status = "Failed"
-                Error = $_.Exception.Message
+                DeviceId        = $DeviceId
+                MachineActionId = $null
+                Success         = $false
             }
         }
     }
@@ -739,19 +729,32 @@ Function Get-LiveResponseOutput {
             $tempFilePath = [System.IO.Path]::GetTempFileName()
             Invoke-WebRequest -Uri $downloadLink -OutFile $tempFilePath
             $content = Get-Content -Path $tempFilePath -Raw
-            $jsonResponse = $content | ConvertFrom-Json
-            $scriptName = $jsonResponse.script_name
-            $exitCode = $jsonResponse.exit_code
-            $scriptOutput = $jsonResponse.script_output
-            $scriptErrors = $jsonResponse.script_errors
-            Remove-Item -Path $tempFilePath
-            return [PSCustomObject]@{
-                ScriptName   = $scriptName
-                ExitCode     = $exitCode
-                ScriptOutput = $scriptOutput
-                ScriptErrors = $scriptErrors
-                Status       = "Success"
-                MachineActionId = $machineActionId
+            try {
+                $jsonResponse = $content | ConvertFrom-Json
+                $scriptName = $jsonResponse.script_name
+                $exitCode = $jsonResponse.exit_code
+                $scriptOutput = $jsonResponse.script_output
+                $scriptErrors = $jsonResponse.script_errors
+                Remove-Item -Path $tempFilePath
+                return [PSCustomObject]@{
+                    ScriptName      = $scriptName
+                    ExitCode        = $exitCode
+                    ScriptOutput    = $scriptOutput
+                    ScriptErrors    = $scriptErrors
+                    Status          = "Success"
+                    MachineActionId = $machineActionId
+                }
+            } catch {
+                Remove-Item -Path $tempFilePath
+                return [PSCustomObject]@{
+                    ScriptName      = $null
+                    ExitCode        = $null
+                    ScriptOutput    = $null
+                    ScriptErrors    = $null
+                    Status          = "Failed"
+                    MachineActionId = $machineActionId
+                    Error           = "Output is not valid JSON. Raw output: $content"
+                }
             }
         } else {
             Write-Output "Failed to retrieve the download link."

@@ -81,14 +81,9 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
 
 2. Add "SPNSECRET" to Azure Key Vault
 
-   Steps:
-
-   a. Enable public access to MDEAutomator's Azure Key Vault
-
-   b. Create a secret named "SPNSECRET" with the value generated during SPN provisioning  
+   Create a secret named "SPNSECRET" with the value generated during SPN provisioning  
       ![Secret](./media/secret.png)
 
-   c. Disable public access to Azure Key Vault
 
 3. Configure your front-end application to call the Function Apps
 

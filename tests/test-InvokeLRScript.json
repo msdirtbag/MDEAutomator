@@ -1,6 +1,6 @@
 {
     "TenantId": "",
-    "scriptName": "Active.ps1",
+    "scriptName": "",
     "Function": "InvokeLRScript",
     "allDevices": true
 }
