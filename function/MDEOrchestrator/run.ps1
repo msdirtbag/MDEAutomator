@@ -76,7 +76,6 @@ try {
         Import-Module "$using:PSScriptRoot\..\MDEAutomator\MDEAutomator.psm1" -Force
         try {
             switch ($using:Function) {
-                # Run a Live Response script on the device and fetch transcript
                 "InvokeLRScript" {
                     if (-not $using:scriptName) { throw "scriptName parameter is required for Invoke-LRScript" }
                     $output = @()
@@ -100,7 +99,6 @@ try {
                     }
                     return $output
                 }
-                # Push a file to the device
                 "InvokePutFile" {
                     if (-not $using:fileName) { throw "fileName parameter is required for Invoke-PutFile" }
                     $output = @()
@@ -110,7 +108,6 @@ try {
                     }
                     return $output
                 }
-                # Download a file from the device and upload to Azure Blob Storage
                 "InvokeGetFile" {
                     if (-not $using:filePath) { throw "filePath parameter is required for Invoke-GetFile" }
                     $output = @()
@@ -121,46 +118,41 @@ try {
                         Write-Host "Processing result: $($res | ConvertTo-Json -Compress)"
                         if ($res.Status -eq "Success" -and $res.DownloadUri) {
                             try {
-                                Write-Host "Attempting download from $($res.DownloadUri) for DeviceId: $DeviceId"
-                                # Download file from device
                                 $tempFile = [System.IO.Path]::GetTempFileName()
-                                Invoke-WebRequest -Uri $res.DownloadUri -OutFile $tempFile
+                                $headers = @{ "Authorization" = "Bearer $using:token" }
+                                Invoke-WebRequest -Uri $res.DownloadUri -OutFile $tempFile -Headers $headers -UseBasicParsing
 
-                                Write-Host "Downloaded file to $tempFile"
-                                # Generate a unique blob name for storage
-                                $timestamp = Get-Date -Format "yyyyMMddHHmmss"
-                                $blobName = "$DeviceId-$timestamp.zip"
+                                # Use the original filename from the MDE API if available
+                                $originalFileName = if ($res.FileName) { $res.FileName } else { "$DeviceId-$timestamp.zip" }
+                                $blobName = $originalFileName
 
-                                # Use Entra ID (Managed Identity) authentication for Azure Function
-                                $ctx = New-AzStorageContext -StorageAccountName $using:StorageAccountName -UseConnectedAccount
+                                $ctx = New-AzStorageContext -StorageAccountName ([System.Environment]::GetEnvironmentVariable('STORAGE_ACCOUNT', 'Process')) -UseConnectedAccount
                                 $containerName = "files"
                                 Write-Host "Uploading file to Azure Blob Storage: $blobName in container $containerName"
                                 Set-AzStorageBlobContent -File $tempFile -Container $containerName -Blob $blobName -Context $ctx -Force
 
-                                # Clean up temp file
                                 Remove-Item $tempFile -Force
-                                Write-Host "cleaned up temp file: $tempFile"
 
                                 $output += [PSCustomObject]@{
-                                    DeviceId = $DeviceId
-                                    Success  = $true
-                                    BlobName = $blobName
+                                    DeviceId      = $DeviceId
+                                    Success       = $true
+                                    BlobName      = $blobName
                                     ContainerName = $containerName
-                                    DownloadUri = $res.DownloadUri
+                                    DownloadUri   = $res.DownloadUri
                                 }
                             } catch {
                                 $output += [PSCustomObject]@{
-                                    DeviceId = $DeviceId
-                                    Success  = $false
-                                    Error    = "Failed to upload file to blob storage: $($_.Exception.Message)"
+                                    DeviceId    = $DeviceId
+                                    Success     = $false
+                                    Error       = "Failed to upload file to blob storage: $($_.Exception.Message)"
                                     DownloadUri = $res.DownloadUri
                                 }
                             }
                         } else {
                             $output += [PSCustomObject]@{
-                                DeviceId = $DeviceId
-                                Success  = $false
-                                Error    = $res.Error
+                                DeviceId    = $DeviceId
+                                Success     = $false
+                                Error       = $res.Error
                                 DownloadUri = $res.DownloadUri
                             }
                         }

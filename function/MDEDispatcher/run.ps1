@@ -17,16 +17,20 @@ try {
     # Get environment variables and connect
     $spnId = [System.Environment]::GetEnvironmentVariable('SPNID', 'Process')
     $keyVaultName = [System.Environment]::GetEnvironmentVariable('AZURE_KEYVAULT', 'Process')
+    $storageAccountName = $StorageAccountName
+    if (-not $storageAccountName) {
+        $storageAccountName = [System.Environment]::GetEnvironmentVariable('STORAGE_ACCOUNT', 'Process')
+    }
     $token = Connect-MDE -TenantId $TenantId -SpnId $spnId -keyVaultName $keyVaultName
 
     if ($allDevices -eq $true) {
         Write-Host "Getting all devices"
-        $machines = Get-Machines -token $token | ConvertFrom-Json
+        $machines = Get-Machines -token $token
         $DeviceIds = $machines.Id
     }
     elseif ($Filter) {
         Write-Host "Using provided filter: $Filter"
-        $machines = Get-Machines -token $token -filter $Filter | ConvertFrom-Json
+        $machines = Get-Machines -token $token -filter $Filter 
         $DeviceIds = $machines.Id
     }
     elseif ($DeviceIds -and $DeviceIds.Count -gt 0) {
@@ -68,26 +72,46 @@ try {
                 "InvokeMachineOffboard" { 
                     Invoke-MachineOffboard -token $using:token -DeviceIds $deviceId 
                 }
-                "InvokeCollectInvestigationPackage" { 
-                    $resultJson = Invoke-CollectInvestigationPackage -token $using:token -DeviceIds $deviceId
-                    $resultObj = $resultJson | ConvertFrom-Json
-
+                "InvokeCollectInvestigationPackage" {
+                    
+                    $output = @()
+                    $resultObj = Invoke-CollectInvestigationPackage -token $using:token -DeviceIds $deviceId
+                    
                     if ($resultObj.Status -eq "Success" -and $resultObj.PackageUri) {
-                        $packageUri = $resultObj.PackageUri
-                        $localPath = Join-Path $env:TEMP "$($deviceId)_investigation.zip"
-                        Invoke-WebRequest -Uri $packageUri -OutFile $localPath
-
-                        # Upload to Azure Blob Storage (requires Az module and storage context)
-                        $storageAccountName = $using:StorageAccountName
-                        $containerName = "packages"
-                        $blobName = Split-Path $localPath -Leaf
-
-                        $ctx = (Get-AzStorageAccount -Name $storageAccountName).Context
-                        Set-AzStorageBlobContent -File $localPath -Container $containerName -Blob $blobName -Context $ctx | Out-Null
-
+                        try {
+                            $tempFile = [System.IO.Path]::GetTempFileName()
+                            Invoke-WebRequest -Uri $resultObj.PackageUri -OutFile $tempFile
+                            $timestamp = Get-Date -Format "yyyyMMddHHmmss"
+                            $blobName = "$deviceId-$timestamp-investigation.zip"
+                            $ctx = New-AzStorageContext -StorageAccountName $using:StorageAccountName -UseConnectedAccount
+                            $containerName = "packages"
+                            Set-AzStorageBlobContent -File $tempFile -Container $containerName -Blob $blobName -Context $ctx -Force
+                            Remove-Item $tempFile -Force
+                
+                            $output += [PSCustomObject]@{
+                                DeviceId      = $deviceId
+                                Success       = $true
+                                BlobName      = $blobName
+                                ContainerName = $containerName
+                                PackageUri    = $resultObj.PackageUri
+                            }
+                        } catch {
+                            $output += [PSCustomObject]@{
+                                DeviceId   = $deviceId
+                                Success    = $false
+                                Error      = "Failed to upload investigation package: $($_.Exception.Message)"
+                                PackageUri = $resultObj.PackageUri
+                            }
+                        }
+                    } else {
+                        $output += [PSCustomObject]@{
+                            DeviceId   = $deviceId
+                            Success    = $false
+                            Error      = $resultObj.Error
+                            PackageUri = $resultObj.PackageUri
+                        }
                     }
-
-                    $resultObj | ConvertTo-Json -Depth 10
+                    return $output
                 }
                 default { 
                     throw "Invalid function specified: $using:Function"
