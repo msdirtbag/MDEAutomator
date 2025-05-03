@@ -107,7 +107,7 @@ Below are example usage patterns for the MDEAutomator PowerShell module.
 ### Importing
 ```powershell
 # Import MDEAutomator module
-Import-Module -Name ./MDEAutomator -ErrorAction Stop -Force
+Import-Module -Name ./function/MDEAutomator -ErrorAction Stop -Force
 
 ```
 > **Note:** PowerShell Gallery support is planned & in-progress
