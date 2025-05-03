@@ -1647,39 +1647,54 @@ function Invoke-TiIP {
         "Authorization" = "Bearer $token"
     }
     $responses = @()
+    $rfc1918
 
     foreach ($IP in $IPs) {
-        $body = @{
-            "indicatorValue" = $IP
-            "indicatorType" = "IpAddress"
-            "action" = "Block"
-            "severity" = "High"
-            "title" = "MDEAutomator $IP"
-            "description" = "MDEautomator has created this Custom Threat Indicator."
-            "recommendedActions" = "Investigate & take appropriate action."
-        }
-        try {
-            $response = Invoke-WithRetry -ScriptBlock {
-                try {
-                    Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body ($body | ConvertTo-Json) -ContentType "application/json" -ErrorAction Stop
-                } catch {
-                    if ($_.Exception.Response.StatusCode -eq 404) {
-                        Write-Host "API responded with 'not found'. Continuing execution."
-                    } else {
-                        throw $_
+        
+            if ($ip -match '^10\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$' -or
+                $ip -match '^172\.(1[6-9]|2[0-9]|3[0-1])\.(\d{1,3})\.(\d{1,3})$' -or
+                $ip -match '^192\.168\.(\d{1,3})\.(\d{1,3})$') {
+                Write-Host "$ip is RFC1918 (private). Cannot add Private IP address as an MDE Indicator" -ForegroundColor Red
+                $rfc1918 = $true
+            } else {
+                Write-Output "$ip is public. Proceeding to add Indicator to MDE"
+                $rfc1918 = $false
+            }
+        
+        
+        if(-not ($rfc1918)){
+            $body = @{
+                "indicatorValue" = $IP
+                "indicatorType" = "IpAddress"
+                "action" = "Block"
+                "severity" = "High"
+                "title" = "MDEAutomator $IP"
+                "description" = "MDEautomator has created this Custom Threat Indicator."
+                "recommendedActions" = "Investigate & take appropriate action."
+            }
+            try {
+                $response = Invoke-WithRetry -ScriptBlock {
+                    try {
+                        Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body ($body | ConvertTo-Json) -ContentType "application/json" -ErrorAction Stop
+                    } catch {
+                        if ($_.Exception.Response.StatusCode -eq 404) {
+                            Write-Host "API responded with 'not found'. Continuing execution."
+                        } else {
+                            throw $_
+                        }
                     }
                 }
-            }
-            Write-Host "Successfully created Threat Indicator for IP: $IP"
-            $responses += [PSCustomObject]@{
-                IP = $IP
-                Response = $response
-            }
-        } catch {
-            Write-Error "Failed to create Threat Indicator for IP: $IP $_"
-            $responses += [PSCustomObject]@{
-                IP = $IP
-                Error = $_.Exception.Message
+                Write-Host "Successfully created Threat Indicator for IP: $IP"
+                $responses += [PSCustomObject]@{
+                    IP = $IP
+                    Response = $response
+                }
+            } catch {
+                Write-Error "Failed to create Threat Indicator for IP: $IP $_"
+                $responses += [PSCustomObject]@{
+                    IP = $IP
+                    Error = $_.Exception.Message
+                }
             }
         }
     }

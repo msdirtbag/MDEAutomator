@@ -104,10 +104,15 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
 Below are example usage patterns for the MDEAutomator PowerShell module.
 
 
-### Importing
+### Installing & Importing
 ```powershell
-# Import MDEAutomator module
-Import-Module -Name ./MDEAutomator -ErrorAction Stop -Force
+
+# Import MDEAutomator module from source repo
+Import-Module -Name ./function/MDEAutomator -ErrorAction Stop -Force
+
+# Install & Import from PowerShell Gallery
+Install-Module -Name MDEAutomator -AllowClobber
+Import-Module -Name MDEAutomator -ErrorAction Stop -Force
 
 ```
 > **Note:** PowerShell Gallery support is planned & in-progress
