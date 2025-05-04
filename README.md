@@ -249,17 +249,29 @@ Undo-TiCert -token $token -Sha1s @("<SHA1Thumbprint>")
 ```
 ## Security Notes
 
-MDEAutomator could be misused by a threat actor and quickly become a weapon of mass destruction.
+> ⚠️ **Warning:**  
+> MDEAutomator is a powerful tool that, if misused by a threat actor, could cause significant harm. Treat all credentials, scripts, and deployments with the highest level of security.
 
-Secret Management
-- Azure Key Vault is recommended for most production uses cases.
+### Secret Management
 
-PowerShell Security Hyigene 
-- Clone the repo and use an Azure Trusted Signing account to sign all PowerShell in this repo with **your** signing key. There is a signing script included in the payloads subfolder in the repo named `signscripts.ps1` that can assist with this. Once this is done, redeploy the zip with the signed PowerShell to the Azure Function. This allows you to disable unsigned script execution in MDE Advanced Settings with no loss of functionality.
+- **Azure Key Vault** is strongly recommended for storing secrets in all production scenarios.
 
-[Azure Trusted Signing](https://learn.microsoft.com/en-us/azure/trusted-signing/quickstart)
+### Managed Identities
 
-> **Note:** At this time, Trusted Signing is only available to organizations based in the USA and Canada that have a verifiable history of three years or more.
+- **User-managed identity support** is on the roadmap. This will require additional refactoring to support multi-tenant deployments.
+
+### PowerShell Security Hygiene
+
+- **Sign all PowerShell scripts:**  
+  Clone this repository and use an [Azure Trusted Signing](https://learn.microsoft.com/en-us/azure/trusted-signing/quickstart) account to sign every PowerShell script with your own signing key.
+- A signing script (`signscripts.ps1`) is included in the `payloads` subfolder to assist with this process.
+- After signing, redeploy the zip package containing the signed scripts to your Azure Function.
+- This allows you to **disable unsigned script execution** in MDE Advanced Settings without losing any functionality.
+
+> **Note:**  
+> Azure Trusted Signing is currently available only to organizations based in the USA and Canada with a verifiable history of three years or more.
+
+---
 
 ---
 
