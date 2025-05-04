@@ -115,8 +115,6 @@ Install-Module -Name MDEAutomator -AllowClobber
 Import-Module -Name MDEAutomator -ErrorAction Stop -Force
 
 ```
-> **Note:** PowerShell Gallery support is planned & in-progress
-
 ### Authentication Examples
 
 ```powershell
