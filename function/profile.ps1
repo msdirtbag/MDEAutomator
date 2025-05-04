@@ -15,4 +15,4 @@ Import-Module -Name Az.KeyVault
 Import-Module -Name Az.Storage
 
 # Import custom modules
-Import-Module -Name ./MDEAutomator
+Import-Module -Name ./modules/MDEAutomator
