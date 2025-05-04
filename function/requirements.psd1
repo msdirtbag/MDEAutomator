@@ -1,4 +1,4 @@
 @{
     'Az' = '6.*'
-    'MDEAutomator' = '*'
+    'MDEAutomator' = '1.*'
 }
