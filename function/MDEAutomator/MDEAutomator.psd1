@@ -1,6 +1,6 @@
 @{
     # Module Identity
-    ModuleVersion     = '1.1'
+    ModuleVersion     = '1.2'
     GUID              = '010c4ef2-f71c-4bce-84cc-de9752cf1577'
     RootModule        = 'MDEAutomator.psm1'
 

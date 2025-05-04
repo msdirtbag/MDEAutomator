@@ -15,7 +15,6 @@ try {
     $scriptName = Get-RequestParam -Name "scriptName" -Request $Request
     $filePath   = Get-RequestParam -Name "filePath"   -Request $Request
     $fileName   = Get-RequestParam -Name "fileName"   -Request $Request
-    $StorageAccountName = Get-RequestParam -Name "StorageAccountName" -Request $Request
 
     # Retrieve environment variables for authentication
     $spnId        = [System.Environment]::GetEnvironmentVariable('SPNID', 'Process')
@@ -116,21 +115,15 @@ try {
                     Write-Host "Invoke-GetFile returned $($results.Count) results for DeviceId: $DeviceId"
                     foreach ($res in $results) {
                         Write-Host "Processing result: $($res | ConvertTo-Json -Compress)"
-                        if ($res.Status -eq "Success" -and $res.DownloadUri) {
+                        if ($res.Status -eq "Success" -and $res.FileUrl) {
                             try {
                                 $tempFile = [System.IO.Path]::GetTempFileName()
-                                $headers = @{ "Authorization" = "Bearer $using:token" }
-                                Invoke-WebRequest -Uri $res.DownloadUri -OutFile $tempFile -Headers $headers -UseBasicParsing
-
-                                # Use the original filename from the MDE API if available
-                                $originalFileName = if ($res.FileName) { $res.FileName } else { "$DeviceId-$timestamp.zip" }
-                                $blobName = $originalFileName
-
-                                $ctx = New-AzStorageContext -StorageAccountName ([System.Environment]::GetEnvironmentVariable('STORAGE_ACCOUNT', 'Process')) -UseConnectedAccount
+                                Invoke-WebRequest -Uri $res.FileUrl -OutFile $tempFile -UseBasicParsing
+                                $blobName = if ($res.FileName) { $res.FileName } else { "$DeviceId-$(Get-Date -Format 'yyyyMMddHHmmss').gz" }
                                 $containerName = "files"
-                                Write-Host "Uploading file to Azure Blob Storage: $blobName in container $containerName"
-                                Set-AzStorageBlobContent -File $tempFile -Container $containerName -Blob $blobName -Context $ctx -Force
-
+                                $ctx = New-AzStorageContext -StorageAccountName ([System.Environment]::GetEnvironmentVariable('STORAGE_ACCOUNT', 'Process')) -UseConnectedAccount
+                                Write-Host "Uploading gzip file to Azure Blob Storage: $blobName in container $containerName"
+                                Set-AzStorageBlobContent -Container $containerName -Blob $blobName -Context $ctx -Force -File $tempFile
                                 Remove-Item $tempFile -Force
 
                                 $output += [PSCustomObject]@{
@@ -138,22 +131,23 @@ try {
                                     Success       = $true
                                     BlobName      = $blobName
                                     ContainerName = $containerName
-                                    DownloadUri   = $res.DownloadUri
+                                    FileUrl       = $res.FileUrl
                                 }
                             } catch {
+                                if ($tempFile -and (Test-Path $tempFile)) { Remove-Item $tempFile -Force }
                                 $output += [PSCustomObject]@{
-                                    DeviceId    = $DeviceId
-                                    Success     = $false
-                                    Error       = "Failed to upload file to blob storage: $($_.Exception.Message)"
-                                    DownloadUri = $res.DownloadUri
+                                    DeviceId = $DeviceId
+                                    Success  = $false
+                                    Error    = "Failed to upload gzip file to blob storage: $($_.Exception.Message)"
+                                    FileUrl  = $res.FileUrl
                                 }
                             }
                         } else {
                             $output += [PSCustomObject]@{
-                                DeviceId    = $DeviceId
-                                Success     = $false
-                                Error       = $res.Error
-                                DownloadUri = $res.DownloadUri
+                                DeviceId = $DeviceId
+                                Success  = $false
+                                Error    = $res.Error
+                                FileUrl  = $res.FileUrl
                             }
                         }
                     }
@@ -177,9 +171,7 @@ try {
 
     # No need to flatten, just use the results directly
     $finalResults = $orchestratorResults
-
-    Write-Host "Final Orchestrator Results: $($finalResults | ConvertTo-Json -Depth 100)"
-
+    
     # Return the results as the HTTP response
     Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
         StatusCode = [HttpStatusCode]::OK

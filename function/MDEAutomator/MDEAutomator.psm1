@@ -483,6 +483,7 @@ function Invoke-PutFile {
     }
     return $responses
 }
+
 function Invoke-GetFile {
     param (
         [Parameter(Mandatory = $true)]
@@ -529,11 +530,14 @@ function Invoke-GetFile {
             $statusSucceeded = Get-MachineActionStatus -machineActionId $actionId -token $token
 
             if ($statusSucceeded) {
+                Start-Sleep -Seconds 3
                 $downloadUri = "https://api.securitycenter.microsoft.com/api/machineactions/$actionId/GetLiveResponseResultDownloadLink(index=0)"
+                $downloadResponse = Invoke-RestMethod -Uri $downloadUri -Headers $headers -Method Get
+                $FileUrl = $downloadResponse.value
                 $responses += [PSCustomObject]@{
                     DeviceId = $DeviceId
                     Status = "Success"
-                    DownloadUri = $downloadUri
+                    FileUrl = $FileUrl
                     ActionId = $actionId
                 }
             } else {
@@ -556,7 +560,6 @@ function Invoke-GetFile {
     }
     return $responses
 }
-
 function Invoke-CollectInvestigationPackage {
     param (
         [Parameter(Mandatory = $true)]

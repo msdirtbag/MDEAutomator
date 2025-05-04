@@ -150,6 +150,11 @@ $DeviceId = "<DeviceId>"
 $result = Invoke-LRScript -DeviceIds @($DeviceId) -scriptName 'Active.ps1' -token $token
 $result | ConvertTo-Json -Depth 5 | Write-Host
 
+# Download the file locally
+$result = Invoke-GetFile -token $token -filePath "C:\Temp\test.msi" -DeviceIds @("<DeviceId>")
+$downloadPath = "C:\Your\Desired\Path\test.msi.gz"
+Invoke-WebRequest -Uri $result.FileUrl -OutFile $downloadPath
+
 # Run Script on every device
 $DeviceIds = Get-Machines -token $token | Select-Object -ExpandProperty Id
 Invoke-LRScript -DeviceIds $DeviceIds -scriptName 'Active.ps1' -token $token
