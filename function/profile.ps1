@@ -9,12 +9,10 @@ if ($env:MSI_SECRET) {
     Set-AzContext -Subscription $subscriptionId -ErrorAction Stop
 }
 
-# Import MDEAutomator module
-Import-Module -Name ./MDEAutomator -ErrorAction Stop -Force
-
 # Import PowerShell Gallery modules
 Import-Module -Name Az.Accounts -ErrorAction Stop -Force
 Import-Module -Name Az.KeyVault -ErrorAction Stop -Force
 Import-Module -Name Az.Storage -ErrorAction Stop -Force
+Import-Module -Name MDEAutomator -ErrorAction Stop -Force
 
 #
