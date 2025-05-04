@@ -141,17 +141,18 @@ Invoke-UploadLR -token $token -filePath "C:\MDEAutomator\tester.txt"
 # Push a Live Response Library file to endpoint devices
 Invoke-PutFile -token $token -fileName "Active.ps1" -DeviceIds @("<DeviceId>")
 
-# Run a full disk scan on multiple devices
-Invoke-FullDiskScan -token $token -DeviceIds @("<DeviceId1>", "<DeviceId2>")
+# Run a full disk scan on all onboarded and active devices
+$DeviceIds = Get-Machines -token $token | Select-Object -ExpandProperty Id
+Invoke-FullDiskScan -token $token -DeviceIds $DeviceIds
 
-# Get a file from a device
-Invoke-GetFile -token $token -filePath "C:\Windows\Temp\log.txt" -DeviceIds @("<DeviceId>")
+# Run a script via Live Response on a single device and print the transcript in JSON
+$DeviceId = "<DeviceId>"
+$result = Invoke-LRScript -DeviceIds @($DeviceId) -scriptName 'Active.ps1' -token $token
+$result | ConvertTo-Json -Depth 5 | Write-Host
 
-# Collect an investigation package and upload to a storage account
-Invoke-CollectInvestigationPackage -token $token -DeviceIds @("<DeviceId>") -StorageAccountName "<StorageAccount>"
-
-# Run a script via Live Response
-Invoke-LRScript -token $token -DeviceIds @("<DeviceId>") -scriptName "Active.ps1"
+# Run Script on every device
+$DeviceIds = Get-Machines -token $token | Select-Object -ExpandProperty Id
+Invoke-LRScript -DeviceIds $DeviceIds -scriptName 'Active.ps1' -token $token
 
 # Get all onboarded and active Windows machines
 Get-Machines -token $token -filter "contains(osPlatform, 'Windows')"
@@ -162,34 +163,27 @@ Get-Actions -token $token
 # Cancel all current pending machine actions
 Undo-Actions -token $token
 
-# Offboard a device from Defender for Endpoint
-Invoke-MachineOffboard -token $token -DeviceIds @("<DeviceId>")
-
-# Download a file from a device and save locally
-$downloadUrl = Invoke-GetFile -token $token -filePath "C:\Windows\Temp\log.txt" -DeviceIds @("<DeviceId>")
-Invoke-WebRequest -Uri $downloadUrl -OutFile "C:\Temp\log.txt"
-
-# Run Script on every device
-$DeviceIds = Get-Machines -token $token | Select-Object -ExpandProperty Id
-Invoke-LRScript -DeviceIds $DeviceIds -scriptName 'awesome.ps1' -token $token
-
 # Retrieve all devices with a specific tag
 $taggedDevices = Get-Machines -token $token -filter "contains(machineTags, 'Critical')"
 
-# Run a custom script on all devices in a specific RBAC group
-$groupDevices = Get-Machines -token $token | Where-Object { $_.RbacGroupName -eq 'Tier1 Servers' } | Select-Object -ExpandProperty Id
-Invoke-LRScript -DeviceIds $groupDevices -scriptName 'audit.ps1' -token $token
-
-# Collect investigation packages from all devices seen in the last 24 hours
-$recentDevices = Get-Machines -token $token | Where-Object { (Get-Date($_.LastSeen) -gt (Get-Date).AddDays(-1)) } | Select-Object -ExpandProperty Id
-Invoke-CollectInvestigationPackage -token $token -DeviceIds $recentDevices
-
 # Restrict application execution on all endpoints with a high risk score
-$highRiskDevices = Get-Machines -token $token | Where-Object { $_.RiskScore -eq 'High' } | Select-Object -ExpandProperty Id
+$highRiskDevices = Get-Machines -token $token -filter "riskScore eq 'High'" | Select-Object -ExpandProperty Id
 Invoke-RestrictAppExecution -token $token -DeviceIds $highRiskDevices
 
 # Get the status of all recent machine actions and export to CSV
 Get-Actions -token $token | Export-Csv -Path "C:\Temp\MDEActions.csv" -NoTypeInformation
+
+# Upload CSV of SHA256 hash values to MDE
+$hashes = Import-Csv -Path "C:\Temp\hashes.csv" | Select-Object -ExpandProperty Sha256
+Invoke-TiFile -token $token -Sha256s $hashes
+
+# Upload CSV of IP addresses to MDE as threat indicators
+$ips = Import-Csv -Path "C:\Temp\ips.csv" | Select-Object -ExpandProperty IP
+Invoke-TiIP -token $token -IPs $ips
+
+# Upload CSV of URLs or domains to MDE as threat indicators
+$urls = Import-Csv -Path "C:\Temp\urls.csv" | Select-Object -ExpandProperty URL
+Invoke-TiURL -token $token -URLs $urls
 
 ```
 ### Response Actions
@@ -200,6 +194,12 @@ Invoke-MachineIsolation -token $token -DeviceIds @("<DeviceId>")
 
 # Release endpoints from isolation
 Undo-MachineIsolation -token $token -DeviceIds @("<DeviceId>")
+
+# Contain unmanaged endpoints
+Invoke-ContainDevice -token $token -DeviceIds @("<DeviceId>")
+
+# Release endpoints from containment
+Undo-ContainDevice -token $token -DeviceIds @("<DeviceId>")
 
 # Restrict application/code execution on a device
 Invoke-RestrictAppExecution -token $token -DeviceIds "<DeviceId>"
@@ -216,6 +216,12 @@ Invoke-TiFile -token $token -Sha256s @("<SHA256>")
 
 # Remove a file hash threat indicator
 Undo-TiFile -token $token -Sha256s @("<SHA256>")
+
+# Block a file hash (SHA1) as a custom threat indicator
+Invoke-TiFile -token $token -Sha1s @("<SHA1>")
+
+# Remove a file hash threat indicator
+Undo-TiFile -token $token -Sha1s @("<SHA1>")
 
 # Block an IP address as a threat indicator
 Invoke-TiIP -token $token -IPs @("<IPAddress>")
@@ -240,7 +246,10 @@ Undo-TiCert -token $token -Sha1s @("<SHA1Thumbprint>")
 
 MDEAutomator could be misused by a threat actor and quickly become a weapon of mass destruction.
 
-- Be mindful of secret management. Azure Key Vault with public access disabled is highly recommended.
+Secret Management
+- Azure Key Vault is recommended for most production uses cases.
+
+PowerShell Security Hyigene 
 - Clone the repo and use an Azure Trusted Signing account to sign all PowerShell in this repo with **your** signing key. There is a signing script included in the payloads subfolder in the repo named `signscripts.ps1` that can assist with this. Once this is done, redeploy the zip with the signed PowerShell to the Azure Function. This allows you to disable unsigned script execution in MDE Advanced Settings with no loss of functionality.
 
 [Azure Trusted Signing](https://learn.microsoft.com/en-us/azure/trusted-signing/quickstart)

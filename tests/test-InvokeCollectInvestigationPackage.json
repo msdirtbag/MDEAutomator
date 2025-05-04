@@ -1,6 +1,5 @@
 {
     "TenantId": "",
     "Function": "InvokeCollectInvestigationPackage",
-    "StorageAccountName": "teststorageaccount",
     "allDevices": true
 }
