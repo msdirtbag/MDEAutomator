@@ -64,7 +64,7 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
    - Ti.ReadWrite
 
 3. Generate SPN Secret (securely store for post-deployment configuration)  
-   ![Generate](./media/createspn.png)
+   ![Generate](./media/secret.png)
 
 4. Enable Unsigned Script Execution & Live Response for Servers and Workstations in MDE Advanced Settings. (See Security Notes section of this README)  
    ![Unsigned](./media/unsigned.png)
@@ -82,7 +82,7 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
 2. Add "SPNSECRET" to Azure Key Vault
 
    Create a secret named "SPNSECRET" with the value generated during SPN provisioning  
-      ![Secret](./media/secret.png)
+      ![Secret](./media/secretkv.png)
 
 
 3. Configure your front-end application to call the Function Apps
