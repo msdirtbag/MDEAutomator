@@ -12,5 +12,7 @@ if ($env:MSI_SECRET) {
 # Import PowerShell Gallery modules
 Import-Module -Name Az.Accounts
 Import-Module -Name Az.KeyVault
-Import-Module -Name Az.Storage 
-Import-Module -Name MDEAutomator
+Import-Module -Name Az.Storage
+
+# Import custom modules
+Import-Module -Name ./MDEAutomator

@@ -108,7 +108,7 @@ Below are example usage patterns for the MDEAutomator PowerShell module.
 ```powershell
 
 # Import MDEAutomator module from source repo
-Import-Module -Name ./module/MDEAutomator -ErrorAction Stop -Force
+Import-Module -Name ./function/modules/MDEAutomator -ErrorAction Stop -Force
 
 # Install & Import from PowerShell Gallery
 Install-Module -Name MDEAutomator -AllowClobber -Force
