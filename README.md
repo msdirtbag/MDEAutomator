@@ -49,10 +49,6 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
 
    Required WindowsDefenderATP API Permissions:
 
-   - AdvancedQuery.Read.All
-   - Alert.Read.All
-   - File.Read.All
-   - Ip.Read.All
    - Library.Manage
    - Machine.CollectForensics
    - Machine.Isolate
