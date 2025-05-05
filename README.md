@@ -98,7 +98,7 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
 - Use the PowerShell module in Azure Functions.
 - Use the PowerShell module in Azure Automation.
 
-## Usage
+## Module Introduction
 
 Below are example usage patterns for the MDEAutomator PowerShell module.
 
@@ -112,22 +112,6 @@ Import-Module -Name ./function/MDEAutomator -ErrorAction Stop -Force
 # Install & Import from PowerShell Gallery
 Install-Module -Name MDEAutomator -AllowClobber -Force
 Import-Module -Name MDEAutomator -ErrorAction Stop -Force
-
-```
-### Authentication Examples
-
-```powershell
-# Option 1: Using SecureString for SPN Secret and specifying TenantId
-$token = Connect-MDE -SpnId "<AppId>" -SpnSecret (Read-Host -AsSecureString) -TenantId "<TenantId>"
-
-# Option 2: Using SecureString for SPN Secret (defaults to home tenant)
-$token = Connect-MDE -SpnId "<AppId>" -SpnSecret (Read-Host -AsSecureString)
-
-# Option 3: Retrieving SPNSECRET from Azure Key Vault (requires Key Vault access)
-$token = Connect-MDE -SpnId "<AppId>" -keyVaultName "<KeyVaultName>"
-
-# Option 4: Retrieving SPNSECRET from Azure Key Vault and specifying TenantId
-$token = Connect-MDE -SpnId "<AppId>" -keyVaultName "<KeyVaultName>" -TenantId "<TenantId>"
 
 ```
 
@@ -190,62 +174,6 @@ $urls = Import-Csv -Path "C:\Temp\urls.csv" | Select-Object -ExpandProperty URL
 Invoke-TiURL -token $token -URLs $urls
 
 ```
-### Response Actions
-
-```powershell
-# Isolate endpoints from the network
-Invoke-MachineIsolation -token $token -DeviceIds @("<DeviceId>")
-
-# Release endpoints from isolation
-Undo-MachineIsolation -token $token -DeviceIds @("<DeviceId>")
-
-# Contain unmanaged endpoints
-Invoke-ContainDevice -token $token -DeviceIds @("<DeviceId>")
-
-# Release endpoints from containment
-Undo-ContainDevice -token $token -DeviceIds @("<DeviceId>")
-
-# Restrict application/code execution on a device
-Invoke-RestrictAppExecution -token $token -DeviceIds "<DeviceId>"
-
-# Remove application/code execution restriction
-Undo-RestrictAppExecution -token $token -DeviceIds @("<DeviceId>")
-```
-
-### Threat Indicator Management
-
-```powershell
-# Block a file hash (SHA256) as a custom threat indicator
-Invoke-TiFile -token $token -Sha256s @("<SHA256>")
-
-# Remove a file hash threat indicator
-Undo-TiFile -token $token -Sha256s @("<SHA256>")
-
-# Block a file hash (SHA1) as a custom threat indicator
-Invoke-TiFile -token $token -Sha1s @("<SHA1>")
-
-# Remove a file hash threat indicator
-Undo-TiFile -token $token -Sha1s @("<SHA1>")
-
-# Block an IP address as a threat indicator
-Invoke-TiIP -token $token -IPs @("<IPAddress>")
-
-# Remove an IP address threat indicator
-Undo-TiIP -token $token -IPs @("<IPAddress>")
-
-# Block a domain or URL as a threat indicator
-Invoke-TiURL -token $token -URLs @("<DomainOrUrl>")
-
-# Remove a domain or URL threat indicator
-Undo-TiURL -token $token -URLs @("<DomainOrUrl>")
-
-# Block a certificate thumbprint as a threat indicator
-Invoke-TiCert -token $token -Sha1s @("<SHA1Thumbprint>")
-
-# Remove a certificate thumbprint threat indicator
-Undo-TiCert -token $token -Sha1s @("<SHA1Thumbprint>")
-
-```
 ## Security Notes
 
 > ⚠️ **Warning:**  
@@ -272,8 +200,6 @@ Undo-TiCert -token $token -Sha1s @("<SHA1Thumbprint>")
 
 ---
 
----
-
 ## Disclaimer
 
 This software is provided "as is", without warranty of any kind, express or implied. The author and contributors are not responsible for any damages, losses, or issues arising from the use of this software. Use at your own risk.
@@ -297,3 +223,410 @@ Made possible by the BlueVoyant Digital Forensics & Incident Response team. For 
 - [Azure PowerShell Deployment Guide](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deploy-powershell)
 - [Azure Cloud Shell Deployment Guide](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deploy-cloud-shell)
 - [GitHub Actions Deployment Guide](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deploy-github-actions)
+
+### Module Documentation
+
+## 1. Connect-MDE
+
+**Description:**  
+Authenticates to Microsoft Defender for Endpoint (MDE) using a Service Principal, optionally retrieving secrets from Azure Key Vault.
+
+The `-SpnId` parameter is the Application (client) ID of your Azure Service Principal. This value uniquely identifies the app registration in Entra ID (Azure AD) that will be used for authentication. You can find this value in the Azure portal under your App Registration's overview page.
+
+The `-SpnSecret` parameter is the client secret associated with your Service Principal. This should be provided as a secure string. Use this parameter if you are not retrieving the secret from Azure Key Vault. Always store and handle this secret securely.
+
+The `-keyVaultName` parameter specifies the name of the Azure Key Vault where your Service Principal secret is stored. If you use this parameter, the module will attempt to retrieve the secret from the specified Key Vault at runtime. The currently logged-in user or managed identity must have appropriate permissions (such as Key Vault Secrets User) to access the secret.
+
+The `-TenantId` parameter is the Entra ID (Azure AD) tenant ID where your Service Principal is registered. This is typically a GUID. If not specified, the module will use the tenant associated with your current Azure context.
+
+**Parameters:**
+- `-SpnId` (string, required): Service Principal App ID.
+- `-SpnSecret` (securestring, optional): Service Principal secret (use if not using Key Vault).
+- `-keyVaultName` (string, optional): Azure Key Vault name (if retrieving secret from Key Vault).
+- `-TenantId` (string, optional): Entra ID Tenant ID or default to home tenant.
+
+**Example:**
+```powershell
+# Using Key Vault
+$token = Connect-MDE -SpnId "<appId>" -keyVaultName "<vaultName>"
+
+# Using direct secret
+$secureSecret = Read-Host "Enter Secret" -AsSecureString
+$token = Connect-MDE -SpnId "<appId>" -SpnSecret $secureSecret -TenantId "<tenantId>"
+```
+
+## 2. Get-Machines
+
+**Description:**  
+
+`Get-Machines` retrieves a collection of devices that have communicated with Microsoft Defender for Endpoint. It supports OData V4 queries, allowing you to filter, sort, and page results.
+
+**Parameters:**
+
+The `$token` parameter is the OAuth2 access token you receive from the `Connect-MDE` function. You must call `Connect-MDE` first and use its output as the `-token` value for `Get-Machines` and all other API functions. These tokens typically expire every 60 minutes. 
+
+- The `-filter` parameter lets you use OData `$filter` expressions on properties such as: `computerDnsName`, `id`, `version`, `deviceValue`, `aadDeviceId`, `machineTags`, `lastSeen`, `exposureLevel`, `onboardingStatus`, `lastIpAddress`, `healthStatus`, `osPlatform`, `riskScore`, and `rbacGroupId`. You can also use `$top` (up to 10,000) and `$skip` for paging results.
+
+**Example:**
+```powershell
+$machines = Get-Machines -token $token
+$machines | Format-Table ComputerDnsName, Id, OsPlatform
+```
+
+---
+
+## 3. Get-Actions
+
+**Description:**  
+Retrieves recent MDE machine actions from the last (60) days performed in MDE.
+
+**Parameters:**
+The `$token` parameter is the OAuth2 access token you receive from the `Connect-MDE` function. You must call `Connect-MDE` first and use its output as the `-token` value for `Get-Actions` and all other API functions. These tokens typically expire every 60 minutes. 
+
+**Example:**
+```powershell
+$actions = Get-Actions -token $token
+$actions | Format-Table Id, Type, Status, ComputerDnsName
+```
+
+---
+
+## 4. Undo-Actions
+
+**Description:**  
+`Undo-Actions` cancels all pending machine actions in Microsoft Defender for Endpoint. This is useful for stopping actions that are queued but not yet executed.
+
+**Parameters:**
+
+The `$token` parameter is the OAuth2 access token you receive from the `Connect-MDE` function. You must call `Connect-MDE` first and use its output as the `-token` value for `Undo-Actions` and all other API functions. These tokens typically expire every 60 minutes.
+
+- `-token` (string, required): OAuth2 access token.
+
+**Example:**
+```powershell
+Undo-Actions -token $token
+```
+
+---
+
+## 5. Invoke-MachineIsolation / Undo-MachineIsolation
+
+**Description:**  
+`Invoke-MachineIsolation` isolates one or more devices from the network, except for connections required for Defender for Endpoint service communication. This always uses Selective isolation and respects Isolation exclusion rules.
+`Undo-MachineIsolation` removes isolation from specified devices, restoring their normal network connectivity.
+
+**Parameters:**
+
+The `$token` parameter is the OAuth2 access token you receive from the `Connect-MDE` function. You must call `Connect-MDE` first and use its output as the `-token` value for these functions. These tokens typically expire every 60 minutes.
+
+The `-DeviceIds` parameter is an array of device IDs that uniquely identify the target devices in Microsoft Defender for Endpoint. You can obtain these IDs by running the `Get-Machines` function and referencing the `Id` property in the results. Pass one or more device IDs as a string array (e.g., `@("deviceId1", "deviceId2")`) to target multiple devices in a single operation.
+
+- `-token` (string, required): OAuth2 access token.
+- `-DeviceIds` (string[], required): Array of device IDs to isolate or unisolate.
+
+**Example:**
+```powershell
+Invoke-MachineIsolation -token $token -DeviceIds @("<deviceId1>", "<deviceId2>")
+Undo-MachineIsolation -token $token -DeviceIds @("<deviceId1>")
+```
+
+---
+
+## 6. Invoke-ContainDevice / Undo-ContainDevice
+
+**Description:**  
+`Invoke-ContainDevice` contains one or more unmanaged devices in Microsoft Defender for Endpoint, restricting their network connectivity to prevent lateral movement.  
+`Undo-ContainDevice` removes containment from specified unmanaged devices, restoring their normal network connectivity.
+
+**Parameters:**
+
+The `$token` parameter is the OAuth2 access token you receive from the `Connect-MDE` function. You must call `Connect-MDE` first and use its output as the `-token` value for these functions. These tokens typically expire every 60 minutes.
+
+The `-DeviceIds` parameter is an array of device IDs that uniquely identify the target devices in Microsoft Defender for Endpoint. Indentify the DeviceId of Unmanaged device you wish to Contain.
+
+- `-token` (string, required): OAuth2 access token.
+- `-DeviceIds` (string[], required): Array of device IDs to contain or uncontain.
+
+**Example:**
+```powershell
+Invoke-ContainDevice -token $token -DeviceIds @("<deviceId>")
+Undo-ContainDevice -token $token -DeviceIds @("<deviceId>")
+```
+
+---
+
+## 7. Invoke-RestrictAppExecution / Undo-RestrictAppExecution
+
+**Description:**  
+`Invoke-RestrictAppExecution` restricts application execution on one or more devices, allowing only Microsoft-signed binaries to run.  
+`Undo-RestrictAppExecution` removes this restriction, allowing normal application execution.
+
+**Parameters:**
+
+The `$token` parameter is the OAuth2 access token you receive from the `Connect-MDE` function. You must call `Connect-MDE` first and use its output as the `-token` value for these functions. These tokens typically expire every 60 minutes.
+
+The `-DeviceIds` parameter is an array of device IDs that uniquely identify the target devices in Microsoft Defender for Endpoint. You can obtain these IDs by running the `Get-Machines` function and referencing the `Id` property in the results. Pass one or more device IDs as a string array (e.g., `@("deviceId1", "deviceId2")`) to target multiple devices in a single operation.
+
+- `-token` (string, required): OAuth2 access token.
+- `-DeviceIds` (string[], required): Array of device IDs to restrict or unrestrict.
+
+**Example:**
+```powershell
+Invoke-RestrictAppExecution -token $token -DeviceIds @("<deviceId>")
+Undo-RestrictAppExecution -token $token -DeviceIds @("<deviceId>")
+```
+
+---
+
+## 8. Invoke-CollectInvestigationPackage
+
+**Description:**  
+`Invoke-CollectInvestigationPackage` collects an investigation package from one or more specified devices. The package contains forensic artifacts for further analysis.
+
+**Parameters:**
+
+The `$token` parameter is the OAuth2 access token you receive from the `Connect-MDE` function. You must call `Connect-MDE` first and use its output as the `-token` value for these functions. These tokens typically expire every 60 minutes.
+
+The `-DeviceIds` parameter is an array of device IDs that uniquely identify the target devices in Microsoft Defender for Endpoint. You can obtain these IDs by running the `Get-Machines` function and referencing the `Id` property in the results. Pass one or more device IDs as a string array (e.g., `@("deviceId1", "deviceId2")`) to target multiple devices in a single operation.
+
+- `-token` (string, required): OAuth2 access token.
+- `-DeviceIds` (string[], required): Array of device IDs to collect packages from.
+
+**Example:**
+```powershell
+Invoke-CollectInvestigationPackage -token $token -DeviceIds @("<deviceId>")
+```
+
+---
+
+## 9. Invoke-TiFile / Undo-TiFile
+
+**Description:**  
+`Invoke-TiFile` creates file hash-based custom threat indicators in Microsoft Defender for Endpoint.  
+`Undo-TiFile` deletes file hash-based custom threat indicators.
+
+**Parameters:**
+
+The `$token` parameter is the OAuth2 access token you receive from the `Connect-MDE` function. You must call `Connect-MDE` first and use its output as the `-token` value for these functions. These tokens typically expire every 60 minutes.
+
+The `-Sha1s` and `-Sha256s` parameters are arrays of file hashes that you want to add or remove as custom threat indicators in Microsoft Defender for Endpoint. Each entry should be a valid SHA-1 or SHA-256 hash string. You can specify values for either or both parameters at the same time, and the function will process all provided hashes in a single operation. This allows you to efficiently manage multiple file-based indicators in one call.
+
+- `-token` (string, required): OAuth2 access token.
+- `-Sha1s` (string[], optional): Array of SHA1 hashes.
+- `-Sha256s` (string[], optional): Array of SHA256 hashes.
+
+**Example:**
+```powershell
+Invoke-TiFile -token $token -Sha1s @("<sha1>")
+Undo-TiFile -token $token -Sha256s @("<sha256>")
+```
+
+---
+
+## 10. Invoke-TiCert / Undo-TiCert
+
+**Description:**  
+`Invoke-TiCert` creates certificate thumbprint-based custom threat indicators in Microsoft Defender for Endpoint.  
+`Undo-TiCert` deletes certificate thumbprint-based custom threat indicators.
+
+**Parameters:**
+
+The `$token` parameter is the OAuth2 access token you receive from the `Connect-MDE` function. You must call `Connect-MDE` first and use its output as the `-token` value for these functions. These tokens typically expire every 60 minutes.
+
+The `-Sha1s` parameter is an array of certificate thumbprints that you want to add or remove as custom threat indicators in Microsoft Defender for Endpoint. Each entry must be a valid SHA-1 certificate thumbprint string. Note that MDE only accepts SHA-1 values for certificate thumbprints—other hash types are not supported. 
+
+- `-token` (string, required): OAuth2 access token.
+- `-Sha1s` (string[], required): Array of certificate thumbprints.
+
+**Example:**
+```powershell
+Invoke-TiCert -token $token -Sha1s @("<thumbprint>")
+Undo-TiCert -token $token -Sha1s @("<thumbprint>")
+```
+
+---
+
+## 11. Invoke-TiIP / Undo-TiIP
+
+**Description:**  
+`Invoke-TiIP` creates IP address-based custom threat indicators in Microsoft Defender for Endpoint.  
+`Undo-TiIP` deletes IP address-based custom threat indicators.
+
+**Parameters:**
+
+The `$token` parameter is the OAuth2 access token you receive from the `Connect-MDE` function. You must call `Connect-MDE` first and use its output as the `-token` value for these functions. These tokens typically expire every 60 minutes.
+
+The `-IPs` parameter is an array of IP addresses that you want to add or remove as custom threat indicators in Microsoft Defender for Endpoint. Each entry should be a valid public IPv4 or IPv6 address (e.g., `"8.8.8.8"` or `"2001:4860:4860::8888"`). Private or reserved IP ranges are not supported. You can specify one or more IP addresses as a string array (e.g., `@("8.8.8.8", "1.1.1.1")`) to target multiple indicators in a single operation.
+
+- `-token` (string, required): OAuth2 access token.
+- `-IPs` (string[], required): Array of IP addresses.
+
+**Example:**
+```powershell
+Invoke-TiIP -token $token -IPs @("8.8.8.8")
+Undo-TiIP -token $token -IPs @("8.8.8.8")
+```
+
+---
+
+## 12. Invoke-TiURL / Undo-TiURL
+
+**Description:**  
+`Invoke-TiURL` creates URL or domain-based custom threat indicators in Microsoft Defender for Endpoint.  
+`Undo-TiURL` deletes URL or domain-based custom threat indicators.
+
+**Parameters:**
+
+The `$token` parameter is the OAuth2 access token you receive from the `Connect-MDE` function. You must call `Connect-MDE` first and use its output as the `-token` value for these functions. These tokens typically expire every 60 minutes.
+
+The `-URLs` parameter is an array of URLs or domain names that you want to add or remove as custom threat indicators in Microsoft Defender for Endpoint. Each entry should be a valid URL or domain string (e.g., `"malicious.example.com"`). You can specify one or more URLs or domains as a string array (e.g., `@("malicious.example.com", "phishing.example.net")`) to target multiple indicators in a single operation.
+
+- `-token` (string, required): OAuth2 access token.
+- `-URLs` (string[], required): Array of URLs or domains.
+
+**Example:**
+```powershell
+Invoke-TiURL -token $token -URLs @("malicious.example.com")
+Undo-TiURL -token $token -URLs @("malicious.example.com")
+```
+
+---
+
+## 13. Invoke-UploadLR
+
+**Description:**  
+`Invoke-UploadLR` uploads a script file to the Microsoft Defender for Endpoint Live Response library for later use in automated investigations or manual response.
+
+**Parameters:**
+
+The `$token` parameter is the OAuth2 access token you receive from the `Connect-MDE` function. You must call `Connect-MDE` first and use its output as the `-token` value for these functions. These tokens typically expire every 60 minutes.
+
+The `-filePath` parameter specifies the full path to the script or file you want to upload or retrieve. For upload operations, provide the local path to the file on your system (e.g., `"C:\Scripts\MyScript.ps1"`). 
+
+- `-token` (string, required): OAuth2 access token.
+- `-filePath` (string, required): Path to the script file to upload.
+
+**Example:**
+```powershell
+Invoke-UploadLR -token $token -filePath "C:\Scripts\MyScript.ps1"
+```
+
+---
+
+## 14. Invoke-PutFile
+
+**Description:**  
+`Invoke-PutFile` pushes a file from the Live Response library to one or more specified devices.
+
+**Parameters:**
+
+The `$token` parameter is the OAuth2 access token you receive from the `Connect-MDE` function. You must call `Connect-MDE` first and use its output as the `-token` value for these functions. These tokens typically expire every 60 minutes.
+
+The `-fileName` parameter specifies the name of the file in the Live Response library that you want to push to devices. This should match the exact file name as it appears in the library, including the file extension (e.g., `"MyScript.ps1"`). Ensure the file has already been uploaded to the library using the appropriate upload function before referencing it here.
+
+The `-DeviceIds` parameter is an array of device IDs that uniquely identify the target devices in Microsoft Defender for Endpoint. You can obtain these IDs by running the `Get-Machines` function and referencing the `Id` property in the results. Pass one or more device IDs as a string array (e.g., `@("deviceId1", "deviceId2")`) to target multiple devices in a single operation.
+
+- `-token` (string, required): OAuth2 access token.
+- `-fileName` (string, required): Name of the file in the library.
+- `-DeviceIds` (string[], required): Array of device IDs to receive the file.
+
+**Example:**
+```powershell
+Invoke-PutFile -token $token -fileName "MyScript.ps1" -DeviceIds @("<deviceId>")
+```
+
+---
+
+## 15. Invoke-GetFile
+
+**Description:**  
+`Invoke-GetFile` retrieves a file from one or more specified devices using Live Response.
+
+**Parameters:**
+
+The `$token` parameter is the OAuth2 access token you receive from the `Connect-MDE` function. You must call `Connect-MDE` first and use its output as the `-token` value for these functions. These tokens typically expire every 60 minutes.
+
+The `-filePath` parameter specifies the full path to the script or file you want to upload or retrieve. For upload operations, provide the path to the file on the MDE endpoint. (e.g., `"C:\Temp\error.log"`)
+
+The `-DeviceIds` parameter is an array of device IDs that uniquely identify the target devices in Microsoft Defender for Endpoint. You can obtain these IDs by running the `Get-Machines` function and referencing the `Id` property in the results. Pass one or more device IDs as a string array (e.g., `@("deviceId1", "deviceId2")`) to target multiple devices in a single operation.
+
+- `-token` (string, required): OAuth2 access token.
+- `-filePath` (string, required): Path to the file on the device.
+- `-DeviceIds` (string[], required): Array of device IDs to retrieve the file from.
+
+**Example:**
+```powershell
+Invoke-GetFile -token $token -filePath "C:\Windows\Temp\test.txt" -DeviceIds @("<deviceId>")
+```
+
+---
+
+## 16. Invoke-LRScript
+
+**Description:**  
+`Invoke-LRScript` executes a Live Response script from the library on one or more specified devices.
+
+**Parameters:**
+
+The `$token` parameter is the OAuth2 access token you receive from the `Connect-MDE` function. You must call `Connect-MDE` first and use its output as the `-token` value for these functions. These tokens typically expire every 60 minutes.
+
+The `-scriptName` parameter specifies the name of the file in the Live Response library that you want to push to devices. This should match the exact file name as it appears in the library, including the file extension (e.g., `"MyScript.ps1"`). Ensure the file has already been uploaded to the library using the appropriate upload function before referencing it here.
+
+The `-DeviceIds` parameter is an array of device IDs that uniquely identify the target devices in Microsoft Defender for Endpoint. You can obtain these IDs by running the `Get-Machines` function and referencing the `Id` property in the results. Pass one or more device IDs as a string array (e.g., `@("deviceId1", "deviceId2")`) to target multiple devices in a single operation.
+
+- `-DeviceIds` (string[], required): Array of device IDs to run the script on.
+- `-scriptName` (string, required): Name of the script in the library.
+- `-token` (string, required): OAuth2 access token.
+
+**Example:**
+```powershell
+Invoke-LRScript -DeviceIds @("<deviceId>") -scriptName "MyScript.ps1" -token $token
+```
+
+---
+
+## 17. Get-MachineActionStatus
+
+**Description:**  
+`Get-MachineActionStatus` checks the status of a machine action by its action ID.
+
+**Parameters:**
+
+The `$token` parameter is the OAuth2 access token you receive from the `Connect-MDE` function. You must call `Connect-MDE` first and use its output as the `-token` value for these functions. These tokens typically expire every 60 minutes.
+
+The `-machineActionId` parameter is the unique identifier for a specific machine action in Microsoft Defender for Endpoint. You can obtain this value from the output of functions such as `Get-Actions` or after initiating an action (e.g., isolation, investigation package collection) and waiting for the response. Use this ID to query the status or retrieve the output of that particular action.
+
+
+- `-machineActionId` (string, required): The machineActionId to check.
+- `-token` (string, required): OAuth2 access token.
+
+**Example:**
+```powershell
+Get-MachineActionStatus -machineActionId "<machineActionId>" -token $token
+```
+
+---
+
+## 18. Get-LiveResponseOutput
+
+**Description:**  
+`Get-LiveResponseOutput` downloads and parses the output of a Live Response script for a given machine action.
+
+**Parameters:**
+
+The `$token` parameter is the OAuth2 access token you receive from the `Connect-MDE` function. You must call `Connect-MDE` first and use its output as the `-token` value for these functions. These tokens typically expire every 60 minutes.
+
+The `-machineActionId` parameter is the unique identifier for a specific machine action in Microsoft Defender for Endpoint. You can obtain this value from the output of functions such as `Get-Actions` or after initiating an action (e.g., isolation, investigation package collection) and waiting for the response. Use this ID to query the status or retrieve the output of that particular action.
+
+- `-machineActionId` (string, required): The machineActionId for the Live Response script.
+- `-token` (string, required): OAuth2 access token.
+
+**Example:**
+```powershell
+Get-LiveResponseOutput -machineActionId "<machineActionId>" -token $token
+```
+---
+
+> **Tip:**  
+> For all functions, ensure you have a valid `$token` from `Connect-MDE` and the required permissions in Azure/MDE.
+
