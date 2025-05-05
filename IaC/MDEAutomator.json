@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.35.1.17967",
-      "templateHash": "12593727018743509699"
+      "templateHash": "2637842251544491801"
     }
   },
   "parameters": {
@@ -50,7 +50,7 @@
         },
         "networkAcls": {
           "bypass": "AzureServices",
-          "defaultAction": "Deny",
+          "defaultAction": "Allow",
           "ipRules": [
             {
               "value": "[reference(resourceId('Microsoft.Web/sites', format('funcmdeauto{0}', variables('environmentid'))), '2023-12-01').outboundIpAddresses]"

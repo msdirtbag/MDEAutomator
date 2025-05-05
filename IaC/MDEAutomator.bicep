@@ -40,7 +40,7 @@ resource keyvault 'Microsoft.KeyVault/vaults@2024-11-01' = {
     }
     networkAcls: {
       bypass: 'AzureServices'
-      defaultAction: 'Deny'
+      defaultAction: 'Allow'
       ipRules: [
         {
           value: function01.properties.outboundIpAddresses
