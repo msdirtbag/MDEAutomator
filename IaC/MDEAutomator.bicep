@@ -41,6 +41,11 @@ resource keyvault 'Microsoft.KeyVault/vaults@2024-11-01' = {
     networkAcls: {
       bypass: 'AzureServices'
       defaultAction: 'Deny'
+      ipRules: [
+        {
+          value: function01.properties.outboundIpAddresses
+        }
+      ]      
     }  
     tenantId: subscription().tenantId
     publicNetworkAccess: 'Enabled'
@@ -288,7 +293,7 @@ resource function01 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
             name: 'AZURE_KEYVAULT'
-            value: keyvault.name
+            value: 'kv-mdeauto-${environmentid}'
         }
         {
             name: 'SUBSCRIPTION_ID'
