@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.35.1.17967",
-      "templateHash": "2637842251544491801"
+      "templateHash": "6212863098969516973"
     }
   },
   "parameters": {
@@ -50,19 +50,11 @@
         },
         "networkAcls": {
           "bypass": "AzureServices",
-          "defaultAction": "Allow",
-          "ipRules": [
-            {
-              "value": "[reference(resourceId('Microsoft.Web/sites', format('funcmdeauto{0}', variables('environmentid'))), '2023-12-01').outboundIpAddresses]"
-            }
-          ]
+          "defaultAction": "Allow"
         },
         "tenantId": "[subscription().tenantId]",
         "publicNetworkAccess": "Enabled"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Web/sites', format('funcmdeauto{0}', variables('environmentid')))]"
-      ]
+      }
     },
     {
       "type": "Microsoft.Authorization/roleAssignments",
