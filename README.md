@@ -57,7 +57,6 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
    - Machine.CollectForensics
    - Machine.Isolate
    - Machine.LiveResponse
-   - Machine.Offboard
    - Machine.ReadWrite.All
    - Machine.RestrictExecution
    - Machine.Scan
