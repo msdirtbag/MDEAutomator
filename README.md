@@ -49,14 +49,19 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
 
    Required WindowsDefenderATP API Permissions:
 
+   - AdvancedQuery.Read.All
+   - Alert.Read.All
+   - File.Read.All
+   - Ip.Read.All
    - Library.Manage
    - Machine.CollectForensics
    - Machine.Isolate
+   - Machine.StopAndQuarantine
    - Machine.LiveResponse
    - Machine.ReadWrite.All
    - Machine.RestrictExecution
    - Machine.Scan
-   - Ti.ReadWrite
+   - Ti.ReadWrite.All
 
 3. Generate SPN Secret (securely store for post-deployment configuration)  
    ![Generate](./media/secret.png)
