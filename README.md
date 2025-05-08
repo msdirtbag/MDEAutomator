@@ -62,6 +62,7 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
    - Machine.RestrictExecution
    - Machine.Scan
    - Ti.ReadWrite.All
+   - User.Read.All
 
 3. Generate SPN Secret (securely store for post-deployment configuration)  
    ![Generate](./media/secret.png)
