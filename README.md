@@ -623,6 +623,86 @@ Get-LiveResponseOutput -machineActionId "<machineActionId>" -token $token
 ```
 ---
 
+### 19. Invoke-StopAndQuarantineFile
+
+**Description:**  
+`Invoke-StopAndQuarantineFile` issues a Stop and Quarantine File action on one or more devices in Microsoft Defender for Endpoint. This action attempts to stop the specified file (by SHA1 hash) on all Active and onboarded devices.
+
+**Parameters:**
+
+- `-token` (string, required): OAuth2 access token. Obtain this from `Connect-MDE`.
+- `-Sha1` (string, required): The SHA1 hash of the file to stop and quarantine.
+
+**Example:**
+```powershell
+Invoke-StopAndQuarantineFile -token $token -Sha1 "<sha1hash>"
+```
+
+---
+
+### 20. Get-Indicators
+
+**Description:**  
+`Get-Indicators` retrieves all custom threat indicators (IOCs) from Microsoft Defender for Endpoint, including file hashes, IPs, URLs, and certificates. 
+
+**Parameters:**
+
+- `-token` (string, required): OAuth2 access token. Obtain this from `Connect-MDE`.
+
+**Example:**
+```powershell
+$indicators = Get-Indicators -token $token
+$indicators | Format-Table Id, IndicatorValue, IndicatorType, Action
+```
+## 21. Get-FileInfo
+
+**Description:**  
+`Get-FileInfo` retrieves detailed information about one or more files in Microsoft Defender for Endpoint using their SHA1 hashes. For each hash, it returns file metadata, related alerts, machines, and statistics.
+
+**Parameters:**
+
+- `-token` (string, required): OAuth2 access token. Obtain this from `Connect-MDE`.
+- `-Sha1s` (string[], required): Array of SHA1 hashes to query.
+
+**Example:**
+```powershell
+$fileInfo = Get-FileInfo -token $token -Sha1s @("<sha1hash1>", "<sha1hash2>")
+$fileInfo | ConvertTo-Json -Depth 5
+```
+
+---
+
+## 22. Get-IPInfo
+
+**Description:**  
+`Get-IPInfo` retrieves information about one or more IP addresses from Microsoft Defender for Endpoint. For each IP, it returns related alerts, statistics, and advanced hunting results.
+
+**Parameters:**
+
+- `-token` (string, required): OAuth2 access token. Obtain this from `Connect-MDE`.
+- `-IPs` (string[], required): Array of IP addresses to query.
+
+**Example:**
+```powershell
+$ipInfo = Get-IPInfo -token $token -IPs @("8.8.8.8", "1.2.3.4")
+$ipInfo | ConvertTo-Json -Depth 5
+```
+## 23. Get-LoggedInUsers
+
+**Description:**  
+`Get-LoggedInUsers` retrieves the list of users currently or recently logged in to one or more devices in Microsoft Defender for Endpoint. For each device, it returns details such as account name, domain, logon type, session info, and last seen time.
+
+**Parameters:**
+
+- `-token` (string, required): OAuth2 access token. Obtain this from `Connect-MDE`.
+- `-DeviceIds` (string[], required): Array of device IDs to query. Use `Get-Machines` to obtain IDs.
+
+**Example:**
+```powershell
+$deviceIds = Get-Machines -token $token | Select-Object -ExpandProperty Id
+$users = Get-LoggedInUsers -token $token -DeviceIds $deviceIds
+$users | Format-Table DeviceId, AccountName, LogonTime, LastSeen
+```
 > **Tip:**  
 > For all functions, ensure you have a valid `$token` from `Connect-MDE` and the required permissions in Azure/MDE.
 

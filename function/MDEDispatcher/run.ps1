@@ -13,6 +13,7 @@ try {
     $allDevices = Get-RequestParam -Name "allDevices" -Request $Request -DefaultValue $false
     $Filter = Get-RequestParam -Name "Filter" -Request $Request
     $StorageAccountName = Get-RequestParam -Name "StorageAccountName" -Request $Request
+    $Sha1s = Get-RequestParam -Name "Sha1s" -Request $Request
 
     # Get environment variables and connect
     $spnId = [System.Environment]::GetEnvironmentVariable('SPNID', 'Process')
@@ -69,8 +70,8 @@ try {
                 "UndoRestrictAppExecution" { 
                     Undo-RestrictAppExecution -token $using:token -DeviceIds $deviceId 
                 }
-                "InvokeMachineOffboard" { 
-                    Invoke-MachineOffboard -token $using:token -DeviceIds $deviceId 
+                "InvokeStopAndQuarantineFile" { 
+                    Invoke-StopAndQuarantineFile -token $using:token -Sha1s $Sha1s
                 }
                 "InvokeCollectInvestigationPackage" {
                     

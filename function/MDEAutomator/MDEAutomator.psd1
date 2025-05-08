@@ -1,6 +1,6 @@
 @{
     # Module Identity
-    ModuleVersion     = '1.2'
+    ModuleVersion     = '1.3'
     GUID              = '010c4ef2-f71c-4bce-84cc-de9752cf1577'
     RootModule        = 'MDEAutomator.psm1'
 
@@ -23,6 +23,9 @@
         'Get-Machines'
         'Get-Actions'
         'Undo-Actions'
+        'Get-IPInfo'
+        'Get-FileInfo'
+        'Get-LoggedInUsers'
         'Get-MachineActionStatus'
         
         # Live Response Actions
@@ -37,9 +40,11 @@
         'Invoke-ContainDevice', 'Undo-ContainDevice'
         'Invoke-RestrictAppExecution', 'Undo-RestrictAppExecution'
         'Invoke-FullDiskScan'
+        'Invoke-StopAndQuarantineFile'
         'Invoke-CollectInvestigationPackage'
 
         # IOC's
+        'Get-Indicators',
         'Invoke-TiFile', 'Undo-TiFile'
         'Invoke-TiCert', 'Undo-TiCert'
         'Invoke-TiIP',   'Undo-TiIP'

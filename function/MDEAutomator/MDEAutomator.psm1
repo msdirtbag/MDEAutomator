@@ -917,6 +917,53 @@ function Get-Machines {
     }
 }
 
+function Get-LoggedInUsers {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$token,
+        [Parameter(Mandatory = $true)]
+        [string[]]$DeviceIds
+    )
+    $headers = @{
+        "Authorization" = "Bearer $token"
+    }
+    $allResponses = @()
+    foreach ($DeviceId in $DeviceIds) {
+        Write-Host "Retrieving logon users for DeviceId: $DeviceId"
+        $uri = "https://api.securitycenter.microsoft.com/api/machines/$DeviceId/logonusers"
+        try {
+            $responses = @()
+            do {
+                $response = Invoke-RestMethod -Uri $uri -Method Get -Headers $headers -ErrorAction Stop
+                $responses += $response.value | ForEach-Object {
+                    [PSCustomObject]@{
+                        DeviceId = $DeviceId
+                        AccountName = $_.accountName
+                        AccountDomain = $_.accountDomain
+                        LogonType = $_.logonType
+                        LogonTime = $_.logonTime
+                        IsDomainAccount = $_.isDomainAccount
+                        Sid = $_.sid
+                        AccountSid = $_.accountSid
+                        LogonId = $_.logonId
+                        LogonIdType = $_.logonIdType
+                        LogonSessionId = $_.logonSessionId
+                        LogonProcess = $_.logonProcess
+                        AuthenticationPackage = $_.authenticationPackage
+                        LogonServer = $_.logonServer
+                        LastSeen = $_.lastSeen
+                    }
+                }
+                $uri = $response.'@odata.nextLink'
+            } while ($uri)
+            $allResponses += $responses
+        } catch {
+            Write-Error "Failed to retrieve logon users for DeviceId: $DeviceId - $($_.Exception.Message)"
+        }
+    }
+    return $allResponses
+}
+
 function Get-Actions {
     param (
         [Parameter(Mandatory = $true)]
@@ -1035,6 +1082,100 @@ function Undo-Actions {
         }
     }
     Write-Host "Undo-Actions completed. Total processed: $($responses.Count)"
+    return $responses
+}
+
+function Get-FileInfo {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$token,
+        [Parameter(Mandatory = $true)]
+        [string[]]$Sha1s
+    )
+    $headers = @{
+        "Authorization" = "Bearer $token"
+    }
+    $responses = @()
+
+    foreach ($Sha1 in $Sha1s) {
+        $uri1 = "https://api.security.microsoft.com/api/files/$Sha1"
+        $uri2 = "https://api.securitycenter.microsoft.com/api/files/$Sha1/alerts"
+        $uri3 = "https://api.securitycenter.microsoft.com/api/files/$Sha1/machines"
+        $uri4 = "https://api.securitycenter.microsoft.com/api/files/$Sha1/stats"
+
+        try {
+            $response1 = Invoke-RestMethod -Uri $uri1 -Method Get -Headers $headers -ErrorAction Stop
+            $response2 = Invoke-RestMethod -Uri $uri2 -Method Get -Headers $headers -ErrorAction Stop
+            $response3 = Invoke-RestMethod -Uri $uri3 -Method Get -Headers $headers -ErrorAction Stop
+            $response4 = Invoke-RestMethod -Uri $uri4 -Method Get -Headers $headers -ErrorAction Stop
+            $response = [PSCustomObject]@{
+                FileInfo = $response1
+                Alerts = $response2
+                Machines = $response3
+                Stats = $response4
+            }
+            Write-Host "Successfully retrieved file information for Sha1: $Sha1"
+            $responses += [PSCustomObject]@{
+                Sha1 = $Sha1
+                Response = $response
+            }
+        } catch {
+            Write-Error "Failed to retrieve file information for Sha1: $Sha1 $_"
+            $responses += [PSCustomObject]@{
+                Sha1 = $Sha1
+                Error = $_.Exception.Message
+            }
+        }
+    }
+    return $responses
+}
+
+function Get-IPInfo {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$token,
+        [Parameter(Mandatory = $true)]
+        [string[]]$IPs
+    )
+    $headers = @{
+        "Authorization" = "Bearer $token"
+    }
+    $responses = @()
+
+    foreach ($IP in $IPs) {
+        $uri1 = "https://api.securitycenter.microsoft.com/api/ips/$IP/alerts"
+        $uri2 = "https://api.security.microsoft.com/api/ips/$IP/stats"
+        $uri3 = "https://api.securitycenter.microsoft.com/api/advancedqueries/run"
+
+        try {
+            $response1 = Invoke-RestMethod -Uri $uri1 -Method Get -Headers $headers -ErrorAction Stop
+            $response2 = Invoke-RestMethod -Uri $uri2 -Method Get -Headers $headers -ErrorAction Stop
+            $response = [PSCustomObject]@{
+                Alerts = $response1
+                Stats = $response2
+            }
+
+            $kqlQuery = "DeviceNetworkEvents | where RemoteIP == '$IP' | summarize Count = count() by DeviceName, DeviceId | top 100 by Count"
+            $body = @{
+                "Query" = $kqlQuery
+            }
+            
+            $advancedHuntingResponse = Invoke-RestMethod -Uri $uri3 -Method Post -Headers $headers -Body ($body | ConvertTo-Json) -ContentType "application/json" -ErrorAction Stop
+
+            Write-Host "Successfully retrieved IP information for IP: $IP"
+            $responses += [PSCustomObject]@{
+                IP = $IP
+                Response = $response
+                AdvancedHuntingData = $advancedHuntingResponse.Results
+            }
+        } catch {
+            Write-Error "Failed to retrieve IP information for IP: $IP $_"
+            $responses += [PSCustomObject]@{
+                IP = $IP
+                Error = $_.Exception.Message
+            }
+        }
+    }
     return $responses
 }
 
@@ -1473,6 +1614,114 @@ function Undo-RestrictAppExecution {
     return $responses
 }
 
+function Invoke-StopAndQuarantineFile {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$token,
+        [Parameter(Mandatory = $true)]
+        [string]$Sha1
+    )
+    $headers = @{
+        "Authorization" = "Bearer $token"
+    }
+    $responses = @()
+
+    # Get all onboarded and active machines
+    $machines = Get-Machines -token $token
+    if (-not $machines -or $machines.Count -eq 0) {
+        Write-Error "No machines found to process."
+        return $responses
+    }
+
+    foreach ($machine in $machines) {
+        $DeviceId = $machine.Id
+        $uri = "https://api.securitycenter.microsoft.com/api/machines/$DeviceId/StopAndQuarantineFile"
+        $body = @{
+            "Comment" = "MDEAutomator"
+            "Sha1"    = $Sha1
+        } | ConvertTo-Json
+        try {
+            $response = Invoke-WithRetry -ScriptBlock {
+                Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body -ContentType "application/json" -ErrorAction Stop
+            }
+            Write-Host "Successfully invoked StopAndQuarantineFile on DeviceId: $DeviceId"
+            $responses += [PSCustomObject]@{
+                DeviceId = $DeviceId
+                Response = $response
+            }
+        } catch {
+            Write-Error "Failed to invoke StopAndQuarantineFile on DeviceId: $DeviceId $_"
+            $responses += [PSCustomObject]@{
+                DeviceId = $DeviceId
+                Error = $_.Exception.Message
+            }
+        }
+    }
+    return $responses
+}
+
+function Get-Indicators {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$token
+    )
+    $uri = "https://api.securitycenter.microsoft.com/api/indicators"
+    $headers = @{
+        "Authorization" = "Bearer $token"
+    }
+    $allResults = @()
+    try {
+        $response = Invoke-RestMethod -Uri $uri -Method Get -Headers $headers -ErrorAction Stop
+        $allResults += $response.value | ForEach-Object {
+            [PSCustomObject]@{
+                Id = $_.id
+                IndicatorValue = $_.indicatorValue
+                IndicatorType = $_.indicatorType
+                Action = $_.action
+                Application = $_.application
+                Source = $_.source
+                SourceType = $_.sourceType
+                Title = $_.title
+                CreationTimeDateTimeUtc = $_.creationTimeDateTimeUtc
+                CreatedBy = $_.createdBy
+                ExpirationTime = $_.expirationTime
+                LastUpdateTime = $_.lastUpdateTime
+                LastUpdatedBy = $_.lastUpdatedBy
+                Severity = $_.severity
+                Description = $_.description
+                RecommendedActions = $_.recommendedActions
+                RbacGroupNames = $_.rbacGroupNames
+            }
+        }
+        while ($response.'@odata.nextLink') {
+            $response = Invoke-RestMethod -Uri $response.'@odata.nextLink' -Method Get -Headers $headers -ErrorAction Stop
+            $allResults += $response.value | ForEach-Object {
+                [PSCustomObject]@{
+                    Id = $_.id
+                    IndicatorValue = $_.indicatorValue
+                    IndicatorType = $_.indicatorType
+                    Action = $_.action
+                    Application = $_.application
+                    Source = $_.source
+                    SourceType = $_.sourceType
+                    Title = $_.title
+                    CreationTimeDateTimeUtc = $_.creationTimeDateTimeUtc
+                    CreatedBy = $_.createdBy
+                    ExpirationTime = $_.expirationTime
+                    LastUpdateTime = $_.lastUpdateTime
+                    LastUpdatedBy = $_.lastUpdatedBy
+                    Severity = $_.severity
+                    Description = $_.description
+                    RecommendedActions = $_.recommendedActions
+                    RbacGroupNames = $_.rbacGroupNames
+                }
+            }
+        }
+        return $allResults
+    } catch {
+        Write-Error "Failed to retrieve indicators: $_"
+    }
+}
 function Invoke-TiFile {
     param (
         [Parameter(Mandatory = $true)]
@@ -1547,7 +1796,6 @@ function Invoke-TiFile {
             }
         }
     }
-
     return $responses
 }
 
@@ -1939,6 +2187,6 @@ function Undo-TiCert {
 # Export the functions
 Export-ModuleMember -Function Connect-MDE, Get-AccessToken, Get-Machines, Get-Actions, Undo-Actions, Invoke-MachineIsolation, Undo-MachineIsolation, Invoke-ContainDevice, Undo-ContainDevice,
     Invoke-RestrictAppExecution, Undo-RestrictAppExecution, Invoke-TiFile, Undo-TiFile, Invoke-TiCert, Undo-TiCert, Invoke-TiIP, Undo-TiIP, 
-    Invoke-TiURL, Undo-TiURL, Get-RequestParam, Get-SecretFromKeyVault, 
+    Invoke-TiURL, Undo-TiURL, Get-RequestParam, Get-SecretFromKeyVault, Get-IPInfo, Get-FileInfo, Get-LoggedInUsers, Get-Indicators,
     Invoke-WithRetry, Invoke-UploadLR, Invoke-PutFile, Invoke-GetFile, Invoke-CollectInvestigationPackage, Invoke-LRScript, 
-    Get-MachineActionStatus, Get-LiveResponseOutput, Invoke-FullDiskScan
+    Get-MachineActionStatus, Get-LiveResponseOutput, Invoke-FullDiskScan, Invoke-StopAndQuarantineFile
