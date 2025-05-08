@@ -1,5 +1,5 @@
 //MDEAutomator
-//Version: RC1
+//Version: 1.0.1
 //Author: msdirtbag
 
 //Scope
