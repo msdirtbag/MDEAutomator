@@ -1,6 +1,6 @@
 @{
     # Module Identity
-    ModuleVersion     = '1.4.0'
+    ModuleVersion     = '1.5.0'
     GUID              = '010c4ef2-f71c-4bce-84cc-de9752cf1577'
     RootModule        = 'MDEAutomator.psm1'
 
@@ -8,7 +8,7 @@
     Author            = 'msdirtbag'
     Copyright         = '(c) All Rights Reserved.'
     Description       = 'Microsoft Defender for Endpoint Automation Module'
-    PowerShellVersion = '7.4'
+    PowerShellVersion = '5.1'
 
     # Export Settings
     FunctionsToExport = @(
