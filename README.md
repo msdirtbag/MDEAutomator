@@ -726,7 +726,22 @@ $fileInfo | ConvertTo-Json -Depth 5
 $ipInfo = Get-IPInfo -token $token -IPs @("8.8.8.8", "1.2.3.4")
 $ipInfo | ConvertTo-Json -Depth 5
 ```
-## 24. Get-LoggedInUsers
+## 24. Get-URLInfo
+
+**Description:**  
+`Get-URLInfo` retrieves information about one or more URLs or domains from Microsoft Defender for Endpoint. For each URL or domain, it returns related alerts, statistics, machines, and advanced hunting results.
+
+**Parameters:**
+
+- `-token` (string, required): OAuth2 access token. Obtain this from `Connect-MDE`.
+- `-URLs` (string[], required): Array of URLs or domains to query.
+
+**Example:**
+```powershell
+$urlInfo = Get-URLInfo -token $token -URLs @("malicious.example.com", "phishing.example.net")
+$urlInfo | ConvertTo-Json -Depth 5
+```
+## 25. Get-LoggedInUsers
 
 **Description:**  
 `Get-LoggedInUsers` retrieves the list of users currently or recently logged in to one or more devices in Microsoft Defender for Endpoint. For each device, it returns details such as account name, domain, logon type, session info, and last seen time.
@@ -742,12 +757,16 @@ $deviceIds = Get-Machines -token $token | Select-Object -ExpandProperty Id
 $users = Get-LoggedInUsers -token $token -DeviceIds $deviceIds
 $users | Format-Table DeviceId, AccountName, LogonTime, LastSeen
 ```
-## 25. Invoke-AdvancedHunting
+## 26. Invoke-AdvancedHunting
 
 **Description:**  
 `Invoke-AdvancedHunting` runs one or more KQL queries against Microsoft Defender for Endpoint’s Advanced Hunting API using Microsoft Graph. It returns the raw results for each query.
 
 It leverages a randomization technique to load balance between the v1.0 & Beta API endpoint.
+
+**Requirements:**
+
+Connect-MDEGraph must be run successfully in the session before this command will work. 
 
 **Parameters:**
 

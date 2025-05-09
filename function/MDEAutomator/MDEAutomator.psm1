@@ -1170,6 +1170,7 @@ function Get-FileInfo {
         $uri2 = "https://api.securitycenter.microsoft.com/api/files/$Sha1/alerts"
         $uri3 = "https://api.securitycenter.microsoft.com/api/files/$Sha1/machines"
         $uri4 = "https://api.securitycenter.microsoft.com/api/files/$Sha1/stats"
+        $uri5 = "https://api.securitycenter.microsoft.com/api/advancedqueries/run"
 
         try {
             $response1 = Invoke-RestMethod -Uri $uri1 -Method Get -Headers $headers -ErrorAction Stop
@@ -1182,10 +1183,18 @@ function Get-FileInfo {
                 Machines = $response3
                 Stats = $response4
             }
+
+            $kqlQuery = "DeviceFileEvents | where SHA1 == '$Sha1' | summarize Count = count() by DeviceName, DeviceId | top 100 by Count"
+            $body = @{
+                "Query" = $kqlQuery
+            }
+            $advancedHuntingResponse = Invoke-RestMethod -Uri $uri5 -Method Post -Headers $headers -Body ($body | ConvertTo-Json) -ContentType "application/json" -ErrorAction Stop
+
             Write-Host "Successfully retrieved file information for Sha1: $Sha1"
             $responses += [PSCustomObject]@{
                 Sha1 = $Sha1
                 Response = $response
+                AdvancedHuntingData = $advancedHuntingResponse.Results
             }
         } catch {
             Write-Error "Failed to retrieve file information for Sha1: $Sha1 $_"
@@ -1197,7 +1206,6 @@ function Get-FileInfo {
     }
     return $responses
 }
-
 function Get-IPInfo {
     param (
         [Parameter(Mandatory = $true)]
@@ -1238,6 +1246,58 @@ function Get-IPInfo {
             }
         } catch {
             Write-Error "Failed to retrieve IP information for IP: $IP $_"
+            $responses += [PSCustomObject]@{
+                IP = $IP
+                Error = $_.Exception.Message
+            }
+        }
+    }
+    return $responses
+}
+
+function Get-URLInfo {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$token,
+        [Parameter(Mandatory = $true)]
+        [string[]]$URLs
+    )
+    $headers = @{
+        "Authorization" = "Bearer $token"
+    }
+    $responses = @()
+
+    foreach ($URL in $URLs) {
+        $uri1 = "https://api.securitycenter.microsoft.com/api/domains/$URL/alerts"
+        $uri2 = "https://api.security.microsoft.com/api/domains/$URL/stats"
+        $uri3 = "https://api.security.microsoft.com/api/domains/$URL/machines"
+        $uri4 = "https://api.securitycenter.microsoft.com/api/advancedqueries/run"
+
+        try {
+            $response1 = Invoke-RestMethod -Uri $uri1 -Method Get -Headers $headers -ErrorAction Stop
+            $response2 = Invoke-RestMethod -Uri $uri2 -Method Get -Headers $headers -ErrorAction Stop
+            $response3 = Invoke-RestMethod -Uri $uri3 -Method Get -Headers $headers -ErrorAction Stop
+            $response = [PSCustomObject]@{
+                Alerts = $response1
+                Stats = $response2
+                Machines = $response3
+            }
+
+            $kqlQuery = "DeviceNetworkEvents | where RemoteUri == '$URL' | summarize Count = count() by DeviceName, DeviceId | top 100 by Count"
+            $body = @{
+                "Query" = $kqlQuery
+            }
+            
+            $advancedHuntingResponse = Invoke-RestMethod -Uri $uri4 -Method Post -Headers $headers -Body ($body | ConvertTo-Json) -ContentType "application/json" -ErrorAction Stop
+
+            Write-Host "Successfully retrieved URL information for URL: $URL"
+            $responses += [PSCustomObject]@{
+                IP = $IP
+                Response = $response
+                AdvancedHuntingData = $advancedHuntingResponse.Results
+            }
+        } catch {
+            Write-Error "Failed to retrieve URL information for URL: $URL $_"
             $responses += [PSCustomObject]@{
                 IP = $IP
                 Error = $_.Exception.Message
@@ -2297,6 +2357,6 @@ Function Invoke-AdvancedHunting {
 # Export the functions
 Export-ModuleMember -Function Connect-MDE, Connect-MDEGraph, Get-AccessToken, Get-Machines, Get-Actions, Undo-Actions, Invoke-MachineIsolation, Undo-MachineIsolation, Invoke-ContainDevice, Undo-ContainDevice,
     Invoke-RestrictAppExecution, Undo-RestrictAppExecution, Invoke-TiFile, Undo-TiFile, Invoke-TiCert, Undo-TiCert, Invoke-TiIP, Undo-TiIP, 
-    Invoke-TiURL, Undo-TiURL, Get-RequestParam, Get-SecretFromKeyVault, Get-IPInfo, Get-FileInfo, Get-LoggedInUsers, Get-Indicators,
+    Invoke-TiURL, Undo-TiURL, Get-RequestParam, Get-SecretFromKeyVault, Get-IPInfo, Get-FileInfo, Get-URLInfo, Get-LoggedInUsers, Get-Indicators,
     Invoke-WithRetry, Invoke-UploadLR, Invoke-PutFile, Invoke-GetFile, Invoke-CollectInvestigationPackage, Invoke-LRScript, 
     Get-MachineActionStatus, Get-LiveResponseOutput, Invoke-FullDiskScan, Invoke-StopAndQuarantineFile, Invoke-AdvancedHunting

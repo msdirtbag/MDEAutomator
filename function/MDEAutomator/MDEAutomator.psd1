@@ -1,6 +1,6 @@
 @{
     # Module Identity
-    ModuleVersion     = '1.5.0'
+    ModuleVersion     = '1.5.1'
     GUID              = '010c4ef2-f71c-4bce-84cc-de9752cf1577'
     RootModule        = 'MDEAutomator.psm1'
 
@@ -26,6 +26,7 @@
         'Undo-Actions'
         'Get-IPInfo'
         'Get-FileInfo'
+        'Get-URLInfo'
         'Get-LoggedInUsers'
         'Get-MachineActionStatus'
         'Invoke-AdvancedHunting'
