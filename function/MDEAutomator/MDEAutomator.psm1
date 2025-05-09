@@ -189,7 +189,75 @@ Function Connect-MDE {
     }
     return $token
 }
+Function Connect-MDEGraph {
+    param (
+        [Parameter(Mandatory = $false)]
+        [string] $keyVaultName,
+        [Parameter(Mandatory = $true)]
+        [string] $SpnId,
+        [Parameter(Mandatory = $false)]
+        [securestring] $SpnSecret,
+        [Parameter(Mandatory = $false)]
+        [string] $TenantId
+    )
 
+    if (-not $TenantId) {
+        $TenantId = (Get-AzContext).Tenant.Id
+    }
+
+    if (-not (Get-Module -ListAvailable -Name Az.Accounts)) {
+        Write-Host "Az.Accounts module not found. Installing for first use..."
+        Install-Module -Name Az.Accounts -Scope CurrentUser -Force -AllowClobber
+    }
+    if (-not (Get-Module -ListAvailable -Name Az.KeyVault)) {
+        Write-Host "Az.KeyVault module not found. Installing for first use..."
+        Install-Module -Name Az.KeyVault -Scope CurrentUser -Force -AllowClobber
+    }
+    if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) {
+        Write-Host "Microsoft.Graph module not found. Installing for first use..."
+        Install-Module -Name Microsoft.Graph -Scope CurrentUser -Force -AllowClobber
+    }
+    if (-not (Get-Module -Name Az.Accounts)) {
+        Import-Module Az.Accounts -ErrorAction Stop
+    }
+    if (-not (Get-Module -Name Az.KeyVault)) {
+        Import-Module Az.KeyVault -ErrorAction Stop
+    }
+    if (-not (Get-Module -Name Microsoft.Graph.Authentication)) {
+        Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
+    }
+
+    if (-not $SpnSecret) {
+        if ($keyVaultName) {
+            if (-not (Get-AzContext)) {
+                Write-Host "No Azure session detected. Please sign in."
+                Connect-AzAccount -TenantId $TenantId -ErrorAction Stop
+            }
+            $SpnSecret = (Get-AzKeyVaultSecret -VaultName $keyVaultName -Name 'SPNSECRET').SecretValue
+        } else {
+            Write-Error "SpnSecret must be provided if keyVaultName is not specified."
+            throw "SpnSecret must be provided if keyVaultName is not specified."
+        }
+    }
+
+    if (-not $SpnSecret) {
+        Write-Error "Failed to retrieve SPN secret"
+        throw "Failed to retrieve SPN secret"
+    }
+
+    $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($SpnSecret)
+    $plainSecret = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+
+    try {
+        $SecuredPassword = ConvertTo-SecureString -String $plainSecret -AsPlainText -Force
+        $ClientSecretCredential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $SpnId, $SecuredPassword
+        Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $ClientSecretCredential | Out-Null
+        Write-Host "Successfully connected to Microsoft Graph."
+    } catch {
+        Write-Host "Failed to connect to Microsoft Graph. Error: $_"
+        exit 1
+    }
+}
 function Invoke-WithRetry {
     param(
         [Parameter(Mandatory=$true)]
@@ -2184,9 +2252,51 @@ function Undo-TiCert {
     return $responses
 }
 
+Function Invoke-AdvancedHunting {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string[]]$Queries
+    )
+
+    $endpoints = @(
+        "https://graph.microsoft.com/v1.0/security/runHuntingQuery",
+        "https://graph.microsoft.com/beta/security/runHuntingQuery"
+    )
+
+    $responses = @()
+
+    foreach ($query in $Queries) {
+        $uri = $endpoints | Get-Random
+
+        $body = @{
+            "Query" = $query
+        } | ConvertTo-Json
+
+        try {
+            $response = Invoke-WithRetry -ScriptBlock {
+                Invoke-MgGraphRequest -Uri $uri -Method POST -Body $body -ContentType "application/json"
+            }
+            $responses += [PSCustomObject]@{
+                Query = $query
+                Response = $response
+            }
+            Write-Host "Query completed successfully"
+        } catch {
+            Write-Error "Query failed $($_.Exception.Message)"
+            $responses += [PSCustomObject]@{
+                Query = $query
+                Endpoint = $uri
+                Error = $_.Exception.Message
+            }
+        }
+    }
+    return $responses
+}
+
 # Export the functions
-Export-ModuleMember -Function Connect-MDE, Get-AccessToken, Get-Machines, Get-Actions, Undo-Actions, Invoke-MachineIsolation, Undo-MachineIsolation, Invoke-ContainDevice, Undo-ContainDevice,
+Export-ModuleMember -Function Connect-MDE, Connect-MDEGraph, Get-AccessToken, Get-Machines, Get-Actions, Undo-Actions, Invoke-MachineIsolation, Undo-MachineIsolation, Invoke-ContainDevice, Undo-ContainDevice,
     Invoke-RestrictAppExecution, Undo-RestrictAppExecution, Invoke-TiFile, Undo-TiFile, Invoke-TiCert, Undo-TiCert, Invoke-TiIP, Undo-TiIP, 
     Invoke-TiURL, Undo-TiURL, Get-RequestParam, Get-SecretFromKeyVault, Get-IPInfo, Get-FileInfo, Get-LoggedInUsers, Get-Indicators,
     Invoke-WithRetry, Invoke-UploadLR, Invoke-PutFile, Invoke-GetFile, Invoke-CollectInvestigationPackage, Invoke-LRScript, 
-    Get-MachineActionStatus, Get-LiveResponseOutput, Invoke-FullDiskScan, Invoke-StopAndQuarantineFile
+    Get-MachineActionStatus, Get-LiveResponseOutput, Invoke-FullDiskScan, Invoke-StopAndQuarantineFile, Invoke-AdvancedHunting

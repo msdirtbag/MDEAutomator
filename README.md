@@ -15,6 +15,7 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
   - **MDEOrchestrator**: Automates bulk management of Live Response commands delivered to endpoints.
   - **MDEProfiles**: Automates bulk delivery of custom PowerShell scripts to configure policy on MDE endpoints.
   - **MDETIManager**: Automates the management of Threat Indicators in MDE.
+  - **MDEAutoHunt**: Automates bulk threat hunting tasks.  
 
 ## Key Features
 
@@ -45,7 +46,7 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
    > **Note:** Select Multitenant if you plan to leverage this to service multiple tenants.
 
 2. Add required API permissions to the Service Principal  
-   ![Perms](./media/spnperms.png)
+
 
    Required WindowsDefenderATP API Permissions:
 
@@ -64,10 +65,21 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
    - Ti.ReadWrite.All
    - User.Read.All
 
-3. Generate SPN Secret (securely store for post-deployment configuration)  
+   Required Graph API Permissions:
+
+   - CustomDetection.ReadWrite.All
+   - ThreatHunting.Read.All
+   - ThreatIndicators.ReadWrite.OwnedBy
+   - User.Read
+
+   ![Perms](./media/spnperms.png)   
+
+3. Generate SPN Secret (securely store for post-deployment configuration)
+
    ![Generate](./media/secret.png)
 
 4. Enable Unsigned Script Execution & Live Response for Servers and Workstations in MDE Advanced Settings. (See Security Notes section of this README)  
+
    ![Unsigned](./media/unsigned.png)
 
 ## Deployment
@@ -257,7 +269,28 @@ $secureSecret = Read-Host "Enter Secret" -AsSecureString
 $token = Connect-MDE -SpnId "<appId>" -SpnSecret $secureSecret -TenantId "<tenantId>"
 ```
 
-## 2. Get-Machines
+## 2. Connect-MDEGraph
+
+**Description:**  
+`Connect-MDEGraph` authenticates to Microsoft Graph for use with Defender for Endpoint Advanced Hunting and other Graph-based APIs. It supports authentication using a Service Principal, optionally retrieving the secret from Azure Key Vault.
+
+**Parameters:**
+
+- `-SpnId` (string, required): Service Principal App ID.
+- `-SpnSecret` (securestring, optional): Service Principal secret (use if not using Key Vault).
+- `-keyVaultName` (string, optional): Azure Key Vault name (if retrieving secret from Key Vault).
+- `-TenantId` (string, optional): Entra ID Tenant ID or default to home tenant.
+
+**Example:**
+```powershell
+# Using Key Vault
+Connect-MDEGraph -SpnId "<appId>" -keyVaultName "<vaultName>"
+
+# Using direct secret
+$secureSecret = Read-Host "Enter Secret" -AsSecureString
+Connect-MDEGraph -SpnId "<appId>" -SpnSecret $secureSecret -TenantId "<tenantId>"
+```
+## 3. Get-Machines
 
 **Description:**  
 
@@ -277,7 +310,7 @@ $machines | Format-Table ComputerDnsName, Id, OsPlatform
 
 ---
 
-## 3. Get-Actions
+## 4. Get-Actions
 
 **Description:**  
 Retrieves recent MDE machine actions from the last (60) days performed in MDE.
@@ -293,7 +326,7 @@ $actions | Format-Table Id, Type, Status, ComputerDnsName
 
 ---
 
-## 4. Undo-Actions
+## 5. Undo-Actions
 
 **Description:**  
 `Undo-Actions` cancels all pending machine actions in Microsoft Defender for Endpoint. This is useful for stopping actions that are queued but not yet executed.
@@ -311,7 +344,7 @@ Undo-Actions -token $token
 
 ---
 
-## 5. Invoke-MachineIsolation / Undo-MachineIsolation
+## 6. Invoke-MachineIsolation / Undo-MachineIsolation
 
 **Description:**  
 `Invoke-MachineIsolation` isolates one or more devices from the network, except for connections required for Defender for Endpoint service communication. This always uses Selective isolation and respects Isolation exclusion rules.
@@ -334,7 +367,7 @@ Undo-MachineIsolation -token $token -DeviceIds @("<deviceId1>")
 
 ---
 
-## 6. Invoke-ContainDevice / Undo-ContainDevice
+## 7. Invoke-ContainDevice / Undo-ContainDevice
 
 **Description:**  
 `Invoke-ContainDevice` contains one or more unmanaged devices in Microsoft Defender for Endpoint, restricting their network connectivity to prevent lateral movement.  
@@ -357,7 +390,7 @@ Undo-ContainDevice -token $token -DeviceIds @("<deviceId>")
 
 ---
 
-## 7. Invoke-RestrictAppExecution / Undo-RestrictAppExecution
+## 8. Invoke-RestrictAppExecution / Undo-RestrictAppExecution
 
 **Description:**  
 `Invoke-RestrictAppExecution` restricts application execution on one or more devices, allowing only Microsoft-signed binaries to run.  
@@ -380,7 +413,7 @@ Undo-RestrictAppExecution -token $token -DeviceIds @("<deviceId>")
 
 ---
 
-## 8. Invoke-CollectInvestigationPackage
+## 9. Invoke-CollectInvestigationPackage
 
 **Description:**  
 `Invoke-CollectInvestigationPackage` collects an investigation package from one or more specified devices. The package contains forensic artifacts for further analysis.
@@ -401,7 +434,7 @@ Invoke-CollectInvestigationPackage -token $token -DeviceIds @("<deviceId>")
 
 ---
 
-## 9. Invoke-TiFile / Undo-TiFile
+## 10. Invoke-TiFile / Undo-TiFile
 
 **Description:**  
 `Invoke-TiFile` creates file hash-based custom threat indicators in Microsoft Defender for Endpoint.  
@@ -425,7 +458,7 @@ Undo-TiFile -token $token -Sha256s @("<sha256>")
 
 ---
 
-## 10. Invoke-TiCert / Undo-TiCert
+## 11. Invoke-TiCert / Undo-TiCert
 
 **Description:**  
 `Invoke-TiCert` creates certificate thumbprint-based custom threat indicators in Microsoft Defender for Endpoint.  
@@ -448,7 +481,7 @@ Undo-TiCert -token $token -Sha1s @("<thumbprint>")
 
 ---
 
-## 11. Invoke-TiIP / Undo-TiIP
+## 12. Invoke-TiIP / Undo-TiIP
 
 **Description:**  
 `Invoke-TiIP` creates IP address-based custom threat indicators in Microsoft Defender for Endpoint.  
@@ -471,7 +504,7 @@ Undo-TiIP -token $token -IPs @("8.8.8.8")
 
 ---
 
-## 12. Invoke-TiURL / Undo-TiURL
+## 13. Invoke-TiURL / Undo-TiURL
 
 **Description:**  
 `Invoke-TiURL` creates URL or domain-based custom threat indicators in Microsoft Defender for Endpoint.  
@@ -494,7 +527,7 @@ Undo-TiURL -token $token -URLs @("malicious.example.com")
 
 ---
 
-## 13. Invoke-UploadLR
+## 14. Invoke-UploadLR
 
 **Description:**  
 `Invoke-UploadLR` uploads a script file to the Microsoft Defender for Endpoint Live Response library for later use in automated investigations or manual response.
@@ -515,7 +548,7 @@ Invoke-UploadLR -token $token -filePath "C:\Scripts\MyScript.ps1"
 
 ---
 
-## 14. Invoke-PutFile
+## 15. Invoke-PutFile
 
 **Description:**  
 `Invoke-PutFile` pushes a file from the Live Response library to one or more specified devices.
@@ -539,7 +572,7 @@ Invoke-PutFile -token $token -fileName "MyScript.ps1" -DeviceIds @("<deviceId>")
 
 ---
 
-## 15. Invoke-GetFile
+## 16. Invoke-GetFile
 
 **Description:**  
 `Invoke-GetFile` retrieves a file from one or more specified devices using Live Response.
@@ -563,7 +596,7 @@ Invoke-GetFile -token $token -filePath "C:\Windows\Temp\test.txt" -DeviceIds @("
 
 ---
 
-## 16. Invoke-LRScript
+## 17. Invoke-LRScript
 
 **Description:**  
 `Invoke-LRScript` executes a Live Response script from the library on one or more specified devices.
@@ -587,7 +620,7 @@ Invoke-LRScript -DeviceIds @("<deviceId>") -scriptName "MyScript.ps1" -token $to
 
 ---
 
-## 17. Get-MachineActionStatus
+## 18. Get-MachineActionStatus
 
 **Description:**  
 `Get-MachineActionStatus` checks the status of a machine action by its action ID.
@@ -609,7 +642,7 @@ Get-MachineActionStatus -machineActionId "<machineActionId>" -token $token
 
 ---
 
-## 18. Get-LiveResponseOutput
+## 19. Get-LiveResponseOutput
 
 **Description:**  
 `Get-LiveResponseOutput` downloads and parses the output of a Live Response script for a given machine action.
@@ -629,7 +662,7 @@ Get-LiveResponseOutput -machineActionId "<machineActionId>" -token $token
 ```
 ---
 
-### 19. Invoke-StopAndQuarantineFile
+### 20. Invoke-StopAndQuarantineFile
 
 **Description:**  
 `Invoke-StopAndQuarantineFile` issues a Stop and Quarantine File action on one or more devices in Microsoft Defender for Endpoint. This action attempts to stop the specified file (by SHA1 hash) on all Active and onboarded devices.
@@ -646,7 +679,7 @@ Invoke-StopAndQuarantineFile -token $token -Sha1 "<sha1hash>"
 
 ---
 
-### 20. Get-Indicators
+### 21. Get-Indicators
 
 **Description:**  
 `Get-Indicators` retrieves all custom threat indicators (IOCs) from Microsoft Defender for Endpoint, including file hashes, IPs, URLs, and certificates. 
@@ -660,7 +693,7 @@ Invoke-StopAndQuarantineFile -token $token -Sha1 "<sha1hash>"
 $indicators = Get-Indicators -token $token
 $indicators | Format-Table Id, IndicatorValue, IndicatorType, Action
 ```
-## 21. Get-FileInfo
+## 22. Get-FileInfo
 
 **Description:**  
 `Get-FileInfo` retrieves detailed information about one or more files in Microsoft Defender for Endpoint using their SHA1 hashes. For each hash, it returns file metadata, related alerts, machines, and statistics.
@@ -678,7 +711,7 @@ $fileInfo | ConvertTo-Json -Depth 5
 
 ---
 
-## 22. Get-IPInfo
+## 23. Get-IPInfo
 
 **Description:**  
 `Get-IPInfo` retrieves information about one or more IP addresses from Microsoft Defender for Endpoint. For each IP, it returns related alerts, statistics, and advanced hunting results.
@@ -693,7 +726,7 @@ $fileInfo | ConvertTo-Json -Depth 5
 $ipInfo = Get-IPInfo -token $token -IPs @("8.8.8.8", "1.2.3.4")
 $ipInfo | ConvertTo-Json -Depth 5
 ```
-## 23. Get-LoggedInUsers
+## 24. Get-LoggedInUsers
 
 **Description:**  
 `Get-LoggedInUsers` retrieves the list of users currently or recently logged in to one or more devices in Microsoft Defender for Endpoint. For each device, it returns details such as account name, domain, logon type, session info, and last seen time.
@@ -709,6 +742,27 @@ $deviceIds = Get-Machines -token $token | Select-Object -ExpandProperty Id
 $users = Get-LoggedInUsers -token $token -DeviceIds $deviceIds
 $users | Format-Table DeviceId, AccountName, LogonTime, LastSeen
 ```
+## 25. Invoke-AdvancedHunting
+
+**Description:**  
+`Invoke-AdvancedHunting` runs one or more KQL queries against Microsoft Defender for Endpoint’s Advanced Hunting API using Microsoft Graph. It returns the raw results for each query.
+
+It leverages a randomization technique to load balance between the v1.0 & Beta API endpoint.
+
+**Parameters:**
+
+- `-Queries` (string[], required): String Array of KQL queries to execute. Each query string should be valid for the Advanced Hunting API.
+
+**Example:**
+```powershell
+$queries = @(
+    "DeviceEvents | take 5",
+    "AlertInfo | where Severity == 'High'"
+)
+$results = Invoke-AdvancedHunting -Queries $queries
+$results | ConvertTo-Json -Depth 5
+```
+
 > **Tip:**  
-> For all functions, ensure you have a valid `$token` from `Connect-MDE` and the required permissions in Azure/MDE.
+> For most functions, ensure you have a valid `$token` from `Connect-MDE` and the required permissions in Azure/MDE.
 

@@ -10,12 +10,11 @@ if ($env:MSI_SECRET) {
 }
 
 # Import MDEAutomator module
-Import-Module -Name ./MDEAutomator -ErrorAction Stop -Force
+Import-Module -Name ./MDEAutomator
 
 # Import PowerShell Gallery modules
-Import-Module -Name Az.Accounts -ErrorAction Stop -Force
-Import-Module -Name Az.KeyVault -ErrorAction Stop -Force
-Import-Module -Name Az.Storage -ErrorAction Stop -Force
-Import-Module -Name MDEAutomator -ErrorAction Stop -Force
-
-#
+Import-Module -Name Az.Accounts
+Import-Module -Name Az.KeyVault
+Import-Module -Name Az.Storage 
+Import-Module -Name Microsoft.Graph.Authentication 
+#Install-Module -Name MDEAutomator

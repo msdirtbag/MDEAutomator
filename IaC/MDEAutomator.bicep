@@ -181,6 +181,14 @@ resource payloadscontainer 'Microsoft.Storage/storageAccounts/blobServices/conta
   }
 }
 
+resource outputcontainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' = {
+  name: 'output'
+  parent: blobservice
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
 //Application Insights
 resource appinsights01 'Microsoft.Insights/components@2020-02-02' = {
   name: 'appi-mdeauto${environmentid}'
