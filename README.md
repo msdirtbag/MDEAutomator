@@ -822,4 +822,19 @@ $jsonContent = Get-Content .\UpdatedDetectionRule.json | ConvertFrom-Json
 Update-DetectionRule -RuleId $ruleId -jsonContent $jsonContent
 ```
 
+## 30. Undo-DetectionRule
 
+**Description:**  
+`Undo-DetectionRule` deletes an existing Custom Detection rule in Microsoft Defender via Microsoft Graph API. Accepts the rule ID of the detection rule to remove.
+
+**Requirements:**  
+You must be connected to Microsoft Graph using `Connect-MDEGraph` before running this command.
+
+**Parameters:**
+
+- `-RuleId` (string, required): The ID of the Custom Detection rule to delete.
+
+**Example:**
+```powershell
+Undo-DetectionRule -RuleId $ruleId
+```

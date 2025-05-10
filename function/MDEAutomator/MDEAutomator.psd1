@@ -57,6 +57,7 @@
         'Get-DetectionRules'
         'Install-DetectionRule'
         'Update-DetectionRule'
+        'Undo-DetectionRule'
 
     )
 }

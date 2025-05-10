@@ -2507,9 +2507,26 @@ function Update-DetectionRule {
     }
 }
 
+function Undo-DetectionRule {
+    param (
+        [string]$RuleId
+    )
+    try {
+        $uri = "https://graph.microsoft.com/beta/security/rules/detectionRules/$RuleId"
+        $response = Invoke-MgGraphRequest -Method DELETE -Uri $uri
+        if ($null -eq $response) {
+            Write-Host "Deleted detection rule: $RuleId"
+        } else {
+            Write-Host "Failed to delete detection rule: $RuleId. Unexpected response."
+        }
+    } catch {
+        Write-Host "Failed to delete detection rule: $RuleId. Error: $_"
+    }
+}
+
 Export-ModuleMember -Function Connect-MDE, Connect-MDEGraph, Get-AccessToken, Get-RequestParam, Get-SecretFromKeyVault, Invoke-WithRetry,
     Get-Machines, Get-Actions, Undo-Actions, Get-IPInfo, Get-FileInfo, Get-URLInfo, Get-LoggedInUsers, Get-MachineActionStatus, Invoke-AdvancedHunting,
     Invoke-UploadLR, Invoke-PutFile, Invoke-GetFile, Invoke-LRScript, Get-LiveResponseOutput,
-    Invoke-MachineIsolation, Undo-MachineIsolation, Invoke-ContainDevice, Undo-ContainDevice, Get-DetectionRules, Install-DetectionRule, Update-DetectionRule,
+    Invoke-MachineIsolation, Undo-MachineIsolation, Invoke-ContainDevice, Undo-ContainDevice, Get-DetectionRules, Install-DetectionRule, Update-DetectionRule, Undo-DetectionRule,
     Invoke-RestrictAppExecution, Undo-RestrictAppExecution, Invoke-FullDiskScan, Invoke-StopAndQuarantineFile, Invoke-CollectInvestigationPackage,
     Get-Indicators, Invoke-TiFile, Undo-TiFile, Invoke-TiCert, Undo-TiCert, Invoke-TiIP, Undo-TiIP, Invoke-TiURL, Undo-TiURL
