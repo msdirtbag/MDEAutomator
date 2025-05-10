@@ -1,21 +1,25 @@
 # MDEAutomator
 
-
-MDEAutomator is a modular, serverless solution for endpoint management and incident response in Microsoft Defender for Endpoint (MDE) environments. It leverages Azure Function Apps and a custom PowerShell module to orchestrate large MDE deployments, automate response actions, and manage threat indicators at scale.
+MDEAutomator is a modular, serverless solution for endpoint management and incident response in Microsoft Defender for Endpoint (MDE) environments. It leverages Azure Function Apps and a custom PowerShell module to orchestrate MDE deployments.
 
 ![main](./media/main.png)
+
+---
 
 ## Core Components
 
 - **MDEAutomator PowerShell Module**  
-  Provides cmdlets for authentication, device management, live response, response actions, and threat indicator management in MDE.
+  Provides cmdlets for authentication, profile management, live response, response actions, custom detections, advanced hunting and threat indicator management in MDE.
 
 - **Azure Function Apps**  
   - **MDEDispatcher**: Automates bulk management of response actions delivered to endpoints.
   - **MDEOrchestrator**: Automates bulk management of Live Response commands delivered to endpoints.
   - **MDEProfiles**: Automates bulk delivery of custom PowerShell scripts to configure policy on MDE endpoints.
   - **MDETIManager**: Automates the management of Threat Indicators in MDE.
-  - **MDEAutoHunt**: Automates bulk threat hunting tasks.  
+  - **MDEAutoHunt**: Automates bulk threat hunting processing & export of output to blob storage.  
+  - **MDECDManager**: Automates synchronization of Custom Detections from blob storage. 
+
+---
 
 ## Key Features
 
@@ -25,7 +29,10 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 - Designed for multi-tenant use cases
 - Azure Key Vault secret management + manual `$SPNSECRET` flexibility
 - Ability to deliver key configuration settings via PowerShell that are not available in Endpoint Security Profiles. 
+- Bulk Threat Hunting via Microsoft Graph
 - Convenient upload of endpoint packages/files to Azure Storage
+
+---
 
 ## Azure Resources Deployed
 
@@ -38,6 +45,8 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 
 MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
 
+---
+
 ## Prerequisites
 
 1. Create Entra ID Service Principal (App Registration)  
@@ -46,7 +55,6 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
    > **Note:** Select Multitenant if you plan to leverage this to service multiple tenants.
 
 2. Add required API permissions to the Service Principal  
-
 
    Required WindowsDefenderATP API Permissions:
 
@@ -82,6 +90,8 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
 
    ![Unsigned](./media/unsigned.png)
 
+---
+
 ## Deployment
 
 1. Click the "Deploy to Azure" button below.
@@ -100,11 +110,15 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
 
 3. Configure your front-end application to call the Function Apps
 
+---
+
 ## Integration
 
 - [Calling Azure Functions via HTTP](https://learn.microsoft.com/en-us/azure/azure-functions/functions-bindings-http-webhook-trigger)
 - [Example Requests](https://github.com/msdirtbag/MDEAutomator/tree/main/tests)
 - [How to customize and republish](https://learn.microsoft.com/en-us/azure/azure-functions/run-functions-from-deployment-package#manually-uploading-a-package-to-blob-storage)
+
+---
 
 ## Use Cases
 
@@ -112,10 +126,11 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
 - Use the PowerShell module in Azure Functions.
 - Use the PowerShell module in Azure Automation.
 
+---
+
 ## Module Introduction
 
 Below are example usage patterns for the MDEAutomator PowerShell module.
-
 
 ### Installing & Importing
 ```powershell
@@ -126,9 +141,7 @@ Import-Module -Name ./function/MDEAutomator -ErrorAction Stop -Force
 # Install & Import from PowerShell Gallery
 Install-Module -Name MDEAutomator -AllowClobber -Force
 Import-Module -Name MDEAutomator -ErrorAction Stop -Force
-
 ```
-
 ### Common Operations
 
 ```powershell
@@ -230,6 +243,8 @@ We welcome contributions! Please open an issue or submit a pull request on [GitH
 
 Made possible by the BlueVoyant Digital Forensics & Incident Response team. For assistance, contact incident@bluevoyant.com.
 
+---
+
 ## References
 
 - [VS Code Deployment Guide](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deploy-vscode)
@@ -237,6 +252,8 @@ Made possible by the BlueVoyant Digital Forensics & Incident Response team. For 
 - [Azure PowerShell Deployment Guide](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deploy-powershell)
 - [Azure Cloud Shell Deployment Guide](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deploy-cloud-shell)
 - [GitHub Actions Deployment Guide](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deploy-github-actions)
+
+---
 
 ### Module Documentation
 
@@ -276,7 +293,7 @@ $token = Connect-MDE -SpnId "<appId>" -SpnSecret $secureSecret -TenantId "<tenan
 
 **Parameters:**
 
-- `-SpnId` (string, required): Service Principal App ID.
+- `-SpnId` (string, required): Service Principal Application ID. (Client ID)
 - `-SpnSecret` (securestring, optional): Service Principal secret (use if not using Key Vault).
 - `-keyVaultName` (string, optional): Azure Key Vault name (if retrieving secret from Key Vault).
 - `-TenantId` (string, optional): Entra ID Tenant ID or default to home tenant.
@@ -308,8 +325,6 @@ $machines = Get-Machines -token $token
 $machines | Format-Table ComputerDnsName, Id, OsPlatform
 ```
 
----
-
 ## 4. Get-Actions
 
 **Description:**  
@@ -323,8 +338,6 @@ The `$token` parameter is the OAuth2 access token you receive from the `Connect-
 $actions = Get-Actions -token $token
 $actions | Format-Table Id, Type, Status, ComputerDnsName
 ```
-
----
 
 ## 5. Undo-Actions
 
@@ -341,8 +354,6 @@ The `$token` parameter is the OAuth2 access token you receive from the `Connect-
 ```powershell
 Undo-Actions -token $token
 ```
-
----
 
 ## 6. Invoke-MachineIsolation / Undo-MachineIsolation
 
@@ -365,8 +376,6 @@ Invoke-MachineIsolation -token $token -DeviceIds @("<deviceId1>", "<deviceId2>")
 Undo-MachineIsolation -token $token -DeviceIds @("<deviceId1>")
 ```
 
----
-
 ## 7. Invoke-ContainDevice / Undo-ContainDevice
 
 **Description:**  
@@ -387,8 +396,6 @@ The `-DeviceIds` parameter is an array of device IDs that uniquely identify the 
 Invoke-ContainDevice -token $token -DeviceIds @("<deviceId>")
 Undo-ContainDevice -token $token -DeviceIds @("<deviceId>")
 ```
-
----
 
 ## 8. Invoke-RestrictAppExecution / Undo-RestrictAppExecution
 
@@ -411,8 +418,6 @@ Invoke-RestrictAppExecution -token $token -DeviceIds @("<deviceId>")
 Undo-RestrictAppExecution -token $token -DeviceIds @("<deviceId>")
 ```
 
----
-
 ## 9. Invoke-CollectInvestigationPackage
 
 **Description:**  
@@ -431,8 +436,6 @@ The `-DeviceIds` parameter is an array of device IDs that uniquely identify the 
 ```powershell
 Invoke-CollectInvestigationPackage -token $token -DeviceIds @("<deviceId>")
 ```
-
----
 
 ## 10. Invoke-TiFile / Undo-TiFile
 
@@ -456,8 +459,6 @@ Invoke-TiFile -token $token -Sha1s @("<sha1>")
 Undo-TiFile -token $token -Sha256s @("<sha256>")
 ```
 
----
-
 ## 11. Invoke-TiCert / Undo-TiCert
 
 **Description:**  
@@ -478,8 +479,6 @@ The `-Sha1s` parameter is an array of certificate thumbprints that you want to a
 Invoke-TiCert -token $token -Sha1s @("<thumbprint>")
 Undo-TiCert -token $token -Sha1s @("<thumbprint>")
 ```
-
----
 
 ## 12. Invoke-TiIP / Undo-TiIP
 
@@ -502,8 +501,6 @@ Invoke-TiIP -token $token -IPs @("8.8.8.8")
 Undo-TiIP -token $token -IPs @("8.8.8.8")
 ```
 
----
-
 ## 13. Invoke-TiURL / Undo-TiURL
 
 **Description:**  
@@ -525,8 +522,6 @@ Invoke-TiURL -token $token -URLs @("malicious.example.com")
 Undo-TiURL -token $token -URLs @("malicious.example.com")
 ```
 
----
-
 ## 14. Invoke-UploadLR
 
 **Description:**  
@@ -545,8 +540,6 @@ The `-filePath` parameter specifies the full path to the script or file you want
 ```powershell
 Invoke-UploadLR -token $token -filePath "C:\Scripts\MyScript.ps1"
 ```
-
----
 
 ## 15. Invoke-PutFile
 
@@ -570,8 +563,6 @@ The `-DeviceIds` parameter is an array of device IDs that uniquely identify the 
 Invoke-PutFile -token $token -fileName "MyScript.ps1" -DeviceIds @("<deviceId>")
 ```
 
----
-
 ## 16. Invoke-GetFile
 
 **Description:**  
@@ -593,8 +584,6 @@ The `-DeviceIds` parameter is an array of device IDs that uniquely identify the 
 ```powershell
 Invoke-GetFile -token $token -filePath "C:\Windows\Temp\test.txt" -DeviceIds @("<deviceId>")
 ```
-
----
 
 ## 17. Invoke-LRScript
 
@@ -618,8 +607,6 @@ The `-DeviceIds` parameter is an array of device IDs that uniquely identify the 
 Invoke-LRScript -DeviceIds @("<deviceId>") -scriptName "MyScript.ps1" -token $token
 ```
 
----
-
 ## 18. Get-MachineActionStatus
 
 **Description:**  
@@ -640,8 +627,6 @@ The `-machineActionId` parameter is the unique identifier for a specific machine
 Get-MachineActionStatus -machineActionId "<machineActionId>" -token $token
 ```
 
----
-
 ## 19. Get-LiveResponseOutput
 
 **Description:**  
@@ -660,7 +645,6 @@ The `-machineActionId` parameter is the unique identifier for a specific machine
 ```powershell
 Get-LiveResponseOutput -machineActionId "<machineActionId>" -token $token
 ```
----
 
 ### 20. Invoke-StopAndQuarantineFile
 
@@ -676,8 +660,6 @@ Get-LiveResponseOutput -machineActionId "<machineActionId>" -token $token
 ```powershell
 Invoke-StopAndQuarantineFile -token $token -Sha1 "<sha1hash>"
 ```
-
----
 
 ### 21. Get-Indicators
 
@@ -708,9 +690,6 @@ $indicators | Format-Table Id, IndicatorValue, IndicatorType, Action
 $fileInfo = Get-FileInfo -token $token -Sha1s @("<sha1hash1>", "<sha1hash2>")
 $fileInfo | ConvertTo-Json -Depth 5
 ```
-
----
-
 ## 23. Get-IPInfo
 
 **Description:**  
@@ -726,6 +705,7 @@ $fileInfo | ConvertTo-Json -Depth 5
 $ipInfo = Get-IPInfo -token $token -IPs @("8.8.8.8", "1.2.3.4")
 $ipInfo | ConvertTo-Json -Depth 5
 ```
+
 ## 24. Get-URLInfo
 
 **Description:**  
@@ -741,6 +721,7 @@ $ipInfo | ConvertTo-Json -Depth 5
 $urlInfo = Get-URLInfo -token $token -URLs @("malicious.example.com", "phishing.example.net")
 $urlInfo | ConvertTo-Json -Depth 5
 ```
+
 ## 25. Get-LoggedInUsers
 
 **Description:**  
@@ -757,6 +738,7 @@ $deviceIds = Get-Machines -token $token | Select-Object -ExpandProperty Id
 $users = Get-LoggedInUsers -token $token -DeviceIds $deviceIds
 $users | Format-Table DeviceId, AccountName, LogonTime, LastSeen
 ```
+
 ## 26. Invoke-AdvancedHunting
 
 **Description:**  
@@ -766,7 +748,7 @@ It leverages a randomization technique to load balance between the v1.0 & Beta A
 
 **Requirements:**
 
-Connect-MDEGraph must be run successfully in the session before this command will work. 
+You must be connected to Microsoft Graph using `Connect-MDEGraph` before running this command.
 
 **Parameters:**
 
@@ -780,6 +762,61 @@ $queries = @(
 )
 $results = Invoke-AdvancedHunting -Queries $queries
 $results | ConvertTo-Json -Depth 5
+```
+
+## 27. Get-DetectionRules
+
+**Description:**  
+`Get-DetectionRules` retrieves all Microsoft Defender detection rules via Microsoft Graph API as objects.
+
+**Requirements:**  
+You must be connected to Microsoft Graph using `Connect-MDEGraph` before running this command.
+
+**Parameters:**  
+_None._
+
+**Example:**
+```powershell
+$rules = Get-DetectionRules
+$rules | ConvertTo-Json -Depth 50
+Write-Host $rules 
+```
+
+## 28. Install-DetectionRule
+
+**Description:**  
+`Install-DetectionRule` installs a new detection rule in Microsoft Defender via Microsoft Graph API. Accepts a PowerShell object representing the rule definition.
+
+**Requirements:**  
+You must be connected to Microsoft Graph using `Connect-MDEGraph` before running this command.
+
+**Parameters:**
+
+- `-jsonContent` (PSCustomObject, required): The detection rule definition as a PowerShell object.
+
+**Example:**
+```powershell
+$jsonContent = Get-Content .\MyDetectionRule.json | ConvertFrom-Json
+Install-DetectionRule -jsonContent $jsonContent
+```
+
+## 29. Update-DetectionRule
+
+**Description:**  
+`Update-DetectionRule` updates an existing detection rule in Microsoft Defender via Microsoft Graph API. Accepts the rule ID and the updated rule definition.
+
+**Requirements:**  
+You must be connected to Microsoft Graph using `Connect-MDEGraph` before running this command.
+
+**Parameters:**
+
+- `-RuleId` (string, required): The ID of the detection rule to update.
+- `-jsonContent` (PSCustomObject, required): The updated detection rule definition as a PowerShell object.
+
+**Example:**
+```powershell
+$jsonContent = Get-Content .\UpdatedDetectionRule.json | ConvertFrom-Json
+Update-DetectionRule -RuleId $ruleId -jsonContent $jsonContent
 ```
 
 > **Tip:**  

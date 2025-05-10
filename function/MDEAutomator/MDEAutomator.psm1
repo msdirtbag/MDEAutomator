@@ -9,6 +9,9 @@
     Connect-MDE
         Authenticates to MDE using a Service Principal, optionally retrieving secrets from Azure Key Vault.
 
+    Connect-MDEGraph
+        Authenticates to Microsoft Graph API using a Service Principal, optionally retrieving secrets from Azure Key Vault.
+
     Get-Machines
         Retrieves a list of onboarded and active devices from MDE, with optional filtering.
 
@@ -17,6 +20,39 @@
 
     Undo-Actions
         Cancels all pending machine actions in MDE.
+
+    Get-IPInfo
+        Retrieves information, alerts, and statistics for specified IP addresses.
+
+    Get-FileInfo
+        Retrieves file metadata, alerts, machine associations, and stats for specified file hashes.
+
+    Get-URLInfo
+        Retrieves information, alerts, machine associations, and stats for specified URLs/domains.
+
+    Get-LoggedInUsers
+        Retrieves logon user information for specified devices.
+
+    Get-MachineActionStatus
+        Polls and returns the status of a machine action by ID.
+
+    Invoke-AdvancedHunting
+        Executes advanced hunting queries using Microsoft Graph Security API.
+
+    Invoke-UploadLR
+        Uploads a script file to the MDE Live Response library.
+
+    Invoke-PutFile
+        Pushes a file from the Live Response library to specified devices.
+
+    Invoke-GetFile
+        Retrieves a file from specified devices using Live Response.
+
+    Invoke-LRScript
+        Executes a Live Response script on specified devices.
+
+    Get-LiveResponseOutput
+        Downloads and parses the output of a Live Response script execution.
 
     Invoke-MachineIsolation / Undo-MachineIsolation
         Isolates or unisolates specified devices in MDE.
@@ -27,8 +63,17 @@
     Invoke-RestrictAppExecution / Undo-RestrictAppExecution
         Restricts or unrestricts application execution on specified devices.
         
+    Invoke-FullDiskScan
+        Initiates a full antivirus scan on specified devices.
+
+    Invoke-StopAndQuarantineFile
+        Stops and quarantines a file on all onboarded devices.
+
     Invoke-CollectInvestigationPackage
         Collects an investigation package from specified devices.
+
+    Get-Indicators
+        Retrieves all custom threat indicators from MDE.
 
     Invoke-TiFile / Undo-TiFile
         Creates or deletes file hash-based custom threat indicators.
@@ -42,17 +87,14 @@
     Invoke-TiURL / Undo-TiURL
         Creates or deletes URL/domain-based custom threat indicators.
 
-    Invoke-UploadLR
-        Uploads a script file to the MDE Live Response library.
+    Get-DetectionRules
+        Retrieves all Microsoft Defender detection rules via Microsoft Graph API.
 
-    Invoke-PutFile
-        Pushes a file from the Live Response library to specified devices.
+    Install-DetectionRule
+        Installs a new detection rule in Microsoft Defender via Microsoft Graph API.
 
-    Invoke-GetFile
-        Retrieves a file from specified devices using Live Response.
-
-    Invoke-LRScript
-        Executes a Live Response script on specified devices.
+    Update-DetectionRule
+        Updates an existing detection rule in Microsoft Defender via Microsoft Graph API.
 
 .PARAMETERS
     Most functions require an OAuth2 access token (`$token`) obtained via Connect-MDE.
@@ -96,7 +138,6 @@ function Get-SecretFromKeyVault {
     if ($null -eq $secretValue) {
         throw "[ERROR] Secret not found in Key Vault '$keyVaultName'"
     }
-
     return $secretValue
 }
 
@@ -139,6 +180,7 @@ Function Connect-MDE {
         [Parameter(Mandatory=$false)]
         [string] $TenantId
     )
+
     Write-Host "Connecting to MDE (this may take a few minutes)"
 
     if (-not $TenantId) {
@@ -189,6 +231,7 @@ Function Connect-MDE {
     }
     return $token
 }
+
 Function Connect-MDEGraph {
     param (
         [Parameter(Mandatory = $false)]
@@ -215,7 +258,7 @@ Function Connect-MDEGraph {
     }
     if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) {
         Write-Host "Microsoft.Graph module not found. Installing for first use..."
-        Install-Module -Name Microsoft.Graph -Scope CurrentUser -Force -AllowClobber
+        Install-Module -Name Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber
     }
     if (-not (Get-Module -Name Az.Accounts)) {
         Import-Module Az.Accounts -ErrorAction Stop
@@ -258,6 +301,7 @@ Function Connect-MDEGraph {
         exit 1
     }
 }
+
 function Invoke-WithRetry {
     param(
         [Parameter(Mandatory=$true)]
@@ -628,6 +672,7 @@ function Invoke-GetFile {
     }
     return $responses
 }
+
 function Invoke-CollectInvestigationPackage {
     param (
         [Parameter(Mandatory = $true)]
@@ -1206,6 +1251,7 @@ function Get-FileInfo {
     }
     return $responses
 }
+
 function Get-IPInfo {
     param (
         [Parameter(Mandatory = $true)]
@@ -1597,7 +1643,6 @@ function Undo-ContainDevice {
     return $responses 
 }
 
-
 function Invoke-RestrictAppExecution {
     param (
         [Parameter(Mandatory = $true)]
@@ -1754,7 +1799,6 @@ function Invoke-StopAndQuarantineFile {
     }
     $responses = @()
 
-    # Get all onboarded and active machines
     $machines = Get-Machines -token $token
     if (-not $machines -or $machines.Count -eq 0) {
         Write-Error "No machines found to process."
@@ -1850,6 +1894,7 @@ function Get-Indicators {
         Write-Error "Failed to retrieve indicators: $_"
     }
 }
+
 function Invoke-TiFile {
     param (
         [Parameter(Mandatory = $true)]
@@ -2258,7 +2303,6 @@ function Invoke-TiCert {
             }
         }
     }
-
     return $responses
 }
 
@@ -2308,7 +2352,6 @@ function Undo-TiCert {
             }
         }
     }
-
     return $responses
 }
 
@@ -2354,9 +2397,119 @@ Function Invoke-AdvancedHunting {
     return $responses
 }
 
-# Export the functions
-Export-ModuleMember -Function Connect-MDE, Connect-MDEGraph, Get-AccessToken, Get-Machines, Get-Actions, Undo-Actions, Invoke-MachineIsolation, Undo-MachineIsolation, Invoke-ContainDevice, Undo-ContainDevice,
-    Invoke-RestrictAppExecution, Undo-RestrictAppExecution, Invoke-TiFile, Undo-TiFile, Invoke-TiCert, Undo-TiCert, Invoke-TiIP, Undo-TiIP, 
-    Invoke-TiURL, Undo-TiURL, Get-RequestParam, Get-SecretFromKeyVault, Get-IPInfo, Get-FileInfo, Get-URLInfo, Get-LoggedInUsers, Get-Indicators,
-    Invoke-WithRetry, Invoke-UploadLR, Invoke-PutFile, Invoke-GetFile, Invoke-CollectInvestigationPackage, Invoke-LRScript, 
-    Get-MachineActionStatus, Get-LiveResponseOutput, Invoke-FullDiskScan, Invoke-StopAndQuarantineFile, Invoke-AdvancedHunting
+function Get-DetectionRules {
+    try {
+        $uri = "https://graph.microsoft.com/beta/security/rules/detectionRules?$select=displayName"
+        $allRules = @()
+        do {
+            $listResponse = Invoke-MgGraphRequest -Method GET -Uri $uri
+            $listResponseJson = $listResponse | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+            $allRules += $listResponseJson.value
+            $uri = $listResponseJson.'@odata.nextLink'
+        } while ($uri)
+        return $allRules
+    } catch {
+        Write-Error "Failed to retrieve detection rules: $_"
+        exit 1
+    }
+}
+
+function Install-DetectionRule {
+    param (
+        [PSCustomObject]$jsonContent
+    )
+    try {
+        $bodyParameter = @{
+            displayName = $jsonContent.DisplayName
+            isEnabled = $jsonContent.IsEnabled
+            queryCondition = @{
+                queryText = $jsonContent.QueryCondition.QueryText
+            }
+            schedule = @{
+                period = $jsonContent.Schedule.Period
+            }
+            detectionAction = @{
+                alertTemplate = @{
+                    title = $jsonContent.DetectionAction.AlertTemplate.Title
+                    description = $jsonContent.DetectionAction.AlertTemplate.Description
+                    severity = $jsonContent.DetectionAction.AlertTemplate.Severity
+                    category = $jsonContent.DetectionAction.AlertTemplate.Category
+                    mitreTechniques = $jsonContent.DetectionAction.AlertTemplate.MitreTechniques
+                    recommendedActions = $jsonContent.DetectionAction.AlertTemplate.RecommendedActions
+                    impactedAssets = @(
+                        @{
+                            "@odata.type" = "#microsoft.graph.security.impactedDeviceAsset"
+                            "identifier" = "deviceId"
+                        }
+                    )
+                }
+            }
+        }
+        $bodyJson = $bodyParameter | ConvertTo-Json -Depth 10
+        if (-not $bodyJson) {
+            return
+        }
+        $response = Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/beta/security/rules/detectionRules" -Body $bodyJson
+        if ($response -and $response.id) {
+            Write-Host "Installed new detection rule: $($jsonContent.DisplayName)"
+        } else {
+            Write-Host "Failed to install detection rule: $($jsonContent.DisplayName). No ID returned in response."
+        }
+    } catch {
+        Write-Host "Failed to install detection rule: $($jsonContent.DisplayName). Error: $_"
+    }
+}
+
+function Update-DetectionRule {
+    param (
+        [string]$RuleId,
+        [PSCustomObject]$jsonContent
+    )
+    try {
+        $bodyParameter = @{
+            displayName = $jsonContent.DisplayName
+            isEnabled = $jsonContent.IsEnabled
+            queryCondition = @{
+                queryText = $jsonContent.QueryCondition.QueryText
+            }
+            schedule = @{
+                period = $jsonContent.Schedule.Period
+            }
+            detectionAction = @{
+                alertTemplate = @{
+                    title = $jsonContent.DetectionAction.AlertTemplate.Title
+                    description = $jsonContent.DetectionAction.AlertTemplate.Description
+                    severity = $jsonContent.DetectionAction.AlertTemplate.Severity
+                    category = $jsonContent.DetectionAction.AlertTemplate.Category
+                    mitreTechniques = $jsonContent.DetectionAction.AlertTemplate.MitreTechniques
+                    recommendedActions = $jsonContent.DetectionAction.AlertTemplate.RecommendedActions
+                    impactedAssets = @(
+                        @{
+                            "@odata.type" = "#microsoft.graph.security.impactedDeviceAsset"
+                            "identifier" = "deviceId"
+                        }
+                    )
+                }
+            }
+        }
+        $bodyJson = $bodyParameter | ConvertTo-Json -Depth 10
+        if (-not $bodyJson) {
+            return
+        }
+        $response = Invoke-MgGraphRequest -Method PATCH -Uri "https://graph.microsoft.com/beta/security/rules/detectionRules/$RuleId" -Body $bodyJson
+        if ($response -and $response.id) {
+            Write-Host "Updated detection rule: $($jsonContent.DisplayName)"
+        } else {
+            Write-Host "Failed to update detection rule: $($jsonContent.DisplayName). No ID returned in response."
+        }
+    } catch {
+        Write-Host "Failed to update detection rule: $($jsonContent.DisplayName). Error: $_"
+    }
+}
+
+Export-ModuleMember -Function Connect-MDE, Connect-MDEGraph, Get-AccessToken, Get-RequestParam, Get-SecretFromKeyVault, Invoke-WithRetry,
+    Get-Machines, Get-Actions, Undo-Actions, Get-IPInfo, Get-FileInfo, Get-URLInfo, Get-LoggedInUsers, Get-MachineActionStatus, Invoke-AdvancedHunting,
+    Invoke-UploadLR, Invoke-PutFile, Invoke-GetFile, Invoke-LRScript, Get-LiveResponseOutput,
+    Invoke-MachineIsolation, Undo-MachineIsolation, Invoke-ContainDevice, Undo-ContainDevice, Get-DetectionRules, Install-DetectionRule, Update-DetectionRule,
+    Invoke-RestrictAppExecution, Undo-RestrictAppExecution, Invoke-FullDiskScan, Invoke-StopAndQuarantineFile, Invoke-CollectInvestigationPackage,
+    Get-Indicators, Invoke-TiFile, Undo-TiFile, Invoke-TiCert, Undo-TiCert, Invoke-TiIP, Undo-TiIP, Invoke-TiURL, Undo-TiURL

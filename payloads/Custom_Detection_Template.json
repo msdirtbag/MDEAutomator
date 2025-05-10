@@ -1,0 +1,22 @@
+{
+  "DetectionAction": {
+    "AlertTemplate": {
+      "Category": "",
+      "Description": "",
+      "MitreTechniques": [
+        ""
+      ],
+      "RecommendedActions": "",
+      "Severity": "",
+      "Title": ""
+    }
+  },
+  "DisplayName": "",
+  "IsEnabled": true,
+  "QueryCondition": {
+    "QueryText": ""
+  },
+  "Schedule": {
+    "Period": "0"
+  }
+}

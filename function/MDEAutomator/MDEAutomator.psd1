@@ -1,6 +1,6 @@
 @{
     # Module Identity
-    ModuleVersion     = '1.5.1'
+    ModuleVersion     = '1.5.2'
     GUID              = '010c4ef2-f71c-4bce-84cc-de9752cf1577'
     RootModule        = 'MDEAutomator.psm1'
 
@@ -30,7 +30,7 @@
         'Get-LoggedInUsers'
         'Get-MachineActionStatus'
         'Invoke-AdvancedHunting'
-        
+
         # Live Response Actions
         'Invoke-UploadLR'
         'Invoke-PutFile'
@@ -52,5 +52,11 @@
         'Invoke-TiCert', 'Undo-TiCert'
         'Invoke-TiIP',   'Undo-TiIP'
         'Invoke-TiURL',  'Undo-TiURL'
+
+        # Custom Detections
+        'Get-DetectionRules'
+        'Install-DetectionRule'
+        'Update-DetectionRule'
+
     )
 }
