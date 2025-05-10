@@ -739,6 +739,9 @@ $users = Get-LoggedInUsers -token $token -DeviceIds $deviceIds
 $users | Format-Table DeviceId, AccountName, LogonTime, LastSeen
 ```
 
+> **Tip:**  
+> For most functions, ensure you have a valid `$token` from `Connect-MDE` and the required permissions in Azure/MDE.
+
 ## 26. Invoke-AdvancedHunting
 
 **Description:**  
@@ -752,7 +755,7 @@ You must be connected to Microsoft Graph using `Connect-MDEGraph` before running
 
 **Parameters:**
 
-- `-Queries` (string[], required): String Array of KQL queries to execute. Each query string should be valid for the Advanced Hunting API.
+- `-Queries` (string[], required): String Array of KQL queries to execute. Each query string should be valid KQL syntax.
 
 **Example:**
 ```powershell
@@ -767,7 +770,7 @@ $results | ConvertTo-Json -Depth 5
 ## 27. Get-DetectionRules
 
 **Description:**  
-`Get-DetectionRules` retrieves all Microsoft Defender detection rules via Microsoft Graph API as objects.
+`Get-DetectionRules` retrieves all Microsoft Defender Custom Detection rules via Microsoft Graph API as objects.
 
 **Requirements:**  
 You must be connected to Microsoft Graph using `Connect-MDEGraph` before running this command.
@@ -785,14 +788,14 @@ Write-Host $rules
 ## 28. Install-DetectionRule
 
 **Description:**  
-`Install-DetectionRule` installs a new detection rule in Microsoft Defender via Microsoft Graph API. Accepts a PowerShell object representing the rule definition.
+`Install-DetectionRule` installs a new Custom Detection rule in Microsoft Defender via Microsoft Graph API. Accepts a PowerShell object representing the rule definition.
 
 **Requirements:**  
 You must be connected to Microsoft Graph using `Connect-MDEGraph` before running this command.
 
 **Parameters:**
 
-- `-jsonContent` (PSCustomObject, required): The detection rule definition as a PowerShell object.
+- `-jsonContent` (PSCustomObject, required): The Custom Detection rule definition as a PowerShell object.
 
 **Example:**
 ```powershell
@@ -803,15 +806,15 @@ Install-DetectionRule -jsonContent $jsonContent
 ## 29. Update-DetectionRule
 
 **Description:**  
-`Update-DetectionRule` updates an existing detection rule in Microsoft Defender via Microsoft Graph API. Accepts the rule ID and the updated rule definition.
+`Update-DetectionRule` updates an existing Custom Detection rule in Microsoft Defender via Microsoft Graph API. Accepts the rule ID and the updated rule definition.
 
 **Requirements:**  
 You must be connected to Microsoft Graph using `Connect-MDEGraph` before running this command.
 
 **Parameters:**
 
-- `-RuleId` (string, required): The ID of the detection rule to update.
-- `-jsonContent` (PSCustomObject, required): The updated detection rule definition as a PowerShell object.
+- `-RuleId` (string, required): The ID of the Custom Detection rule to update.
+- `-jsonContent` (PSCustomObject, required): The updated Custom Detection rule definition as a PowerShell object.
 
 **Example:**
 ```powershell
@@ -819,6 +822,4 @@ $jsonContent = Get-Content .\UpdatedDetectionRule.json | ConvertFrom-Json
 Update-DetectionRule -RuleId $ruleId -jsonContent $jsonContent
 ```
 
-> **Tip:**  
-> For most functions, ensure you have a valid `$token` from `Connect-MDE` and the required permissions in Azure/MDE.
 
