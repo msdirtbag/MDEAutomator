@@ -255,7 +255,7 @@ Made possible by the BlueVoyant Digital Forensics & Incident Response team. For 
 
 ---
 
-### Module Documentation
+#### Module Documentation
 
 ## 1. Connect-MDE
 
@@ -646,7 +646,7 @@ The `-machineActionId` parameter is the unique identifier for a specific machine
 Get-LiveResponseOutput -machineActionId "<machineActionId>" -token $token
 ```
 
-### 20. Invoke-StopAndQuarantineFile
+## 20. Invoke-StopAndQuarantineFile
 
 **Description:**  
 `Invoke-StopAndQuarantineFile` issues a Stop and Quarantine File action on one or more devices in Microsoft Defender for Endpoint. This action attempts to stop the specified file (by SHA1 hash) on all Active and onboarded devices.
@@ -661,7 +661,7 @@ Get-LiveResponseOutput -machineActionId "<machineActionId>" -token $token
 Invoke-StopAndQuarantineFile -token $token -Sha1 "<sha1hash>"
 ```
 
-### 21. Get-Indicators
+## 21. Get-Indicators
 
 **Description:**  
 `Get-Indicators` retrieves all custom threat indicators (IOCs) from Microsoft Defender for Endpoint, including file hashes, IPs, URLs, and certificates. 
