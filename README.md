@@ -26,7 +26,7 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
     - `InvokeFullDiskScan` - Starts Full-disk WDAV scan jobs.
   - **MDEOrchestrator**  
     Automates bulk management of Live Response commands:
-    - `InvokePutFile`- Pushes file from Live Response Library to the `Downloads` folder in activity.
+    - `InvokePutFile`- Pushes file from Live Response Library to the `Downloads` ATP folder on the endpoint.
     - `InvokeGetFile`- Retrieves file from endpoint and uploads to the `files` blob container.
     - `InvokeLRScript`- Runs live response script from Live Response Library on the endpoint.
   - **MDEProfiles**  
