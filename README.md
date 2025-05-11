@@ -11,13 +11,41 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 - **MDEAutomator PowerShell Module**  
   Provides cmdlets for authentication, profile management, live response, response actions, custom detections, advanced hunting and threat indicator management in MDE.
 
-- **Azure Function Apps**  
-  - **MDEDispatcher**: Automates bulk management of response actions delivered to endpoints.
-  - **MDEOrchestrator**: Automates bulk management of Live Response commands delivered to endpoints.
-  - **MDEProfiles**: Automates bulk delivery of custom PowerShell scripts to configure policy on MDE endpoints.
-  - **MDETIManager**: Automates the management of Threat Indicators in MDE.
-  - **MDEAutoHunt**: Automates bulk threat hunting processing & export of output to blob storage.  
-  - **MDECDManager**: Automates synchronization of Custom Detections from blob storage. 
+- **Azure Function Apps**
+  - **MDEDispatcher**  
+    Automates bulk management of response actions delivered to endpoints:
+    - `InvokeMachineIsolation`: Performs selective network isolation. (respects exclusion rules)
+    - `UndoMachineIsolation`: Removes network isolation.
+    - `InvokeContainDevice`: Instructs endpoints to deny all connections from this device.
+    - `UndoContainDevice`: Restores communication with endpoints.
+    - `UndoMachineIsolation`: Removes network isolation.
+    - `InvokeRestrictAppExecution`: Enables Microsoft-only code integrity policy. (Microsoft-signed code only permitted to run)
+    - `UndoRestrictAppExecution`- Removes Microsoft-only code integrity policy.
+    - `InvokeCollectInvestigationPackage` - Collects Investigation Packages and uploads them to the `packages` blob container.
+    - `InvokeStopAndQuarantineFile` - Searches for file on disk, encrypts the file and saves the file in the local WDAV quarantine folder.
+    - `InvokeFullDiskScan` - Starts Full-disk WDAV scan jobs.
+  - **MDEOrchestrator**  
+    Automates bulk management of Live Response commands:
+    - `InvokePutFile`- Pushes file from Live Response Library to the `Downloads` folder in activity.
+    - `InvokeGetFile`- Retrieves file from endpoint and uploads to the `files` blob container.
+    - `InvokeLRScript`- Runs live response script from Live Response Library on the endpoint.
+  - **MDEProfiles**  
+    Automates bulk delivery of custom PowerShell scripts to configure policy on MDE endpoints:
+    - `Active`- This configures specific Set-MpPreference settings, registry settings, Attack Surface Reduction rules, Exploit Protection, and Windows Defender Application Control settings on endpoints. 
+    - `Passive`- This configures specific Set-MpPreference settings and Attack Surface Reduction rules on endpoints.
+  - **MDETIManager**  
+    Automates management of Threat Indicators in MDE:
+    - `InvokeTiFile` / `UndoTiFile`
+    - `InvokeTiIP` / `UndoTiIP`
+    - `InvokeTiURL` / `UndoTiURL`
+    - `InvokeTiCert` / `UndoTiCert`
+  - **MDEAutoHunt**  
+    Automates bulk threat hunting and exports output to the `output` blob container:
+    - Relays groups of KQL queries to the MDE API, exports responses as JSON, and saves to Azure Storage.
+  - **MDECDManager**  
+    Automates synchronization of Custom Detections from a blob container:
+    - Installs or updates Defender Custom Detections based on JSON files in the `detections` blob container.
+
 
 ---
 
