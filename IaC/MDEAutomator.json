@@ -1,16 +1,11 @@
 {
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-  "languageVersion": "2.1-experimental",
   "contentVersion": "1.0.0.0",
   "metadata": {
-    "_EXPERIMENTAL_WARNING": "This template uses ARM features that are experimental. Experimental features should be enabled for testing purposes only, as there are no guarantees about the quality or stability of these features. Do not enable these settings for any production usage, or your production environment may be subject to breaking.",
-    "_EXPERIMENTAL_FEATURES_ENABLED": [
-      "Extensibility"
-    ],
     "_generator": {
       "name": "bicep",
       "version": "0.35.1.17967",
-      "templateHash": "2206781851962883383"
+      "templateHash": "793964303282425629"
     }
   },
   "parameters": {
@@ -19,55 +14,50 @@
       "metadata": {
         "description": "Chose a variable for the environment. Example: dev, test, soc"
       }
-    },
-    "location": {
-      "type": "string",
-      "metadata": {
-        "description": "Chose a Azure region. Example: eastus, westus, westeurope"
-      }
     }
   },
   "variables": {
-    "environmentid": "[uniqueString(tenant().tenantId, parameters('env'))]"
+    "environmentid": "[uniqueString(tenant().tenantId, subscription().id, parameters('env'))]",
+    "location": "[resourceGroup().location]"
   },
-  "resources": {
-    "managedidentity": {
+  "resources": [
+    {
       "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
       "apiVersion": "2024-11-30",
       "name": "[format('umi-mdeautomator-{0}', variables('environmentid'))]",
-      "location": "[parameters('location')]"
+      "location": "[variables('location')]"
     },
-    "blobroleassign": {
+    {
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
       "name": "[guid(variables('environmentid'), 'ba92f5b4-2d11-453d-a403-e96b0029c9fe', subscription().id)]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
-        "principalId": "[reference('managedidentity').principalId]",
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid'))), '2024-11-30').principalId]",
         "principalType": "ServicePrincipal"
       },
       "dependsOn": [
-        "managedidentity"
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid')))]"
       ]
     },
-    "monitorroleassign": {
+    {
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
       "name": "[guid(variables('environmentid'), '3913510d-42f4-4e42-8a64-420c390055eb', subscription().id)]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '3913510d-42f4-4e42-8a64-420c390055eb')]",
-        "principalId": "[reference('managedidentity').principalId]",
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid'))), '2024-11-30').principalId]",
         "principalType": "ServicePrincipal"
       },
       "dependsOn": [
-        "managedidentity"
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid')))]"
       ]
     },
-    "storage01": {
+    {
       "type": "Microsoft.Storage/storageAccounts",
       "apiVersion": "2024-01-01",
       "name": "[format('stmdeauto{0}', variables('environmentid'))]",
-      "location": "[parameters('location')]",
+      "location": "[variables('location')]",
       "identity": {
         "type": "UserAssigned",
         "userAssignedIdentities": {
@@ -105,18 +95,18 @@
         "minimumTlsVersion": "TLS1_2"
       },
       "dependsOn": [
-        "managedidentity"
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid')))]"
       ]
     },
-    "blobservice": {
+    {
       "type": "Microsoft.Storage/storageAccounts/blobServices",
       "apiVersion": "2024-01-01",
       "name": "[format('{0}/{1}', format('stmdeauto{0}', variables('environmentid')), 'default')]",
       "dependsOn": [
-        "storage01"
+        "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]"
       ]
     },
-    "packagescontainer": {
+    {
       "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
       "apiVersion": "2024-01-01",
       "name": "[format('{0}/{1}/{2}', format('stmdeauto{0}', variables('environmentid')), 'default', 'packages')]",
@@ -124,10 +114,10 @@
         "publicAccess": "None"
       },
       "dependsOn": [
-        "blobservice"
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', format('stmdeauto{0}', variables('environmentid')), 'default')]"
       ]
     },
-    "filescontainer": {
+    {
       "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
       "apiVersion": "2024-01-01",
       "name": "[format('{0}/{1}/{2}', format('stmdeauto{0}', variables('environmentid')), 'default', 'files')]",
@@ -135,10 +125,10 @@
         "publicAccess": "None"
       },
       "dependsOn": [
-        "blobservice"
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', format('stmdeauto{0}', variables('environmentid')), 'default')]"
       ]
     },
-    "payloadscontainer": {
+    {
       "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
       "apiVersion": "2024-01-01",
       "name": "[format('{0}/{1}/{2}', format('stmdeauto{0}', variables('environmentid')), 'default', 'payloads')]",
@@ -146,10 +136,10 @@
         "publicAccess": "None"
       },
       "dependsOn": [
-        "blobservice"
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', format('stmdeauto{0}', variables('environmentid')), 'default')]"
       ]
     },
-    "outputcontainer": {
+    {
       "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
       "apiVersion": "2024-01-01",
       "name": "[format('{0}/{1}/{2}', format('stmdeauto{0}', variables('environmentid')), 'default', 'output')]",
@@ -157,10 +147,10 @@
         "publicAccess": "None"
       },
       "dependsOn": [
-        "blobservice"
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', format('stmdeauto{0}', variables('environmentid')), 'default')]"
       ]
     },
-    "detectionscontainer": {
+    {
       "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
       "apiVersion": "2024-01-01",
       "name": "[format('{0}/{1}/{2}', format('stmdeauto{0}', variables('environmentid')), 'default', 'detections')]",
@@ -168,14 +158,14 @@
         "publicAccess": "None"
       },
       "dependsOn": [
-        "blobservice"
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', format('stmdeauto{0}', variables('environmentid')), 'default')]"
       ]
     },
-    "appinsights01": {
+    {
       "type": "Microsoft.Insights/components",
       "apiVersion": "2020-02-02",
       "name": "[format('appi-mdeauto{0}', variables('environmentid'))]",
-      "location": "[parameters('location')]",
+      "location": "[variables('location')]",
       "kind": "web",
       "properties": {
         "Application_Type": "web",
@@ -183,11 +173,11 @@
         "DisableLocalAuth": true
       }
     },
-    "appservice": {
+    {
       "type": "Microsoft.Web/serverfarms",
       "apiVersion": "2024-04-01",
       "name": "[format('asp-mdeautomator-{0}', variables('environmentid'))]",
-      "location": "[parameters('location')]",
+      "location": "[variables('location')]",
       "properties": {
         "reserved": false,
         "elasticScaleEnabled": true,
@@ -198,12 +188,12 @@
         "name": "EP1"
       }
     },
-    "function01": {
+    {
       "type": "Microsoft.Web/sites",
       "apiVersion": "2023-12-01",
       "name": "[format('funcmdeauto{0}', variables('environmentid'))]",
       "kind": "functionapp",
-      "location": "[parameters('location')]",
+      "location": "[variables('location')]",
       "identity": {
         "type": "UserAssigned",
         "userAssignedIdentities": {
@@ -239,11 +229,11 @@
             },
             {
               "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
-              "value": "[reference('appinsights01').ConnectionString]"
+              "value": "[reference(resourceId('Microsoft.Insights/components', format('appi-mdeauto{0}', variables('environmentid'))), '2020-02-02').ConnectionString]"
             },
             {
               "name": "APPLICATIONINSIGHTS_AUTHENTICATION_STRING",
-              "value": "[format('Authorization=AAD;ClientId={0}', reference('managedidentity').clientId)]"
+              "value": "[format('Authorization=AAD;ClientId={0}', reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid'))), '2024-11-30').clientId)]"
             },
             {
               "name": "ApplicationInsightsAgent_EXTENSION_VERSION",
@@ -279,7 +269,7 @@
             },
             {
               "name": "AZURE_CLIENT_ID",
-              "value": "[reference('managedidentity').clientId]"
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid'))), '2024-11-30').clientId]"
             },
             {
               "name": "SUBSCRIPTION_ID",
@@ -301,11 +291,11 @@
         }
       },
       "dependsOn": [
-        "appinsights01",
-        "appservice",
-        "managedidentity",
-        "storage01"
+        "[resourceId('Microsoft.Insights/components', format('appi-mdeauto{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Web/serverfarms', format('asp-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]"
       ]
     }
-  }
+  ]
 }

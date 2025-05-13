@@ -6,15 +6,13 @@
 targetScope = 'resourceGroup'
 
 //Variables
-var environmentid = uniqueString(tenant().tenantId, env)
+var environmentid = uniqueString(tenant().tenantId, subscription().id, env)
+var location = resourceGroup().location
 
 //Parameters
 
 @description('Chose a variable for the environment. Example: dev, test, soc')
 param env string
-
-@description('Chose a Azure region. Example: eastus, westus, westeurope')
-param location string
 
 //Resources
 
