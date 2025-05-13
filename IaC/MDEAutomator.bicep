@@ -1,55 +1,32 @@
 //MDEAutomator
-//Version: 1.0.1
+//Version: 1.5.5
 //Author: msdirtbag
 
 //Scope
 targetScope = 'resourceGroup'
 
 //Variables
-var blobrole = '/providers/Microsoft.Authorization/roleDefinitions/ba92f5b4-2d11-453d-a403-e96b0029c9fe'
-var kvrole = '/providers/Microsoft.Authorization/roleDefinitions/4633458b-17de-408a-b874-0445c86b69e6'
-var location = resourceGroup().location
-var environmentid = uniqueString(subscription().id, resourceGroup().id, tenant().tenantId, env)
-
+var environmentid = uniqueString(tenant().tenantId, env)
 
 //Parameters
+
 @description('Chose a variable for the environment. Example: dev, test, soc')
 param env string
-@description('Specify the ClientID of the Service Principal that will be used')
-param spnid string
+
+@description('Chose a Azure region. Example: eastus, westus, westeurope')
+param location string
 
 //Resources
 
-//User Managed Identity
+// User Managed Identity
 resource managedidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2024-11-30' = {
   name: 'umi-mdeautomator-${environmentid}'
   location: location
 }
 
-//Key Vault
-resource keyvault 'Microsoft.KeyVault/vaults@2024-11-01' = {
-  name: 'kv-mdeauto-${environmentid}'
-  location: location
-  properties: {
-    enableSoftDelete: true
-    enableRbacAuthorization: true
-    softDeleteRetentionInDays: 30
-    sku: {
-      name: 'standard'
-      family: 'A'
-    }
-    networkAcls: {
-      bypass: 'AzureServices'
-      defaultAction: 'Allow'      
-    }  
-    tenantId: subscription().tenantId
-    publicNetworkAccess: 'Enabled'
-  }
-}
-
-//Blob Storage Role Assignments
+// Storage Blob Data Contributor Role Assignment
 resource blobroleassign 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(environmentid, blobrole, subscription().id)
+  name: guid(environmentid, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe', subscription().id)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
     principalId: managedidentity.properties.principalId
@@ -57,60 +34,18 @@ resource blobroleassign 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   }
 }
 
-//Key Vault Role Assignments
-resource kvroleassign 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(environmentid, kvrole, subscription().id)
+// Monitoring Metrics Publisher Role Assignment
+resource monitorroleassign 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(environmentid, '3913510d-42f4-4e42-8a64-420c390055eb', subscription().id)
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '3913510d-42f4-4e42-8a64-420c390055eb')
     principalId: managedidentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
 }
 
-//Function Storage Account
+// Function Storage Account
 resource storage01 'Microsoft.Storage/storageAccounts@2024-01-01' = {
-  name: 'stfunc${environmentid}'
-  location: location
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${managedidentity.id}': {}
-    }
-  }
-  kind: 'StorageV2'
-  sku: {
-    name: 'Standard_LRS'
-  }
-  properties: {
-    encryption: {
-      keySource: 'Microsoft.Storage'
-      requireInfrastructureEncryption: true
-      services: {
-        blob: {
-          enabled: true
-        }
-        file: {
-          enabled: true
-        }
-        queue: {
-          enabled: true
-          keyType: 'Service'
-        }
-        table: {
-          enabled: true
-          keyType: 'Service'
-        }
-      }
-    }
-    allowBlobPublicAccess: false
-    supportsHttpsTrafficOnly: true
-    publicNetworkAccess: 'Enabled'
-    minimumTlsVersion: 'TLS1_2'
-  }
-}
-
-//Storage Account
-resource storage02 'Microsoft.Storage/storageAccounts@2024-01-01' = {
   name: 'stmdeauto${environmentid}'
   location: location
   identity: {
@@ -151,12 +86,13 @@ resource storage02 'Microsoft.Storage/storageAccounts@2024-01-01' = {
   }
 }
 
+// Blob Service
 resource blobservice 'Microsoft.Storage/storageAccounts/blobServices@2024-01-01' = {
   name: 'default'
-  parent: storage02
+  parent: storage01
 }
 
-// Blob containers for storage02
+// Packages Blob Container
 resource packagescontainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' = {
   name: 'packages'
   parent: blobservice
@@ -165,6 +101,7 @@ resource packagescontainer 'Microsoft.Storage/storageAccounts/blobServices/conta
   }
 }
 
+// Files Blob Container
 resource filescontainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' = {
   name: 'files'
   parent: blobservice
@@ -173,6 +110,7 @@ resource filescontainer 'Microsoft.Storage/storageAccounts/blobServices/containe
   }
 }
 
+// Payloads Blob Container
 resource payloadscontainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' = {
   name: 'payloads'
   parent: blobservice
@@ -181,6 +119,7 @@ resource payloadscontainer 'Microsoft.Storage/storageAccounts/blobServices/conta
   }
 }
 
+// Output Blob Container
 resource outputcontainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' = {
   name: 'output'
   parent: blobservice
@@ -189,6 +128,7 @@ resource outputcontainer 'Microsoft.Storage/storageAccounts/blobServices/contain
   }
 }
 
+// Detections Blob Container
 resource detectionscontainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' = {
   name: 'detections'
   parent: blobservice
@@ -197,26 +137,26 @@ resource detectionscontainer 'Microsoft.Storage/storageAccounts/blobServices/con
   }
 }
 
-//Application Insights
+// Application Insights
 resource appinsights01 'Microsoft.Insights/components@2020-02-02' = {
   name: 'appi-mdeauto${environmentid}'
   location: location
   kind: 'web'
   properties: {
     Application_Type: 'web'
-    RetentionInDays: 30
+    RetentionInDays: 60
+    DisableLocalAuth: true
   }
 }
 
-//App Service Plan
+// App Service Plan
 resource appservice 'Microsoft.Web/serverfarms@2024-04-01' = {
   name: 'asp-mdeautomator-${environmentid}'
   location: location
-
   properties: {
     reserved: false
     elasticScaleEnabled: true
-    maximumElasticWorkerCount: 20
+    maximumElasticWorkerCount: 2
   }
   sku: {
     tier: 'ElasticPremium'
@@ -224,7 +164,7 @@ resource appservice 'Microsoft.Web/serverfarms@2024-04-01' = {
   }
 }
 
-//Azure Function
+// Azure Function
 resource function01 'Microsoft.Web/sites@2023-12-01' = {
   name: 'funcmdeauto${environmentid}'
   kind: 'functionapp'
@@ -267,6 +207,10 @@ resource function01 'Microsoft.Web/sites@2023-12-01' = {
             value: appinsights01.properties.ConnectionString
         }
         {
+            name: 'APPLICATIONINSIGHTS_AUTHENTICATION_STRING'
+            value: 'Authorization=AAD;ClientId=${managedidentity.properties.clientId}'
+        }
+        {
             name: 'ApplicationInsightsAgent_EXTENSION_VERSION'
             value: '~3'
         }
@@ -303,20 +247,16 @@ resource function01 'Microsoft.Web/sites@2023-12-01' = {
             value: managedidentity.properties.clientId
         }
         {
-            name: 'AZURE_KEYVAULT'
-            value: 'kv-mdeauto-${environmentid}'
-        }
-        {
             name: 'SUBSCRIPTION_ID'
             value: subscription().subscriptionId
         }
         {
             name: 'STORAGE_ACCOUNT'
-            value: storage02.name
+            value: storage01.name
         }
         {
             name: 'SPNID'
-            value: spnid
+            value: ''
         }
       ]
       use32BitWorkerProcess: false

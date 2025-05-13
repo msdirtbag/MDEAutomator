@@ -26,26 +26,25 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
     - `InvokeFullDiskScan` - Starts Full-disk WDAV scan jobs.
   - **MDEOrchestrator**  
     Automates bulk management of Live Response commands:
-    - `InvokePutFile`- Pushes file from Live Response Library to the `Downloads` ATP folder on the endpoint.
+    - `InvokePutFile`- Pushes file from Live Response Library to 
     - `InvokeGetFile`- Retrieves file from endpoint and uploads to the `files` blob container.
     - `InvokeLRScript`- Runs live response script from Live Response Library on the endpoint.
   - **MDEProfiles**  
     Automates bulk delivery of custom PowerShell scripts to configure policy on MDE endpoints:
     - `Active`- This configures specific Set-MpPreference settings, registry settings, Attack Surface Reduction rules, Exploit Protection, and Windows Defender Application Control settings on endpoints. 
     - `Passive`- This configures specific Set-MpPreference settings and Attack Surface Reduction rules on endpoints.
-  - **MDETIManager**  
-    Automates management of Threat Indicators in MDE:
-    - `InvokeTiFile` / `UndoTiFile`
-    - `InvokeTiIP` / `UndoTiIP`
-    - `InvokeTiURL` / `UndoTiURL`
-    - `InvokeTiCert` / `UndoTiCert`
+- **MDETIManager**  
+  Automates management of Threat Indicators (IOCs) in Microsoft Defender for Endpoint:
+  - `InvokeTiFile` / `UndoTiFile`: Creates/removes file hash-based indicators (SHA1/SHA256)
+  - `InvokeTiIP` / `UndoTiIP`: Creates/removes IP address-based indicators
+  - `InvokeTiURL` / `UndoTiURL`: Creates/removes URL and domain-based indicators
+  - `InvokeTiCert` / `UndoTiCert`: Creates/removes certificate-based indicators (by thumbprint)
   - **MDEAutoHunt**  
-    Automates bulk threat hunting and exports output to the `output` blob container:
+    Automates bulk threat hunting and exports output to Azure Storage:
     - Relays groups of KQL queries to the MDE API, exports responses as JSON, and saves to Azure Storage.
   - **MDECDManager**  
     Automates synchronization of Custom Detections from a blob container:
-    - Installs or updates Defender Custom Detections based on JSON files in the `detections` blob container.
-
+    - Installs or updates Defender Custom Detections based on JSON files in the Detections blob container.
 
 ---
 
@@ -55,9 +54,10 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 - Bulk automation of MDE response actions and live response actions
 - Bulk management of MDE threat indicators (IOCs)
 - Designed for multi-tenant use cases
-- Azure Key Vault secret management + manual `$SPNSECRET` flexibility
+- Secretless App Registration/UMI auth + manual `$SPNSECRET` flexibility
 - Ability to deliver key configuration settings via PowerShell that are not available in Endpoint Security Profiles. 
 - Bulk Threat Hunting via Microsoft Graph
+- Bulk Custom Detection syncronization from Azure Storage
 - Convenient upload of endpoint packages/files to Azure Storage
 
 ---
@@ -68,23 +68,50 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 - Azure Function
 - App Service Plan (EP1)
 - Azure Storage
-- Azure Key Vault
 - User Managed Identity
 
 MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
 
 ---
 
-## Prerequisites
+## Deployment
 
-1. Create Entra ID Service Principal (App Registration)  
-   ![Deploy](./media/createspn.png)
+1. Click the "Deploy to Azure" button below.
 
-   > **Note:** Select Multitenant if you plan to leverage this to service multiple tenants.
+   [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fmsdirtbag%2FMDEAutomator%2Frefs%2Fheads%2Fmain%2FIaC%2FMDEAutomator.json)
 
-2. Add required API permissions to the Service Principal  
+   Note: You must specify a `env` parameter to make the deployment globally unique. Example: "dev", "test", etc.
 
-   Required WindowsDefenderATP API Permissions:
+   ![Deploy](./media/deployment.png)
+
+
+2. Note the name of the User-Managed Identity that is created by the deployment.
+
+---
+
+## Activation
+
+1. Download the activation script locally. 
+
+   [Activation Script](https://learn.microsoft.com/en-us/azure/trusted-signing/quickstart)
+
+
+2. Run the script with Global Administrator or Cloud App Administator permissions active.
+
+   Parameters:
+
+   `-spnname` - The name of the App Registration that will be created for MDEAutomator
+   `-uminame` - The name of the User Managed Identity that was created by the Deployment.
+
+
+   Example usage:
+   ```powershell
+   
+   ./addfedcred.ps1 -spnname "SPN-MDEAutomator" -uminame "umi-mdeautomator-n4pepfiqaxymu"
+
+   ---
+
+   Provisioned WindowsDefenderATP API Permissions:
 
    - AdvancedQuery.Read.All
    - Alert.Read.All
@@ -101,42 +128,21 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
    - Ti.ReadWrite.All
    - User.Read.All
 
-   Required Graph API Permissions:
+   Provisioned Graph API Permissions:
 
    - CustomDetection.ReadWrite.All
    - ThreatHunting.Read.All
    - ThreatIndicators.ReadWrite.OwnedBy
-   - User.Read
 
-   ![Perms](./media/spnperms.png)   
+   When the scripts complete, it will output the $SpnId that must be saved as a Azure Function App Setting. 
 
-3. Generate SPN Secret (securely store for post-deployment configuration)
+3. Save the $SpnId as a Azure Function App Setting.
 
-   ![Generate](./media/secret.png)
+   ![Generate](./media/appsetting.png)
 
 4. Enable Unsigned Script Execution & Live Response for Servers and Workstations in MDE Advanced Settings. (See Security Notes section of this README)  
 
    ![Unsigned](./media/unsigned.png)
-
----
-
-## Deployment
-
-1. Click the "Deploy to Azure" button below.
-
-   [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fmsdirtbag%2FMDEAutomator%2Frefs%2Fheads%2Fmain%2FIaC%2FMDEAutomator.json)
-
-   ![Deploy](./media/deployment.png)
-
-   > **Note:** After deployment, you may need to restart the Azure Function for the Function Apps to load properly.
-
-2. Add "SPNSECRET" to Azure Key Vault
-
-   Create a secret named "SPNSECRET" with the value generated during SPN provisioning  
-      ![Secret](./media/secretkv.png)
-
-
-3. Configure your front-end application to call the Function Apps
 
 ---
 
@@ -234,14 +240,6 @@ Invoke-TiURL -token $token -URLs $urls
 > ⚠️ **Warning:**  
 > MDEAutomator is a powerful tool that, if misused by a threat actor, could cause significant harm. Treat all credentials, scripts, and deployments with the highest level of security.
 
-### Secret Management
-
-- **Azure Key Vault** is strongly recommended for storing secrets in all production scenarios.
-
-### Managed Identities
-
-- **User-managed identity support** is on the roadmap. This will require additional refactoring to support multi-tenant deployments.
-
 ### PowerShell Security Hygiene
 
 - **Sign all PowerShell scripts:**  
@@ -292,50 +290,29 @@ Authenticates to Microsoft Defender for Endpoint (MDE) using a Service Principal
 
 The `-SpnId` parameter is the Application (client) ID of your Azure Service Principal. This value uniquely identifies the app registration in Entra ID (Azure AD) that will be used for authentication. You can find this value in the Azure portal under your App Registration's overview page.
 
-The `-SpnSecret` parameter is the client secret associated with your Service Principal. This should be provided as a secure string. Use this parameter if you are not retrieving the secret from Azure Key Vault. Always store and handle this secret securely.
+The `-SpnSecret` parameter is the client secret associated with your Service Principal. This should be provided as a secure string. Always store and handle this secret securely.
 
-The `-keyVaultName` parameter specifies the name of the Azure Key Vault where your Service Principal secret is stored. If you use this parameter, the module will attempt to retrieve the secret from the specified Key Vault at runtime. The currently logged-in user or managed identity must have appropriate permissions (such as Key Vault Secrets User) to access the secret.
+The `-ManagedIdentityId` parameter specifies the Client ID of the User Managed Identity associated with MDEAutomator. 
 
-The `-TenantId` parameter is the Entra ID (Azure AD) tenant ID where your Service Principal is registered. This is typically a GUID. If not specified, the module will use the tenant associated with your current Azure context.
+The `-TenantId` parameter is the Entra ID tenant ID where your Service Principal is registered. This is typically a GUID. If not specified, the module will use the tenant associated with your current Azure context.
 
 **Parameters:**
 - `-SpnId` (string, required): Service Principal App ID.
-- `-SpnSecret` (securestring, optional): Service Principal secret (use if not using Key Vault).
-- `-keyVaultName` (string, optional): Azure Key Vault name (if retrieving secret from Key Vault).
+- `-SpnSecret` (securestring, optional): Service Principal secret.
+- `-ManagedIdentityId` (string, optional): The Client ID of the MDEAutomator User-Managed Identity.
 - `-TenantId` (string, optional): Entra ID Tenant ID or default to home tenant.
 
 **Example:**
 ```powershell
-# Using Key Vault
-$token = Connect-MDE -SpnId "<appId>" -keyVaultName "<vaultName>"
+# Using UMI + Federated App Registration
+$token = Connect-MDE -SpnId "<SPNappId>" -ManagedIdentityId "<UMIappId>"
 
 # Using direct secret
 $secureSecret = Read-Host "Enter Secret" -AsSecureString
 $token = Connect-MDE -SpnId "<appId>" -SpnSecret $secureSecret -TenantId "<tenantId>"
 ```
 
-## 2. Connect-MDEGraph
-
-**Description:**  
-`Connect-MDEGraph` authenticates to Microsoft Graph for use with Defender for Endpoint Advanced Hunting and other Graph-based APIs. It supports authentication using a Service Principal, optionally retrieving the secret from Azure Key Vault.
-
-**Parameters:**
-
-- `-SpnId` (string, required): Service Principal Application ID. (Client ID)
-- `-SpnSecret` (securestring, optional): Service Principal secret (use if not using Key Vault).
-- `-keyVaultName` (string, optional): Azure Key Vault name (if retrieving secret from Key Vault).
-- `-TenantId` (string, optional): Entra ID Tenant ID or default to home tenant.
-
-**Example:**
-```powershell
-# Using Key Vault
-Connect-MDEGraph -SpnId "<appId>" -keyVaultName "<vaultName>"
-
-# Using direct secret
-$secureSecret = Read-Host "Enter Secret" -AsSecureString
-Connect-MDEGraph -SpnId "<appId>" -SpnSecret $secureSecret -TenantId "<tenantId>"
-```
-## 3. Get-Machines
+## 2. Get-Machines
 
 **Description:**  
 
@@ -353,7 +330,7 @@ $machines = Get-Machines -token $token
 $machines | Format-Table ComputerDnsName, Id, OsPlatform
 ```
 
-## 4. Get-Actions
+## 3. Get-Actions
 
 **Description:**  
 Retrieves recent MDE machine actions from the last (60) days performed in MDE.
@@ -367,7 +344,7 @@ $actions = Get-Actions -token $token
 $actions | Format-Table Id, Type, Status, ComputerDnsName
 ```
 
-## 5. Undo-Actions
+## 4. Undo-Actions
 
 **Description:**  
 `Undo-Actions` cancels all pending machine actions in Microsoft Defender for Endpoint. This is useful for stopping actions that are queued but not yet executed.
@@ -383,7 +360,7 @@ The `$token` parameter is the OAuth2 access token you receive from the `Connect-
 Undo-Actions -token $token
 ```
 
-## 6. Invoke-MachineIsolation / Undo-MachineIsolation
+## 5. Invoke-MachineIsolation / Undo-MachineIsolation
 
 **Description:**  
 `Invoke-MachineIsolation` isolates one or more devices from the network, except for connections required for Defender for Endpoint service communication. This always uses Selective isolation and respects Isolation exclusion rules.
@@ -404,7 +381,7 @@ Invoke-MachineIsolation -token $token -DeviceIds @("<deviceId1>", "<deviceId2>")
 Undo-MachineIsolation -token $token -DeviceIds @("<deviceId1>")
 ```
 
-## 7. Invoke-ContainDevice / Undo-ContainDevice
+## 6. Invoke-ContainDevice / Undo-ContainDevice
 
 **Description:**  
 `Invoke-ContainDevice` contains one or more unmanaged devices in Microsoft Defender for Endpoint, restricting their network connectivity to prevent lateral movement.  
@@ -425,7 +402,7 @@ Invoke-ContainDevice -token $token -DeviceIds @("<deviceId>")
 Undo-ContainDevice -token $token -DeviceIds @("<deviceId>")
 ```
 
-## 8. Invoke-RestrictAppExecution / Undo-RestrictAppExecution
+## 7. Invoke-RestrictAppExecution / Undo-RestrictAppExecution
 
 **Description:**  
 `Invoke-RestrictAppExecution` restricts application execution on one or more devices, allowing only Microsoft-signed binaries to run.  
@@ -446,7 +423,7 @@ Invoke-RestrictAppExecution -token $token -DeviceIds @("<deviceId>")
 Undo-RestrictAppExecution -token $token -DeviceIds @("<deviceId>")
 ```
 
-## 9. Invoke-CollectInvestigationPackage
+## 8. Invoke-CollectInvestigationPackage
 
 **Description:**  
 `Invoke-CollectInvestigationPackage` collects an investigation package from one or more specified devices. The package contains forensic artifacts for further analysis.
@@ -465,7 +442,7 @@ The `-DeviceIds` parameter is an array of device IDs that uniquely identify the 
 Invoke-CollectInvestigationPackage -token $token -DeviceIds @("<deviceId>")
 ```
 
-## 10. Invoke-TiFile / Undo-TiFile
+## 9. Invoke-TiFile / Undo-TiFile
 
 **Description:**  
 `Invoke-TiFile` creates file hash-based custom threat indicators in Microsoft Defender for Endpoint.  
@@ -487,7 +464,7 @@ Invoke-TiFile -token $token -Sha1s @("<sha1>")
 Undo-TiFile -token $token -Sha256s @("<sha256>")
 ```
 
-## 11. Invoke-TiCert / Undo-TiCert
+## 10. Invoke-TiCert / Undo-TiCert
 
 **Description:**  
 `Invoke-TiCert` creates certificate thumbprint-based custom threat indicators in Microsoft Defender for Endpoint.  
@@ -508,7 +485,7 @@ Invoke-TiCert -token $token -Sha1s @("<thumbprint>")
 Undo-TiCert -token $token -Sha1s @("<thumbprint>")
 ```
 
-## 12. Invoke-TiIP / Undo-TiIP
+## 11. Invoke-TiIP / Undo-TiIP
 
 **Description:**  
 `Invoke-TiIP` creates IP address-based custom threat indicators in Microsoft Defender for Endpoint.  
@@ -529,7 +506,7 @@ Invoke-TiIP -token $token -IPs @("8.8.8.8")
 Undo-TiIP -token $token -IPs @("8.8.8.8")
 ```
 
-## 13. Invoke-TiURL / Undo-TiURL
+## 12. Invoke-TiURL / Undo-TiURL
 
 **Description:**  
 `Invoke-TiURL` creates URL or domain-based custom threat indicators in Microsoft Defender for Endpoint.  
@@ -550,7 +527,7 @@ Invoke-TiURL -token $token -URLs @("malicious.example.com")
 Undo-TiURL -token $token -URLs @("malicious.example.com")
 ```
 
-## 14. Invoke-UploadLR
+## 13. Invoke-UploadLR
 
 **Description:**  
 `Invoke-UploadLR` uploads a script file to the Microsoft Defender for Endpoint Live Response library for later use in automated investigations or manual response.
@@ -569,7 +546,7 @@ The `-filePath` parameter specifies the full path to the script or file you want
 Invoke-UploadLR -token $token -filePath "C:\Scripts\MyScript.ps1"
 ```
 
-## 15. Invoke-PutFile
+## 14. Invoke-PutFile
 
 **Description:**  
 `Invoke-PutFile` pushes a file from the Live Response library to one or more specified devices.
@@ -591,7 +568,7 @@ The `-DeviceIds` parameter is an array of device IDs that uniquely identify the 
 Invoke-PutFile -token $token -fileName "MyScript.ps1" -DeviceIds @("<deviceId>")
 ```
 
-## 16. Invoke-GetFile
+## 15. Invoke-GetFile
 
 **Description:**  
 `Invoke-GetFile` retrieves a file from one or more specified devices using Live Response.
@@ -613,7 +590,7 @@ The `-DeviceIds` parameter is an array of device IDs that uniquely identify the 
 Invoke-GetFile -token $token -filePath "C:\Windows\Temp\test.txt" -DeviceIds @("<deviceId>")
 ```
 
-## 17. Invoke-LRScript
+## 16. Invoke-LRScript
 
 **Description:**  
 `Invoke-LRScript` executes a Live Response script from the library on one or more specified devices.
@@ -635,7 +612,7 @@ The `-DeviceIds` parameter is an array of device IDs that uniquely identify the 
 Invoke-LRScript -DeviceIds @("<deviceId>") -scriptName "MyScript.ps1" -token $token
 ```
 
-## 18. Get-MachineActionStatus
+## 17. Get-MachineActionStatus
 
 **Description:**  
 `Get-MachineActionStatus` checks the status of a machine action by its action ID.
@@ -655,7 +632,7 @@ The `-machineActionId` parameter is the unique identifier for a specific machine
 Get-MachineActionStatus -machineActionId "<machineActionId>" -token $token
 ```
 
-## 19. Get-LiveResponseOutput
+## 18. Get-LiveResponseOutput
 
 **Description:**  
 `Get-LiveResponseOutput` downloads and parses the output of a Live Response script for a given machine action.
@@ -674,7 +651,7 @@ The `-machineActionId` parameter is the unique identifier for a specific machine
 Get-LiveResponseOutput -machineActionId "<machineActionId>" -token $token
 ```
 
-## 20. Invoke-StopAndQuarantineFile
+## 19. Invoke-StopAndQuarantineFile
 
 **Description:**  
 `Invoke-StopAndQuarantineFile` issues a Stop and Quarantine File action on one or more devices in Microsoft Defender for Endpoint. This action attempts to stop the specified file (by SHA1 hash) on all Active and onboarded devices.
@@ -689,7 +666,7 @@ Get-LiveResponseOutput -machineActionId "<machineActionId>" -token $token
 Invoke-StopAndQuarantineFile -token $token -Sha1 "<sha1hash>"
 ```
 
-## 21. Get-Indicators
+## 20. Get-Indicators
 
 **Description:**  
 `Get-Indicators` retrieves all custom threat indicators (IOCs) from Microsoft Defender for Endpoint, including file hashes, IPs, URLs, and certificates. 
@@ -703,7 +680,7 @@ Invoke-StopAndQuarantineFile -token $token -Sha1 "<sha1hash>"
 $indicators = Get-Indicators -token $token
 $indicators | Format-Table Id, IndicatorValue, IndicatorType, Action
 ```
-## 22. Get-FileInfo
+## 21. Get-FileInfo
 
 **Description:**  
 `Get-FileInfo` retrieves detailed information about one or more files in Microsoft Defender for Endpoint using their SHA1 hashes. For each hash, it returns file metadata, related alerts, machines, and statistics.
@@ -718,7 +695,7 @@ $indicators | Format-Table Id, IndicatorValue, IndicatorType, Action
 $fileInfo = Get-FileInfo -token $token -Sha1s @("<sha1hash1>", "<sha1hash2>")
 $fileInfo | ConvertTo-Json -Depth 5
 ```
-## 23. Get-IPInfo
+## 22. Get-IPInfo
 
 **Description:**  
 `Get-IPInfo` retrieves information about one or more IP addresses from Microsoft Defender for Endpoint. For each IP, it returns related alerts, statistics, and advanced hunting results.
@@ -734,7 +711,7 @@ $ipInfo = Get-IPInfo -token $token -IPs @("8.8.8.8", "1.2.3.4")
 $ipInfo | ConvertTo-Json -Depth 5
 ```
 
-## 24. Get-URLInfo
+## 23. Get-URLInfo
 
 **Description:**  
 `Get-URLInfo` retrieves information about one or more URLs or domains from Microsoft Defender for Endpoint. For each URL or domain, it returns related alerts, statistics, machines, and advanced hunting results.
@@ -750,7 +727,7 @@ $urlInfo = Get-URLInfo -token $token -URLs @("malicious.example.com", "phishing.
 $urlInfo | ConvertTo-Json -Depth 5
 ```
 
-## 25. Get-LoggedInUsers
+## 24. Get-LoggedInUsers
 
 **Description:**  
 `Get-LoggedInUsers` retrieves the list of users currently or recently logged in to one or more devices in Microsoft Defender for Endpoint. For each device, it returns details such as account name, domain, logon type, session info, and last seen time.
@@ -770,7 +747,7 @@ $users | Format-Table DeviceId, AccountName, LogonTime, LastSeen
 > **Tip:**  
 > For most functions, ensure you have a valid `$token` from `Connect-MDE` and the required permissions in Azure/MDE.
 
-## 26. Invoke-AdvancedHunting
+## 25. Invoke-AdvancedHunting
 
 **Description:**  
 `Invoke-AdvancedHunting` runs one or more KQL queries against Microsoft Defender for Endpoint’s Advanced Hunting API using Microsoft Graph. It returns the raw results for each query.
@@ -779,7 +756,7 @@ It leverages a randomization technique to load balance between the v1.0 & Beta A
 
 **Requirements:**
 
-You must be connected to Microsoft Graph using `Connect-MDEGraph` before running this command.
+You must be connected to Microsoft Graph using `Connect-MDE` before running this command.
 
 **Parameters:**
 
@@ -795,13 +772,13 @@ $results = Invoke-AdvancedHunting -Queries $queries
 $results | ConvertTo-Json -Depth 5
 ```
 
-## 27. Get-DetectionRules
+## 26. Get-DetectionRules
 
 **Description:**  
 `Get-DetectionRules` retrieves all Microsoft Defender Custom Detection rules via Microsoft Graph API as objects.
 
 **Requirements:**  
-You must be connected to Microsoft Graph using `Connect-MDEGraph` before running this command.
+You must be connected to Microsoft Graph using `Connect-MDE` before running this command.
 
 **Parameters:**  
 _None._
@@ -813,13 +790,13 @@ $rules | ConvertTo-Json -Depth 50
 Write-Host $rules 
 ```
 
-## 28. Install-DetectionRule
+## 27. Install-DetectionRule
 
 **Description:**  
 `Install-DetectionRule` installs a new Custom Detection rule in Microsoft Defender via Microsoft Graph API. Accepts a PowerShell object representing the rule definition.
 
 **Requirements:**  
-You must be connected to Microsoft Graph using `Connect-MDEGraph` before running this command.
+You must be connected to Microsoft Graph using `Connect-MDE` before running this command.
 
 **Parameters:**
 
@@ -831,13 +808,13 @@ $jsonContent = Get-Content .\MyDetectionRule.json | ConvertFrom-Json
 Install-DetectionRule -jsonContent $jsonContent
 ```
 
-## 29. Update-DetectionRule
+## 28. Update-DetectionRule
 
 **Description:**  
 `Update-DetectionRule` updates an existing Custom Detection rule in Microsoft Defender via Microsoft Graph API. Accepts the rule ID and the updated rule definition.
 
 **Requirements:**  
-You must be connected to Microsoft Graph using `Connect-MDEGraph` before running this command.
+You must be connected to Microsoft Graph using `Connect-MDE` before running this command.
 
 **Parameters:**
 
@@ -850,13 +827,13 @@ $jsonContent = Get-Content .\UpdatedDetectionRule.json | ConvertFrom-Json
 Update-DetectionRule -RuleId $ruleId -jsonContent $jsonContent
 ```
 
-## 30. Undo-DetectionRule
+## 29. Undo-DetectionRule
 
 **Description:**  
 `Undo-DetectionRule` deletes an existing Custom Detection rule in Microsoft Defender via Microsoft Graph API. Accepts the rule ID of the detection rule to remove.
 
 **Requirements:**  
-You must be connected to Microsoft Graph using `Connect-MDEGraph` before running this command.
+You must be connected to Microsoft Graph using `Connect-MDE` before running this command.
 
 **Parameters:**
 

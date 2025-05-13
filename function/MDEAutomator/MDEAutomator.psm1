@@ -7,10 +7,7 @@
 
 .FUNCTIONS
     Connect-MDE
-        Authenticates to MDE using a Service Principal, optionally retrieving secrets from Azure Key Vault.
-
-    Connect-MDEGraph
-        Authenticates to Microsoft Graph API using a Service Principal, optionally retrieving secrets from Azure Key Vault.
+        Authenticates to MDE using a Federated App Registration + UMI (FIC/Workload Identity). Also supports $SPNSECRET for local/dev environments.
 
     Get-Machines
         Retrieves a list of onboarded and active devices from MDE, with optional filtering.
@@ -97,13 +94,12 @@
         Updates an existing detection rule in Microsoft Defender via Microsoft Graph API.
 
 .PARAMETERS
-    Most functions require an OAuth2 access token (`$token`) obtained via Connect-MDE.
+    All functions require an OAuth2 access token (`$token`) obtained via Connect-MDE.
     Device-specific functions require one or more device IDs (`$DeviceIds`).
     Threat indicator functions require indicator values (e.g., `$Sha1s`, `$Sha256s`, `$IPs`, `$URLs`).
 
 .NOTES
-    - Requires PowerShell 5.1+ and the Az.Accounts/Az.KeyVault modules for Key Vault integration.
-    - All API calls are made to the Microsoft Defender for Endpoint API (https://api.securitycenter.microsoft.com).
+    - Requires PowerShell 5.1+ and the Az.Accounts.
     - Error handling and retry logic are built-in for robust automation.
     - For more information, see the official Microsoft Defender for Endpoint API documentation.
 
@@ -111,7 +107,7 @@
     github.com/msdirtbag
 
 .VERSION
-    1.0.0
+    1.5.3
 
 #>
 
@@ -127,179 +123,110 @@ Function Get-RequestParam {
     return $value
 }
 
-function Get-SecretFromKeyVault {
+function Connect-MDE {
+    [OutputType([System.Security.SecureString])]
     param (
         [Parameter(Mandatory = $true)]
-        [string] $keyVaultName
-    )
-
-    $secretValue = (Get-AzKeyVaultSecret -VaultName $keyVaultName -Name "SPNSECRET" -WarningAction SilentlyContinue).SecretValue
-
-    if ($null -eq $secretValue) {
-        throw "[ERROR] Secret not found in Key Vault '$keyVaultName'"
-    }
-    return $secretValue
-}
-
-function Get-AccessToken {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$TenantId,
-        [Parameter(Mandatory = $true)]
-        [string]$SpnId,
-        [Parameter(Mandatory = $true)]
-        [string]$SpnSecret
-    )
-
-    $resourceAppIdUri = 'https://api.securitycenter.microsoft.com'
-    $oAuthUri = "https://login.microsoftonline.com/$TenantId/oauth2/token"
-    $body = [Ordered]@{
-        resource      = $resourceAppIdUri
-        client_id     = $SpnId
-        client_secret = $SpnSecret
-        grant_type    = 'client_credentials'
-    }
-
-    try {
-        $response = Invoke-RestMethod -Method Post -Uri $oAuthUri -Body $body -ErrorAction Stop
-        return $response.access_token
-    } catch {
-        Write-Error "Failed to acquire access token: $_"
-        exit 1
-    }
-}
-
-Function Connect-MDE {
-    param (
-        [Parameter(Mandatory=$false)]
-        [string] $keyVaultName,
-        [Parameter(Mandatory=$true)]
         [string] $SpnId,
-        [Parameter(Mandatory=$false)]
+        [Parameter(Mandatory = $false)]
         [securestring] $SpnSecret,
-        [Parameter(Mandatory=$false)]
-        [string] $TenantId
+        [Parameter(Mandatory = $false)]
+        [string] $TenantId,
+        [Parameter(Mandatory = $false)]
+        [string] $ManagedIdentityId
     )
 
     Write-Host "Connecting to MDE (this may take a few minutes)"
 
-    if (-not $TenantId) {
-        $TenantId = (Get-AzContext).Tenant.Id
+    if ([string]::IsNullOrEmpty($SpnId)) {
+        Write-Error "SpnId parameter is required"
+        exit 1
     }
 
-    if (-not $SpnSecret) {
-        if ($keyVaultName) {
-            if (-not (Get-Module -ListAvailable -Name Az.Accounts)) {
-                Write-Host "Az.Accounts module not found. Installing for first use..."
-                Install-Module -Name Az.Accounts -Scope CurrentUser -Force -AllowClobber
+    if ([string]::IsNullOrEmpty($TenantId)) {
+        try {
+            $TenantId = (Get-AzContext).Tenant.Id
+            if ([string]::IsNullOrEmpty($TenantId)) {
+                Write-Error "Unable to determine TenantId from context. Please provide TenantId parameter."
+                exit 1
             }
-            if (-not (Get-Module -ListAvailable -Name Az.KeyVault)) {
-                Write-Host "Az.KeyVault module not found. Installing for first use..."
-                Install-Module -Name Az.KeyVault -Scope CurrentUser -Force -AllowClobber
-            }
-            if (-not (Get-Module -Name Az.Accounts)) {
-                Import-Module Az.Accounts -ErrorAction Stop
-            }
-            if (-not (Get-Module -Name Az.KeyVault)) {
-                Import-Module Az.KeyVault -ErrorAction Stop
-            }
-            if (-not (Get-AzContext)) {
-                Write-Host "No Azure session detected. Please sign in."
-                Connect-AzAccount -TenantId $TenantId -ErrorAction Stop
-            }
-            $SpnSecret = (Get-AzKeyVaultSecret -VaultName $keyVaultName -Name 'SPNSECRET').SecretValue
-        } else {
-            Write-Error "SpnSecret must be provided if keyVaultName is not specified."
-            throw "SpnSecret must be provided if keyVaultName is not specified."
+            Write-Host "Using TenantId from current Azure context: $TenantId"
+        }
+        catch {
+            Write-Error "Failed to get Azure context. Please provide TenantId parameter. Error: $_"
+            exit 1
         }
     }
 
-    if (-not $SpnSecret) {
-        Write-Error "Failed to retrieve SPN secret"
-        throw "Failed to retrieve SPN secret"
-    }
-
-    $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($SpnSecret)
-    $plainSecret = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
-
-    try {
-        $token = Get-AccessToken -TenantId $TenantId -SpnId $SpnId -SpnSecret $plainSecret
-        Write-Host "Successfully retrieved access token for MDE."
-    } catch {
-        Write-Host "Failed to retrieve access token for MDE. Error: $_"
-        exit 1
-    }
-    return $token
-}
-
-Function Connect-MDEGraph {
-    param (
-        [Parameter(Mandatory = $false)]
-        [string] $keyVaultName,
-        [Parameter(Mandatory = $true)]
-        [string] $SpnId,
-        [Parameter(Mandatory = $false)]
-        [securestring] $SpnSecret,
-        [Parameter(Mandatory = $false)]
-        [string] $TenantId
-    )
-
-    if (-not $TenantId) {
-        $TenantId = (Get-AzContext).Tenant.Id
-    }
-
-    if (-not (Get-Module -ListAvailable -Name Az.Accounts)) {
-        Write-Host "Az.Accounts module not found. Installing for first use..."
-        Install-Module -Name Az.Accounts -Scope CurrentUser -Force -AllowClobber
-    }
-    if (-not (Get-Module -ListAvailable -Name Az.KeyVault)) {
-        Write-Host "Az.KeyVault module not found. Installing for first use..."
-        Install-Module -Name Az.KeyVault -Scope CurrentUser -Force -AllowClobber
-    }
+    # Ensure required modules are available
     if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) {
         Write-Host "Microsoft.Graph module not found. Installing for first use..."
-        Install-Module -Name Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber
-    }
-    if (-not (Get-Module -Name Az.Accounts)) {
-        Import-Module Az.Accounts -ErrorAction Stop
-    }
-    if (-not (Get-Module -Name Az.KeyVault)) {
-        Import-Module Az.KeyVault -ErrorAction Stop
+        Install-Module -Name Microsoft.Graph.Authentication -Scope CurrentUser -Force -AllowClobber | Out-Null
     }
     if (-not (Get-Module -Name Microsoft.Graph.Authentication)) {
-        Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
+        Import-Module Microsoft.Graph.Authentication -ErrorAction Stop | Out-Null
+    }
+    if (-not (Get-Module -ListAvailable -Name Az.Accounts)) {
+        Write-Host "Az.Accounts module not found. Installing for first use..."
+        Install-Module -Name Az.Accounts -Scope CurrentUser -Force -AllowClobber | Out-Null
+    }
+    if (-not (Get-Module -Name Az.Accounts)) {
+        Import-Module Az.Accounts -ErrorAction Stop | Out-Null
     }
 
-    if (-not $SpnSecret) {
-        if ($keyVaultName) {
-            if (-not (Get-AzContext)) {
-                Write-Host "No Azure session detected. Please sign in."
-                Connect-AzAccount -TenantId $TenantId -ErrorAction Stop
+    $finalToken = $null
+
+    # 1. Manual SPN secret flow (local/dev)
+    if ($null -ne $SpnSecret) {
+        $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($SpnSecret)
+        $plainSecret = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+        try {
+            $resourceAppIdUri = 'https://api.securitycenter.microsoft.com'
+            $oAuthUri = "https://login.microsoftonline.com/$TenantId/oauth2/token"
+            $body = [Ordered]@{
+                resource      = $resourceAppIdUri
+                client_id     = $SpnId
+                client_secret = $plainSecret
+                grant_type    = 'client_credentials'
             }
-            $SpnSecret = (Get-AzKeyVaultSecret -VaultName $keyVaultName -Name 'SPNSECRET').SecretValue
-        } else {
-            Write-Error "SpnSecret must be provided if keyVaultName is not specified."
-            throw "SpnSecret must be provided if keyVaultName is not specified."
+            $response = Invoke-RestMethod -Method Post -Uri $oAuthUri -Body $body -ErrorAction Stop
+            $tokenString = $response.access_token
+            $finalToken = ConvertTo-SecureString -String $tokenString -AsPlainText -Force
+            Write-Host "Successfully obtained token using client secret"
+        } catch {
+            Write-Error "Failed to retrieve access token for MDE using client secret. Error: $_"
+            exit 1
         }
     }
 
-    if (-not $SpnSecret) {
-        Write-Error "Failed to retrieve SPN secret"
-        throw "Failed to retrieve SPN secret"
+    # 2. Federated App Registration + UMI (FIC/Workload Identity)
+    elseif (-not [string]::IsNullOrEmpty($ManagedIdentityId)) {
+        Write-Host "Using Managed Identity authentication with ID: $ManagedIdentityId"
+        try {
+            Update-AzConfig -DisplayBreakingChangeWarning $false | Out-Null
+            Connect-AzAccount -Identity -AccountId $ManagedIdentityId | Out-Null
+            $Audience = "api://AzureADTokenExchange"
+            $aztoken = Get-AzAccessToken -ResourceUrl $Audience
+            Connect-AzAccount -ApplicationId $SpnId -FederatedToken $aztoken.Token -Tenant $TenantId | Out-Null
+            $tokenObj = Get-AzAccessToken -ResourceUrl "https://api.securitycenter.microsoft.com/" -TenantId $TenantId          
+            $tokenString = $tokenObj.Token
+            $graphTokenObj = Get-AzAccessToken -ResourceUrl "https://graph.microsoft.com/" -TenantId $TenantId
+            $graphTokenString = $graphTokenObj.Token
+            $graphTokenSecure = ConvertTo-SecureString -String $graphTokenString -AsPlainText -Force
+            Connect-MgGraph -AccessToken $graphTokenSecure -NoWelcome | Out-Null
+            $finalToken = ConvertTo-SecureString -String $tokenString -AsPlainText -Force
+            
+            Write-Host "Federated App Registration + UMI authentication to MDE & Graph API complete."
+        } catch {
+            Write-Error "Failed federated UMI authentication. Error: $_"
+            exit 1
+        }
     }
-
-    $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($SpnSecret)
-    $plainSecret = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
-
-    try {
-        $SecuredPassword = ConvertTo-SecureString -String $plainSecret -AsPlainText -Force
-        $ClientSecretCredential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $SpnId, $SecuredPassword
-        Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $ClientSecretCredential | Out-Null
-        Write-Host "Successfully connected to Microsoft Graph."
-    } catch {
-        Write-Host "Failed to connect to Microsoft Graph. Error: $_"
+    else {
+        Write-Error "Either SpnSecret or ManagedIdentityId must be provided"
         exit 1
     }
+    return $finalToken
 }
 
 function Invoke-WithRetry {
@@ -387,12 +314,15 @@ function Invoke-WithRetry {
 function Invoke-FullDiskScan {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string[]]$DeviceIds
     )
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $body = @{
         "Comment" = "MDEAutomator"
@@ -460,15 +390,18 @@ function Invoke-FullDiskScan {
 function Invoke-UploadLR {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
 
         [Parameter(Mandatory = $true)]
         [string]$filePath
     )
 
     try {
-        $headers = @{ 
-            Authorization = "Bearer $token" 
+        $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+            [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+        )
+        $headers = @{
+            "Authorization" = "Bearer $plainToken"
         }
         $fileName = [System.IO.Path]::GetFileName($filePath)
         $fileContent = [System.IO.File]::ReadAllBytes($filePath)
@@ -514,14 +447,17 @@ function Invoke-UploadLR {
 function Invoke-PutFile {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string]$fileName,
         [Parameter(Mandatory = $true)]
         [string[]]$DeviceIds
     )
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $responses = @()
     foreach ($DeviceId in $DeviceIds) {
@@ -599,14 +535,17 @@ function Invoke-PutFile {
 function Invoke-GetFile {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string]$filePath,
         [Parameter(Mandatory = $true)]
         [string[]]$DeviceIds
     )
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $responses = @()
     foreach ($DeviceId in $DeviceIds) {
@@ -676,13 +615,16 @@ function Invoke-GetFile {
 function Invoke-CollectInvestigationPackage {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string[]]$DeviceIds
     )
     
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $responses = @()
 
@@ -761,17 +703,21 @@ function Invoke-LRScript {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
         [string[]] $DeviceIds,
 
         [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
         [string] $scriptName,
 
         [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [string] $token
+        [securestring] $token
     )
+
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
+    $headers = @{
+        "Authorization" = "Bearer $plainToken"
+    }
 
     $responses = @()
 
@@ -795,11 +741,11 @@ function Invoke-LRScript {
             } | ConvertTo-Json -Depth 10
 
             $response = Invoke-WithRetry -ScriptBlock {
-                param($DeviceId, $token, $body)
+                param($DeviceId, $headers, $body)
                 try {
                     Invoke-RestMethod -Uri "https://api.securitycenter.microsoft.com/api/machines/$DeviceId/runliveresponse" `
                         -Method Post `
-                        -Headers @{ Authorization = "Bearer $token" } `
+                        -Headers $headers `
                         -Body $body `
                         -ContentType "application/json" `
                         -ErrorAction Stop
@@ -811,7 +757,7 @@ function Invoke-LRScript {
                     }
                     throw
                 }
-            } -ScriptBlockArgs @($DeviceId, $token, $body) -AllowNullResponse $true
+            } -ScriptBlockArgs @($DeviceId, $headers, $body) -AllowNullResponse $true
 
             if ($response.status -eq "Pending") {
                 Write-Host "Running Live Response script on DeviceId: $($response.id)"
@@ -839,6 +785,7 @@ function Invoke-LRScript {
                 DeviceId        = $DeviceId
                 MachineActionId = $null
                 Success         = $false
+                Error           = $_.Exception.Message
             }
         }
     }
@@ -851,12 +798,15 @@ Function Get-MachineActionStatus {
         [Parameter(Mandatory=$true)]
         [string] $machineActionId,
         [Parameter(Mandatory=$true)]
-        [string] $token
+        [securestring] $token
     )
 
     $uri = "https://api.securitycenter.microsoft.com/api/machineactions/$machineActionId"
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
 
     $timeout = New-TimeSpan -Minutes 11
@@ -905,12 +855,15 @@ Function Get-LiveResponseOutput {
         [Parameter(Mandatory=$true)]
         [string] $machineActionId,
         [Parameter(Mandatory=$true)]
-        [string] $token
+        [securestring] $token
     )
 
     $uri = "https://api.securitycenter.microsoft.com/api/machineactions/$machineActionId/GetLiveResponseResultDownloadLink(index=0)"
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
 
     try {
@@ -968,7 +921,7 @@ Function Get-LiveResponseOutput {
 function Get-Machines {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $false)]
         [string]$filter
     )
@@ -979,8 +932,11 @@ function Get-Machines {
         $combinedFilter = $baseFilter
     }
     $uri = "https://api.securitycenter.microsoft.com/api/machines?`$filter=$combinedFilter" 
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $responses = @()
     try {
@@ -1033,12 +989,15 @@ function Get-Machines {
 function Get-LoggedInUsers {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string[]]$DeviceIds
     )
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $allResponses = @()
     foreach ($DeviceId in $DeviceIds) {
@@ -1080,12 +1039,15 @@ function Get-LoggedInUsers {
 function Get-Actions {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token
+        [securestring]$token
     )
     $startDate = (Get-Date).AddDays(-90).ToString("yyyy-MM-ddTHH:mm:ssZ")
     $uri = "https://api.securitycenter.microsoft.com/api/machineactions?`$filter=CreationDateTimeUtc ge $startDate&`$orderby=CreationDateTimeUtc desc"
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $allResults = @()
     try {
@@ -1149,7 +1111,7 @@ function Get-Actions {
 function Undo-Actions {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token
+        [securestring]$token
     )
 
     $allActions = Get-Actions -token $token
@@ -1157,8 +1119,11 @@ function Undo-Actions {
 
     Write-Host "Found $($pendingActions.Count) pending actions to cancel."
 
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $responses = @()
 
@@ -1201,12 +1166,15 @@ function Undo-Actions {
 function Get-FileInfo {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string[]]$Sha1s
     )
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $responses = @()
 
@@ -1255,12 +1223,15 @@ function Get-FileInfo {
 function Get-IPInfo {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string[]]$IPs
     )
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $responses = @()
 
@@ -1304,12 +1275,15 @@ function Get-IPInfo {
 function Get-URLInfo {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string[]]$URLs
     )
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $responses = @()
 
@@ -1356,12 +1330,15 @@ function Get-URLInfo {
 function Invoke-MachineIsolation {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string[]]$DeviceIds
     )
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $body = @{
         "Comment" = "MDEAutomator"
@@ -1429,12 +1406,15 @@ function Invoke-MachineIsolation {
 function Undo-MachineIsolation {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string[]]$DeviceIds
     )
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $body = @{
         "Comment" = "MDEAutomator"
@@ -1501,12 +1481,15 @@ function Undo-MachineIsolation {
 function Invoke-ContainDevice {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string[]]$DeviceIds
     )
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $body = @{
         "Comment" = "MDEAutomator"
@@ -1574,12 +1557,15 @@ function Invoke-ContainDevice {
 function Undo-ContainDevice {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string[]]$DeviceIds
     )
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $body = @{
         "Comment" = "MDEAutomator"
@@ -1634,10 +1620,6 @@ function Undo-ContainDevice {
             }
         } catch {
             Write-Error "Failed to uncontain DeviceId: $DeviceId $_"
-            $responses += [PSCustomObject]@{
-                DeviceId = $DeviceId
-                Error = $_.Exception.Message
-            }
         }
     }
     return $responses 
@@ -1646,12 +1628,15 @@ function Undo-ContainDevice {
 function Invoke-RestrictAppExecution {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string[]]$DeviceIds
     )
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $body = @{
         "Comment" = "MDEAutomator"
@@ -1718,12 +1703,15 @@ function Invoke-RestrictAppExecution {
 function Undo-RestrictAppExecution {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string[]]$DeviceIds
     )
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $body = @{
         "Comment" = "MDEAutomator"
@@ -1790,12 +1778,15 @@ function Undo-RestrictAppExecution {
 function Invoke-StopAndQuarantineFile {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string]$Sha1
     )
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $responses = @()
 
@@ -1835,11 +1826,14 @@ function Invoke-StopAndQuarantineFile {
 function Get-Indicators {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token
+        [securestring]$token
     )
     $uri = "https://api.securitycenter.microsoft.com/api/indicators"
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $allResults = @()
     try {
@@ -1898,15 +1892,18 @@ function Get-Indicators {
 function Invoke-TiFile {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $false)]
         [string[]]$Sha1s,
         [Parameter(Mandatory = $false)]
         [string[]]$Sha256s
     )
     $uri = "https://api.securitycenter.microsoft.com/api/indicators"
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $responses = @()
 
@@ -1975,14 +1972,17 @@ function Invoke-TiFile {
 function Undo-TiFile {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $false)]
         [string[]]$Sha1s,
         [Parameter(Mandatory = $false)]
         [string[]]$Sha256s
     )
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $responses = @()
 
@@ -2062,13 +2062,16 @@ function Undo-TiFile {
 function Invoke-TiIP {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string[]]$IPs
     )
     $uri = "https://api.securitycenter.microsoft.com/api/indicators"
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $responses = @()
     $rfc1918
@@ -2128,12 +2131,15 @@ function Invoke-TiIP {
 function Undo-TiURL {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string[]]$URLs
     )
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $responses = @()
 
@@ -2175,13 +2181,16 @@ function Undo-TiURL {
 function Invoke-TiURL {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string[]]$URLs
     )
     $uri = "https://api.securitycenter.microsoft.com/api/indicators"
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $responses = @()
 
@@ -2218,12 +2227,15 @@ function Invoke-TiURL {
 function Undo-TiIP {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string[]]$IPs
     )
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $responses = @()
 
@@ -2264,13 +2276,16 @@ function Undo-TiIP {
 function Invoke-TiCert {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $false)]
         [string[]]$Sha1s
     )
     $uri = "https://api.securitycenter.microsoft.com/api/indicators"
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $responses = @()
 
@@ -2309,12 +2324,15 @@ function Invoke-TiCert {
 function Undo-TiCert {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $false)]
         [string[]]$Sha1s
     )
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $responses = @()
 
@@ -2524,7 +2542,7 @@ function Undo-DetectionRule {
     }
 }
 
-Export-ModuleMember -Function Connect-MDE, Connect-MDEGraph, Get-AccessToken, Get-RequestParam, Get-SecretFromKeyVault, Invoke-WithRetry,
+Export-ModuleMember -Function Connect-MDE, Get-RequestParam, Invoke-WithRetry,
     Get-Machines, Get-Actions, Undo-Actions, Get-IPInfo, Get-FileInfo, Get-URLInfo, Get-LoggedInUsers, Get-MachineActionStatus, Invoke-AdvancedHunting,
     Invoke-UploadLR, Invoke-PutFile, Invoke-GetFile, Invoke-LRScript, Get-LiveResponseOutput,
     Invoke-MachineIsolation, Undo-MachineIsolation, Invoke-ContainDevice, Undo-ContainDevice, Get-DetectionRules, Install-DetectionRule, Update-DetectionRule, Undo-DetectionRule,

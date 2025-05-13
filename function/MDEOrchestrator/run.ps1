@@ -1,5 +1,5 @@
 # MDEOrchestrator Function App
-# 0.0.1
+# 1.5.5
 
 using namespace System.Net
 
@@ -17,9 +17,15 @@ try {
     $fileName   = Get-RequestParam -Name "fileName"   -Request $Request
 
     # Retrieve environment variables for authentication
-    $spnId        = [System.Environment]::GetEnvironmentVariable('SPNID', 'Process')
-    $keyVaultName = [System.Environment]::GetEnvironmentVariable('AZURE_KEYVAULT', 'Process')
-    $token        = Connect-MDE -TenantId $TenantId -SpnId $spnId -keyVaultName $keyVaultName
+    $spnId             = [System.Environment]::GetEnvironmentVariable('SPNID', 'Process')
+    $ManagedIdentityId = [System.Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID', 'Process')
+    $token             = Connect-MDE -TenantId $TenantId -SpnId $spnId -ManagedIdentityId $ManagedIdentityId
+
+    # Reconnect to Azure after MDE connection
+    Disable-AzContextAutosave -Scope Process | Out-Null
+    Connect-AzAccount -Identity -AccountId $ManagedIdentityId | Out-Null
+    $subscriptionId = [System.Environment]::GetEnvironmentVariable('SUBSCRIPTION_ID', 'Process')
+    Set-AzContext -Subscription $subscriptionId -ErrorAction Stop
 
     # Device discovery: get all or filtered devices if requested
     if ($allDevices -eq $true) {

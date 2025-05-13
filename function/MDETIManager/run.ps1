@@ -1,5 +1,5 @@
 # MDETIManager Function App
-# 0.0.1
+# 1.5.5
 
 using namespace System.Net
 
@@ -25,8 +25,8 @@ try {
     }
 
     $spnId = [System.Environment]::GetEnvironmentVariable('SPNID', 'Process')
-    $keyVaultName = [System.Environment]::GetEnvironmentVariable('AZURE_KEYVAULT', 'Process')
-    $token = Connect-MDE -TenantId $TenantId -SpnId $spnId -keyVaultName $keyVaultName
+    $ManagedIdentityId = [System.Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID', 'Process')
+    $token = Connect-MDE -TenantId $TenantId -SpnId $spnId -ManagedIdentityId $ManagedIdentityId
 
     $Result = [HttpStatusCode]::OK
     $Body = switch ($Function) {

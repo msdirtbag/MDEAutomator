@@ -1,6 +1,6 @@
 @{
     # Module Identity
-    ModuleVersion     = '1.5.2'
+    ModuleVersion     = '1.5.5'
     GUID              = '010c4ef2-f71c-4bce-84cc-de9752cf1577'
     RootModule        = 'MDEAutomator.psm1'
 
@@ -14,11 +14,8 @@
     FunctionsToExport = @(
         # Authentication & Utility
         'Connect-MDE'
-        'Connect-MDEGraph'
-        'Get-AccessToken'
         'Get-RequestParam'
         'Invoke-WithRetry'
-        'Get-SecretFromKeyVault'
 
         # Core Operations
         'Get-Machines'

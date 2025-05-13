@@ -1,5 +1,5 @@
 # MDEProfiles Function App
-# 0.0.1
+# 1.5.5
 
 using namespace System.Net
 
@@ -33,11 +33,17 @@ try {
 
     # Retrieve environment variables for authentication
     $spnId        = [System.Environment]::GetEnvironmentVariable('SPNID', 'Process')
-    $keyVaultName = [System.Environment]::GetEnvironmentVariable('AZURE_KEYVAULT', 'Process')
+    $ManagedIdentityId = [System.Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID', 'Process')
 
-    # Connect to MDE and get an access token
-    $token = Connect-MDE -TenantId $TenantId -SpnId $spnId -keyVaultName $keyVaultName
+    # Connect to MDE
+    $token = Connect-MDE -TenantId $TenantId -SpnId $spnId -ManagedIdentityId $ManagedIdentityId
 
+    # Reconnect to Azure after MDE connection
+    Disable-AzContextAutosave -Scope Process | Out-Null
+    Connect-AzAccount -Identity -AccountId $ManagedIdentityId | Out-Null
+    $subscriptionId = [System.Environment]::GetEnvironmentVariable('SUBSCRIPTION_ID', 'Process')
+    Set-AzContext -Subscription $subscriptionId -ErrorAction Stop
+    
     # Device discovery: get all Windows devices if requested
     if ($allDevices -eq $true) {
         Write-Host "Getting all devices"

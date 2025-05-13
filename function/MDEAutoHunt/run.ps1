@@ -1,5 +1,5 @@
 # MDEAutoHunt Function App
-# 0.0.1
+# 1.5.5
 
 using namespace System.Net
 
@@ -33,11 +33,17 @@ try {
 
     # Get environment variables
     $spnId = [System.Environment]::GetEnvironmentVariable('SPNID', 'Process')
-    $keyVaultName = [System.Environment]::GetEnvironmentVariable('AZURE_KEYVAULT', 'Process')
+    $ManagedIdentityId = [System.Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID', 'Process')
     $storageAccountName = [System.Environment]::GetEnvironmentVariable('STORAGE_ACCOUNT', 'Process')
 
     # Connect to Graph
-    Connect-MDEGraph -TenantId $TenantId -SpnId $spnId -keyVaultName $keyVaultName
+    Connect-MDE -TenantId $TenantId -SpnId $spnId -ManagedIdentityId $ManagedIdentityId
+
+    # Reconnect to Azure after MDE connection
+    Disable-AzContextAutosave -Scope Process | Out-Null
+    Connect-AzAccount -Identity -AccountId $ManagedIdentityId | Out-Null
+    $subscriptionId = [System.Environment]::GetEnvironmentVariable('SUBSCRIPTION_ID', 'Process')
+    Set-AzContext -Subscription $subscriptionId -ErrorAction Stop
 
     $throttleLimit = 10 # Adjust as needed for parallel processing
     $containerName = "output"
