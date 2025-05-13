@@ -33,12 +33,12 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
     Automates bulk delivery of custom PowerShell scripts to configure policy on MDE endpoints:
     - `Active`- This configures specific Set-MpPreference settings, registry settings, Attack Surface Reduction rules, Exploit Protection, and Windows Defender Application Control settings on endpoints. 
     - `Passive`- This configures specific Set-MpPreference settings and Attack Surface Reduction rules on endpoints.
-- **MDETIManager**  
-  Automates management of Threat Indicators (IOCs) in Microsoft Defender for Endpoint:
-  - `InvokeTiFile` / `UndoTiFile`: Creates/removes file hash-based indicators (SHA1/SHA256)
-  - `InvokeTiIP` / `UndoTiIP`: Creates/removes IP address-based indicators
-  - `InvokeTiURL` / `UndoTiURL`: Creates/removes URL and domain-based indicators
-  - `InvokeTiCert` / `UndoTiCert`: Creates/removes certificate-based indicators (by thumbprint)
+  - **MDETIManager**  
+    Automates management of Threat Indicators (IOCs) in Microsoft Defender for Endpoint:
+    - `InvokeTiFile` / `UndoTiFile`: Creates/removes file hash-based indicators (SHA1/SHA256)
+    - `InvokeTiIP` / `UndoTiIP`: Creates/removes IP address-based indicators
+    - `InvokeTiURL` / `UndoTiURL`: Creates/removes URL and domain-based indicators
+    - `InvokeTiCert` / `UndoTiCert`: Creates/removes certificate-based indicators (by thumbprint)
   - **MDEAutoHunt**  
     Automates bulk threat hunting and exports output to Azure Storage:
     - Relays groups of KQL queries to the MDE API, exports responses as JSON, and saves to Azure Storage.
