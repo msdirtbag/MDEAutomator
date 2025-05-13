@@ -93,7 +93,7 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
 
 1. Download the activation script locally. 
 
-   [Activation Script](https://learn.microsoft.com/en-us/azure/trusted-signing/quickstart)
+   [Activation Script](https://github.com/msdirtbag/MDEAutomator/blob/main/payloads/addfedcred.ps1)
 
 
 2. Run the script with Global Administrator or Cloud App Administator permissions active.
@@ -104,12 +104,11 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
    `-uminame` - The name of the User Managed Identity that was created by the Deployment.
 
 
-   Example usage:
-   ```powershell
-   
-   ./addfedcred.ps1 -spnname "SPN-MDEAutomator" -uminame "umi-mdeautomator-n4pepfiqaxymu"
+  Example usage:
 
-   ---
+  ```powershell
+  ./addfedcred.ps1 -spnname "SPN-MDEAutomator" -uminame "umi-mdeautomator-n4pepfiqaxymu"
+  ```
 
    Provisioned WindowsDefenderATP API Permissions:
 
@@ -134,9 +133,9 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
    - ThreatHunting.Read.All
    - ThreatIndicators.ReadWrite.OwnedBy
 
-   When the scripts complete, it will output the $SpnId that must be saved as a Azure Function App Setting. 
+   When the scripts complete, it will output the SpnId that must be saved as a Azure Function App Setting. 
 
-3. Save the $SpnId as a Azure Function App Setting.
+3. Save the SpnId as a Azure Function App Setting.
 
    ![Generate](./media/appsetting.png)
 
