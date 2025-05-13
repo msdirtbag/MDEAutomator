@@ -352,7 +352,7 @@ $actions | Format-Table Id, Type, Status, ComputerDnsName
 
 The `$token` parameter is the OAuth2 access token you receive from the `Connect-MDE` function. You must call `Connect-MDE` first and use its output as the `-token` value for `Undo-Actions` and all other API functions. These tokens typically expire every 60 minutes.
 
-- `-token` (string, required): OAuth2 access token.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 
 **Example:**
 ```powershell
@@ -371,7 +371,7 @@ The `$token` parameter is the OAuth2 access token you receive from the `Connect-
 
 The `-DeviceIds` parameter is an array of device IDs that uniquely identify the target devices in Microsoft Defender for Endpoint. You can obtain these IDs by running the `Get-Machines` function and referencing the `Id` property in the results. Pass one or more device IDs as a string array (e.g., `@("deviceId1", "deviceId2")`) to target multiple devices in a single operation.
 
-- `-token` (string, required): OAuth2 access token.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 - `-DeviceIds` (string[], required): Array of device IDs to isolate or unisolate.
 
 **Example:**
@@ -392,7 +392,7 @@ The `$token` parameter is the OAuth2 access token you receive from the `Connect-
 
 The `-DeviceIds` parameter is an array of device IDs that uniquely identify the target devices in Microsoft Defender for Endpoint. Indentify the DeviceId of Unmanaged device you wish to Contain.
 
-- `-token` (string, required): OAuth2 access token.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 - `-DeviceIds` (string[], required): Array of device IDs to contain or uncontain.
 
 **Example:**
@@ -413,7 +413,7 @@ The `$token` parameter is the OAuth2 access token you receive from the `Connect-
 
 The `-DeviceIds` parameter is an array of device IDs that uniquely identify the target devices in Microsoft Defender for Endpoint. You can obtain these IDs by running the `Get-Machines` function and referencing the `Id` property in the results. Pass one or more device IDs as a string array (e.g., `@("deviceId1", "deviceId2")`) to target multiple devices in a single operation.
 
-- `-token` (string, required): OAuth2 access token.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 - `-DeviceIds` (string[], required): Array of device IDs to restrict or unrestrict.
 
 **Example:**
@@ -433,7 +433,7 @@ The `$token` parameter is the OAuth2 access token you receive from the `Connect-
 
 The `-DeviceIds` parameter is an array of device IDs that uniquely identify the target devices in Microsoft Defender for Endpoint. You can obtain these IDs by running the `Get-Machines` function and referencing the `Id` property in the results. Pass one or more device IDs as a string array (e.g., `@("deviceId1", "deviceId2")`) to target multiple devices in a single operation.
 
-- `-token` (string, required): OAuth2 access token.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 - `-DeviceIds` (string[], required): Array of device IDs to collect packages from.
 
 **Example:**
@@ -453,7 +453,7 @@ The `$token` parameter is the OAuth2 access token you receive from the `Connect-
 
 The `-Sha1s` and `-Sha256s` parameters are arrays of file hashes that you want to add or remove as custom threat indicators in Microsoft Defender for Endpoint. Each entry should be a valid SHA-1 or SHA-256 hash string. You can specify values for either or both parameters at the same time, and the function will process all provided hashes in a single operation. This allows you to efficiently manage multiple file-based indicators in one call.
 
-- `-token` (string, required): OAuth2 access token.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 - `-Sha1s` (string[], optional): Array of SHA1 hashes.
 - `-Sha256s` (string[], optional): Array of SHA256 hashes.
 
@@ -475,7 +475,7 @@ The `$token` parameter is the OAuth2 access token you receive from the `Connect-
 
 The `-Sha1s` parameter is an array of certificate thumbprints that you want to add or remove as custom threat indicators in Microsoft Defender for Endpoint. Each entry must be a valid SHA-1 certificate thumbprint string. Note that MDE only accepts SHA-1 values for certificate thumbprints—other hash types are not supported. 
 
-- `-token` (string, required): OAuth2 access token.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 - `-Sha1s` (string[], required): Array of certificate thumbprints.
 
 **Example:**
@@ -496,7 +496,7 @@ The `$token` parameter is the OAuth2 access token you receive from the `Connect-
 
 The `-IPs` parameter is an array of IP addresses that you want to add or remove as custom threat indicators in Microsoft Defender for Endpoint. Each entry should be a valid public IPv4 or IPv6 address (e.g., `"8.8.8.8"` or `"2001:4860:4860::8888"`). Private or reserved IP ranges are not supported. You can specify one or more IP addresses as a string array (e.g., `@("8.8.8.8", "1.1.1.1")`) to target multiple indicators in a single operation.
 
-- `-token` (string, required): OAuth2 access token.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 - `-IPs` (string[], required): Array of IP addresses.
 
 **Example:**
@@ -517,7 +517,7 @@ The `$token` parameter is the OAuth2 access token you receive from the `Connect-
 
 The `-URLs` parameter is an array of URLs or domain names that you want to add or remove as custom threat indicators in Microsoft Defender for Endpoint. Each entry should be a valid URL or domain string (e.g., `"malicious.example.com"`). You can specify one or more URLs or domains as a string array (e.g., `@("malicious.example.com", "phishing.example.net")`) to target multiple indicators in a single operation.
 
-- `-token` (string, required): OAuth2 access token.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 - `-URLs` (string[], required): Array of URLs or domains.
 
 **Example:**
@@ -537,7 +537,7 @@ The `$token` parameter is the OAuth2 access token you receive from the `Connect-
 
 The `-filePath` parameter specifies the full path to the script or file you want to upload or retrieve. For upload operations, provide the local path to the file on your system (e.g., `"C:\Scripts\MyScript.ps1"`). 
 
-- `-token` (string, required): OAuth2 access token.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 - `-filePath` (string, required): Path to the script file to upload.
 
 **Example:**
@@ -558,7 +558,7 @@ The `-fileName` parameter specifies the name of the file in the Live Response li
 
 The `-DeviceIds` parameter is an array of device IDs that uniquely identify the target devices in Microsoft Defender for Endpoint. You can obtain these IDs by running the `Get-Machines` function and referencing the `Id` property in the results. Pass one or more device IDs as a string array (e.g., `@("deviceId1", "deviceId2")`) to target multiple devices in a single operation.
 
-- `-token` (string, required): OAuth2 access token.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 - `-fileName` (string, required): Name of the file in the library.
 - `-DeviceIds` (string[], required): Array of device IDs to receive the file.
 
@@ -580,7 +580,7 @@ The `-filePath` parameter specifies the full path to the script or file you want
 
 The `-DeviceIds` parameter is an array of device IDs that uniquely identify the target devices in Microsoft Defender for Endpoint. You can obtain these IDs by running the `Get-Machines` function and referencing the `Id` property in the results. Pass one or more device IDs as a string array (e.g., `@("deviceId1", "deviceId2")`) to target multiple devices in a single operation.
 
-- `-token` (string, required): OAuth2 access token.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 - `-filePath` (string, required): Path to the file on the device.
 - `-DeviceIds` (string[], required): Array of device IDs to retrieve the file from.
 
@@ -604,7 +604,7 @@ The `-DeviceIds` parameter is an array of device IDs that uniquely identify the 
 
 - `-DeviceIds` (string[], required): Array of device IDs to run the script on.
 - `-scriptName` (string, required): Name of the script in the library.
-- `-token` (string, required): OAuth2 access token.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 
 **Example:**
 ```powershell
@@ -624,7 +624,7 @@ The `-machineActionId` parameter is the unique identifier for a specific machine
 
 
 - `-machineActionId` (string, required): The machineActionId to check.
-- `-token` (string, required): OAuth2 access token.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 
 **Example:**
 ```powershell
@@ -643,7 +643,7 @@ The `$token` parameter is the OAuth2 access token you receive from the `Connect-
 The `-machineActionId` parameter is the unique identifier for a specific machine action in Microsoft Defender for Endpoint. You can obtain this value from the output of functions such as `Get-Actions` or after initiating an action (e.g., isolation, investigation package collection) and waiting for the response. Use this ID to query the status or retrieve the output of that particular action.
 
 - `-machineActionId` (string, required): The machineActionId for the Live Response script.
-- `-token` (string, required): OAuth2 access token.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 
 **Example:**
 ```powershell
@@ -657,7 +657,7 @@ Get-LiveResponseOutput -machineActionId "<machineActionId>" -token $token
 
 **Parameters:**
 
-- `-token` (string, required): OAuth2 access token. Obtain this from `Connect-MDE`.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 - `-Sha1` (string, required): The SHA1 hash of the file to stop and quarantine.
 
 **Example:**
@@ -672,7 +672,7 @@ Invoke-StopAndQuarantineFile -token $token -Sha1 "<sha1hash>"
 
 **Parameters:**
 
-- `-token` (string, required): OAuth2 access token. Obtain this from `Connect-MDE`.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 
 **Example:**
 ```powershell
@@ -686,7 +686,7 @@ $indicators | Format-Table Id, IndicatorValue, IndicatorType, Action
 
 **Parameters:**
 
-- `-token` (string, required): OAuth2 access token. Obtain this from `Connect-MDE`.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 - `-Sha1s` (string[], required): Array of SHA1 hashes to query.
 
 **Example:**
@@ -701,7 +701,7 @@ $fileInfo | ConvertTo-Json -Depth 5
 
 **Parameters:**
 
-- `-token` (string, required): OAuth2 access token. Obtain this from `Connect-MDE`.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 - `-IPs` (string[], required): Array of IP addresses to query.
 
 **Example:**
@@ -717,7 +717,7 @@ $ipInfo | ConvertTo-Json -Depth 5
 
 **Parameters:**
 
-- `-token` (string, required): OAuth2 access token. Obtain this from `Connect-MDE`.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 - `-URLs` (string[], required): Array of URLs or domains to query.
 
 **Example:**
@@ -733,7 +733,7 @@ $urlInfo | ConvertTo-Json -Depth 5
 
 **Parameters:**
 
-- `-token` (string, required): OAuth2 access token. Obtain this from `Connect-MDE`.
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 - `-DeviceIds` (string[], required): Array of device IDs to query. Use `Get-Machines` to obtain IDs.
 
 **Example:**
