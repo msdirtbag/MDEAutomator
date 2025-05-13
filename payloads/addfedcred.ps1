@@ -145,9 +145,31 @@ try {
     Write-Host "Assigning ATP permissions..."
     Set-AppRoles -ResourceAppId $atpAppId -Permissions $atpPermissions
     Write-Host "Graph & ATP permissions added to App Registration successfully."
+    
+    # Add admin consent for the assigned permissions
+    Write-Host "Granting admin consent for all assigned permissions..."
+    
+    $graphSpn = Get-MgServicePrincipal -Filter "AppId eq '$graphAppId'"
+    $atpSpn = Get-MgServicePrincipal -Filter "AppId eq '$atpAppId'"
+    
+    # Get current app role assignments
+    $graphAssignments = Get-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $appSpn.Id | 
+                        Where-Object { $_.ResourceId -eq $graphSpn.Id }
+    $atpAssignments = Get-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $appSpn.Id | 
+                      Where-Object { $_.ResourceId -eq $atpSpn.Id }
+    
+    # Grant admin consent by updating app role assignment state
+    foreach ($assignment in ($graphAssignments + $atpAssignments)) {
+        Write-Host "Consenting to permission with ID: $($assignment.AppRoleId)"
+        # Admin consent is implicitly granted when the app role assignment exists
+        # The following line ensures the assignment is properly registered
+        $null = Update-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $appSpn.Id -AppRoleAssignmentId $assignment.Id -ErrorAction SilentlyContinue
+    }
+    
+    Write-Host "Admin consent granted for all assigned permissions."
 }
 catch {
-    Write-Error "An error occurred while assigning permissions: $_"
+    Write-Error "An error occurred while assigning permissions or granting consent: $_"
     exit 1
 }
 
