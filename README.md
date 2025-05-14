@@ -130,7 +130,7 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
 
    ![Generate](./media/fedcred2.png) 
 
-3. Save the App Registration Client ID as SpnId as a Azure Function App Setting.
+3. Save the App Registration Client ID in the `SPNID` Azure Function App Setting.
 
    ![Generate](./media/appsetting.png)
 
