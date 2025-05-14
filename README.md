@@ -93,9 +93,11 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
 
 1. Provision the App Registration. (Service Principal)
 
-   ![Deploy](./media/createspn.png)
+   ![Create](./media/createspn.png)
 
-   > **Note:** Select Multitenant if you plan to leverage this SPN to service multiple tenants.
+   > **Note:** Select Multitenant if you plan to leverage this App Registration to service multiple tenants.
+
+2. Configure & Consent to the required API permissions
 
    Required WindowsDefenderATP API Permissions:
 
@@ -120,21 +122,23 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
    - ThreatHunting.Read.All
    - ThreatIndicators.ReadWrite.OwnedBy
 
-2. Link the User Managed Identity to the App Registration.
+  ![Perms](./media/spnperms.png)
+
+3. Link the User Managed Identity to the App Registration.
 
    Add MDEAutomator's user-managed identity as a Federated Credential of the App Registration.
 
-   ![Generate](./media/fedcred.png) 
+   ![Add](./media/fedcred.png) 
 
 
 
-   ![Generate](./media/fedcred2.png) 
+   ![Link](./media/fedcred2.png) 
 
-3. Save the App Registration Client ID in the `SPNID` Azure Function App Setting.
+4. Save the App Registration Client ID in the `SPNID` Azure Function App Setting.
 
-   ![Generate](./media/appsetting.png)
+   ![AppSetting](./media/appsetting.png)
 
-4. Enable Unsigned Script Execution & Live Response for Servers and Workstations in MDE Advanced Settings. (See Security Notes section of this README)  
+5. Enable Unsigned Script Execution & Live Response for Servers and Workstations in MDE Advanced Settings. (See Security Notes section of this README)  
 
    ![Unsigned](./media/unsigned.png)
 
