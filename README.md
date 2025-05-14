@@ -91,7 +91,7 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
 
 ## Activation
 
-1. Provision the App Registration. (Service Principal)
+1. Provision the App Registration (Service Principal) in Entra ID.
 
    ![Create](./media/createspn.png)
 
@@ -122,7 +122,7 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
    - ThreatHunting.Read.All
    - ThreatIndicators.ReadWrite.OwnedBy
 
-  ![Perms](./media/spnperms.png)
+    ![Perms](./media/spnperms.png)
 
 3. Link the User Managed Identity to the App Registration.
 
