@@ -91,26 +91,13 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
 
 ## Activation
 
-1. Download the activation script locally. 
+1. Provision the App Registration. (Service Principal)
 
-   [Activation Script](https://github.com/msdirtbag/MDEAutomator/blob/main/payloads/addfedcred.ps1)
+   ![Deploy](./media/createspn.png)
 
+   > **Note:** Select Multitenant if you plan to leverage this SPN to service multiple tenants.
 
-2. Run the script with Global Administrator or Cloud App Administator permissions active.
-
-   Parameters:
-
-   `-spnname` - The name of the App Registration that will be created for MDEAutomator
-   `-uminame` - The name of the User Managed Identity that was created by the Deployment.
-
-
-  Example usage:
-
-  ```powershell
-  ./addfedcred.ps1 -spnname "SPN-MDEAutomator" -uminame "umi-mdeautomator-n4pepfiqaxymu"
-  ```
-
-   Provisioned WindowsDefenderATP API Permissions:
+   Required WindowsDefenderATP API Permissions:
 
    - AdvancedQuery.Read.All
    - Alert.Read.All
@@ -127,15 +114,23 @@ MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
    - Ti.ReadWrite.All
    - User.Read.All
 
-   Provisioned Graph API Permissions:
+   Required Graph API Permissions:
 
    - CustomDetection.ReadWrite.All
    - ThreatHunting.Read.All
    - ThreatIndicators.ReadWrite.OwnedBy
 
-   When the scripts complete, it will output the SpnId that must be saved as a Azure Function App Setting. 
+2. Link the User Managed Identity to the App Registration.
 
-3. Save the SpnId as a Azure Function App Setting.
+   Add MDEAutomator's user-managed identity as a Federated Credential of the App Registration.
+
+   ![Generate](./media/fedcred.png) 
+
+
+
+   ![Generate](./media/fedcred2.png) 
+
+3. Save the App Registration Client ID as SpnId as a Azure Function App Setting.
 
    ![Generate](./media/appsetting.png)
 
