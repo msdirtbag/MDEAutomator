@@ -280,7 +280,7 @@ Made possible by the BlueVoyant Digital Forensics & Incident Response team. For 
 ## 1. Connect-MDE
 
 **Description:**  
-Authenticates to Microsoft Defender for Endpoint (MDE) using a Service Principal, optionally retrieving secrets from Azure Key Vault.
+Authenticates to Microsoft Defender for Endpoint (MDE) using a Service Principal/UMI Federation or $SpnSecret.
 
 The `-SpnId` parameter is the Application (client) ID of your Azure Service Principal. This value uniquely identifies the app registration in Entra ID (Azure AD) that will be used for authentication. You can find this value in the Azure portal under your App Registration's overview page.
 
