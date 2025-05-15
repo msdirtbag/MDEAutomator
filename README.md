@@ -193,6 +193,7 @@ To obtain the URL:
 1. In the Azure Portal, navigate to your Function App.
 2. Select "Functions" > your function > "Get Function URL".
 ![geturl1](./media/geturl.png)
+
 3. Copy the URL & Key.
 ![geturl2](./media/funcurl.png)
 
