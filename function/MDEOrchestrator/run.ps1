@@ -15,6 +15,8 @@ try {
     $scriptName = Get-RequestParam -Name "scriptName" -Request $Request
     $filePath   = Get-RequestParam -Name "filePath"   -Request $Request
     $fileName   = Get-RequestParam -Name "fileName"   -Request $Request
+    $fileContent   = Get-RequestParam -Name "fileContent"   -Request $Request
+    $TargetFileName = Get-RequestParam -Name "TargetFileName"   -Request $Request
 
     # Retrieve environment variables for authentication
     $spnId             = [System.Environment]::GetEnvironmentVariable('SPNID', 'Process')
@@ -110,6 +112,19 @@ try {
                     $results = Invoke-PutFile -token $using:token -DeviceIds @($DeviceId) -fileName $using:fileName
                     foreach ($res in $results) {
                         $output += $res
+                    }
+                    return $output
+                }
+                "Invoke-UploadLR" {
+                    $output = @() 
+                    if ($using:fileContent -and $using:TargetFileName) {
+                        $bytesToUpload = if ($using:fileContent -is [byte[]]) { $using:fileContent } else { [System.Text.Encoding]::UTF8.GetBytes($using:fileContent) }
+                        $results = Invoke-UploadLR -token $using:token -fileContent $bytesToUpload -TargetFileName $using:TargetFileName
+                    } else {
+                        throw "For Invoke-UploadLR, both 'fileContent' and 'TargetFileName' parameters are required for this orchestrator path."
+                    }
+                    $output += [PSCustomObject]@{
+                        Status = "Upload attempt finished. Check logs for details."
                     }
                     return $output
                 }

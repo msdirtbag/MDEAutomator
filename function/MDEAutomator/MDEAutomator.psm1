@@ -388,14 +388,23 @@ function Invoke-FullDiskScan {
 }
 
 function Invoke-UploadLR {
+    [CmdletBinding(DefaultParameterSetName = "ByPath")]
     param (
         [Parameter(Mandatory = $true)]
         [securestring]$token,
 
-        [Parameter(Mandatory = $true)]
-        [string]$filePath
+        [Parameter(Mandatory = $true, ParameterSetName = "ByPath", Position = 0)]
+        [string]$filePath,
+
+        [Parameter(Mandatory = $true, ParameterSetName = "ByContent", Position = 0)]
+        [byte[]]$fileContent,
+
+        [Parameter(Mandatory = $false, ParameterSetName = "ByPath", Position = 1)]
+        [Parameter(Mandatory = $true, ParameterSetName = "ByContent", Position = 1)]
+        [string]$TargetFileName
     )
 
+    $memoryStream = $null
     try {
         $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
             [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
@@ -403,46 +412,86 @@ function Invoke-UploadLR {
         $headers = @{
             "Authorization" = "Bearer $plainToken"
         }
-        $fileName = [System.IO.Path]::GetFileName($filePath)
-        $fileContent = [System.IO.File]::ReadAllBytes($filePath)
+
+        [string]$resolvedFileName
+        [byte[]]$resolvedFileBytes
+
+        if ($PSCmdlet.ParameterSetName -eq "ByPath") {
+            $resolvedFileName = if (-not [string]::IsNullOrEmpty($TargetFileName)) { $TargetFileName } else { [System.IO.Path]::GetFileName($filePath) }
+            if (-not (Test-Path -Path $filePath -PathType Leaf)) {
+                throw "File not found at path: $filePath"
+            }
+            $resolvedFileBytes = [System.IO.File]::ReadAllBytes($filePath)
+        }
+        elseif ($PSCmdlet.ParameterSetName -eq "ByContent") {
+            $resolvedFileName = $TargetFileName 
+            $resolvedFileBytes = $fileContent 
+        }
+
         $boundary = [System.Guid]::NewGuid().ToString() 
-        $LF = "`r`n"
+        $LF = "`r`n" # Carriage return and line feed
+
         $memoryStream = New-Object System.IO.MemoryStream
-        $fileHeader = [System.Text.Encoding]::UTF8.GetBytes("--$boundary$LF" +
-            "Content-Disposition: form-data; name=`"file`"; filename=`"$fileName`"$LF" +
-            "Content-Type: application/octet-stream$LF$LF")
-        $memoryStream.Write($fileHeader, 0, $fileHeader.Length)
-        $memoryStream.Write($fileContent, 0, $fileContent.Length)
-        $memoryStream.Write([System.Text.Encoding]::UTF8.GetBytes($LF), 0, 2)
-        $parametersDescription = [System.Text.Encoding]::UTF8.GetBytes("--$boundary$LF" +
-            "Content-Disposition: form-data; name=`"ParametersDescription`"$LF$LF" +
-            "test$LF")
-        $memoryStream.Write($parametersDescription, 0, $parametersDescription.Length)
-        $hasParameters = [System.Text.Encoding]::UTF8.GetBytes("--$boundary$LF" +
-            "Content-Disposition: form-data; name=`"HasParameters`"$LF$LF" +
-            "false$LF")
-        $memoryStream.Write($hasParameters, 0, $hasParameters.Length)
-        $overrideIfExists = [System.Text.Encoding]::UTF8.GetBytes("--$boundary$LF" +
-            "Content-Disposition: form-data; name=`"OverrideIfExists`"$LF$LF" +
-            "true$LF")
-        $memoryStream.Write($overrideIfExists, 0, $overrideIfExists.Length)
-        $description = [System.Text.Encoding]::UTF8.GetBytes("--$boundary$LF" +
-            "Content-Disposition: form-data; name=`"Description`"$LF$LF" +
-            "test description$LF")
-        $memoryStream.Write($description, 0, $description.Length)
-        $finalBoundary = [System.Text.Encoding]::UTF8.GetBytes("--$boundary--$LF")
-        $memoryStream.Write($finalBoundary, 0, $finalBoundary.Length)
+        
+        # File part
+        $fileHeaderString = "--$boundary$LF" +
+                            "Content-Disposition: form-data; name=`"file`"; filename=`"$resolvedFileName`"$LF" +
+                            "Content-Type: application/octet-stream$LF$LF"
+        $fileHeaderBytes = [System.Text.Encoding]::UTF8.GetBytes($fileHeaderString)
+        $memoryStream.Write($fileHeaderBytes, 0, $fileHeaderBytes.Length)
+        $memoryStream.Write($resolvedFileBytes, 0, $resolvedFileBytes.Length)
+        $memoryStream.Write([System.Text.Encoding]::UTF8.GetBytes($LF), 0, [System.Text.Encoding]::UTF8.GetBytes($LF).Length)
+
+        # ParametersDescription part
+        $parametersDescriptionString = "--$boundary$LF" +
+                                       "Content-Disposition: form-data; name=`"ParametersDescription`"$LF$LF" +
+                                       "test$LF" # Hardcoded value
+        $parametersDescriptionBytes = [System.Text.Encoding]::UTF8.GetBytes($parametersDescriptionString)
+        $memoryStream.Write($parametersDescriptionBytes, 0, $parametersDescriptionBytes.Length)
+
+        # HasParameters part
+        $hasParametersString = "--$boundary$LF" +
+                               "Content-Disposition: form-data; name=`"HasParameters`"$LF$LF" +
+                               "false$LF" # Hardcoded value
+        $hasParametersBytes = [System.Text.Encoding]::UTF8.GetBytes($hasParametersString)
+        $memoryStream.Write($hasParametersBytes, 0, $hasParametersBytes.Length)
+
+        # OverrideIfExists part
+        $overrideIfExistsString = "--$boundary$LF" +
+                                  "Content-Disposition: form-data; name=`"OverrideIfExists`"$LF$LF" +
+                                  "true$LF" # Hardcoded value
+        $overrideIfExistsBytes = [System.Text.Encoding]::UTF8.GetBytes($overrideIfExistsString)
+        $memoryStream.Write($overrideIfExistsBytes, 0, $overrideIfExistsBytes.Length)
+
+        # Description part
+        $descriptionString = "--$boundary$LF" +
+                             "Content-Disposition: form-data; name=`"Description`"$LF$LF" +
+                             "test description$LF" # Hardcoded value
+        $descriptionBytes = [System.Text.Encoding]::UTF8.GetBytes($descriptionString)
+        $memoryStream.Write($descriptionBytes, 0, $descriptionBytes.Length)
+        
+        # Final boundary
+        $finalBoundaryBytes = [System.Text.Encoding]::UTF8.GetBytes("--$boundary--$LF")
+        $memoryStream.Write($finalBoundaryBytes, 0, $finalBoundaryBytes.Length)
+        
         $memoryStream.Seek(0, [System.IO.SeekOrigin]::Begin) | Out-Null
         $bodyBytes = $memoryStream.ToArray()
+        
         Invoke-RestMethod -Uri "https://api.security.microsoft.com/api/libraryfiles" -Method Post -Headers $headers -ContentType "multipart/form-data; boundary=$boundary" -Body $bodyBytes -ErrorAction Stop | Out-Null
-        Write-Host "Successfully uploaded file: $fileName"
+        Write-Host "Successfully uploaded file: $resolvedFileName"
     } catch {
         if ($_.Exception.Message -notlike "*already exists*") {
             Write-Host "Error uploading script to library: $($_.Exception.Message)"
-            exit
+            exit 
+        }
+    }
+    finally {
+        if ($null -ne $memoryStream) {
+            $memoryStream.Dispose()
         }
     }
 }
+
 
 function Invoke-PutFile {
     param (
