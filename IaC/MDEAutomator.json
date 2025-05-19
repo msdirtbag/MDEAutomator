@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.35.1.17967",
-      "templateHash": "331296039499323663"
+      "templateHash": "6152226012410346450"
     }
   },
   "parameters": {
@@ -211,7 +211,7 @@
             "allowedOrigins": [
               "https://portal.azure.com",
               "https://preview.portal.azure.com",
-              "[reference(resourceId('Microsoft.Web/sites', format('ase-mdeautomator-{0}', variables('environmentid'))), '2022-09-01').defaultHostName]"
+              "[format('https://{0}', reference(resourceId('Microsoft.Web/sites', format('ase-mdeautomator-{0}', variables('environmentid'))), '2022-09-01').defaultHostName)]"
             ],
             "supportCredentials": true
           },
@@ -369,11 +369,8 @@
       "name": "[format('{0}/{1}', format('ase-mdeautomator-{0}', variables('environmentid')), 'appsettings')]",
       "kind": "calappsettings",
       "properties": {
-        "WEBSITES_ENABLE_APP_SERVICE_STORAGE": "false",
-        "FUNCKEY": "[format('{0}', listKeys(resourceId('Microsoft.Web/sites', format('funcmdeauto{0}', variables('environmentid'))), '2023-12-01').keys[0].value)]",
-        "FUNCURL": "[reference(resourceId('Microsoft.Web/sites', format('funcmdeauto{0}', variables('environmentid'))), '2023-12-01').defaultHostName]",
-        "WEBSITE_HTTPLOGGING_RETENTION_DAYS": "30",
-        "WEBSITES_PORT": "5000"
+        "FUNCKEY": "[listKeys(resourceId('Microsoft.Web/sites/host', format('funcmdeauto{0}', variables('environmentid')), 'default'), '2022-03-01').functionKeys.default]",
+        "FUNCURL": "[reference(resourceId('Microsoft.Web/sites', format('funcmdeauto{0}', variables('environmentid'))), '2023-12-01').defaultHostName]"
       },
       "dependsOn": [
         "[resourceId('Microsoft.Web/sites', format('ase-mdeautomator-{0}', variables('environmentid')))]",
