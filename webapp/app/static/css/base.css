@@ -1,0 +1,68 @@
+:root {
+    /* Color Palette */
+    --primary-color: #00ff41; /* Night vision green */
+    --secondary-color: #00ff41; /* Night vision green */
+    --background-color: #101c11; /* Very dark green/black */
+    --text-color-dark: #00ff41; /* Night vision green */
+    --text-color-light: #7fff7f; /* Softer green for less important text */
+    
+    /* Typography */
+    --font-family-primary: 'Consolas', 'Courier New', monospace;
+    --font-size-base: 16px;
+    --font-size-heading: 1.5rem;
+    
+    /* Spacing */
+    --spacing-small: 10px;
+    --spacing-medium: 20px;
+    --spacing-large: 30px;
+    
+    /* Shadows and Effects */
+    --box-shadow-default: 0 2px 4px rgba(0, 255, 65, 0.1);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--font-family-primary);
+    font-size: var(--font-size-base);
+    background-color: var(--background-color);
+    color: var(--text-color-dark);
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--spacing-medium);
+    background: none;
+}
+
+/* Responsive Typography */
+@media (max-width: 768px) {
+    :root {
+        --font-size-base: 14px;
+        --font-size-heading: 1.3rem;
+    }
+}
+
+/* Utility Classes */
+.text-center {
+    text-align: center;
+}
+
+.text-light {
+    color: var(--text-color-light);
+}
+
+.primary-color {
+    color: var(--primary-color);
+}
+
+.bg-primary {
+    background-color: var(--primary-color);
+    color: #101c11;
+}

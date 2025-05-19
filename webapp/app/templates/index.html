@@ -1,0 +1,517 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridjs/dist/theme/mermaid.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+    <div class="toolbar-left">
+        <div class="dropdown-group">
+            <select id="functionDropdown" class="toolbar-dropdown">
+                <option value="MDEDispatcher">Dispatcher</option>
+                <option value="MDEOrchestrator">Orchestrator</option>
+                <option value="MDEProfiles">Profiles</option>
+            </select>
+            <select id="commandDropdown" class="toolbar-dropdown"></select>
+            <span id="extraParams"></span>
+        </div>
+        <button id="sendCommandBtn" class="cta-button">Send to Selected Devices</button>
+        <button id="refreshMachines" class="cta-button">Refresh Machines</button>
+    </div>
+    <div class="toolbar-title">MDEAutomator</div>
+</div>
+<div class="index-container">
+    <div id="machines-table"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/gridjs/dist/gridjs.umd.js"></script>
+<script src="{{ url_for('static', filename='js/index.js') }}"></script>
+{% if FUNCURL and FUNCKEY %}
+<script>
+window.FUNCURL = "{{ FUNCURL }}";
+window.FUNCKEY = "{{ FUNCKEY }}";
+</script>
+{% endif %}
+<script>
+// Real backend function names and required extra params
+const functionCommands = {
+    'MDEDispatcher': [
+        { label: 'Isolate Device', value: 'InvokeMachineIsolation' },
+        { label: 'Release from Isolation', value: 'UndoMachineIsolation' },
+        { label: 'Contain Unmanaged Device', value: 'InvokeContainDevice' , extra: 'DeviceId'},
+        { label: 'Release from Containment', value: 'UndoContainDevice', extra: 'DeviceId' },
+        { label: 'Collect Investigation Package', value: 'InvokeCollectInvestigationPackage' },
+        { label: 'Run Antivirus Scan', value: 'InvokeFullDiskScan' },
+        { label: 'Restrict App Execution', value: 'InvokeRestrictAppExecution' },
+        { label: 'Undo Restrict App Execution', value: 'UndoRestrictAppExecution' },
+        { label: 'Stop and Quarantine File', value: 'InvokeStopAndQuarantineFile', extra: 'Sha1s' }
+    ],
+    'MDEOrchestrator': [
+        { label: 'Run Live Response Script', value: 'InvokeLRScript', extra: 'scriptName' },
+        { label: 'Collect File', value: 'InvokeGetFile', extra: 'filePath' },
+        { label: 'Put File', value: 'InvokePutFile', extra: 'fileName' },
+        { label: 'Upload file to Live Response Library', value: 'InvokeUploadLR', extra: 'fileContent' }
+    ],
+    'MDEProfiles': []
+};
+
+// Add tenant selector UI to toolbar with Save button
+window.addEventListener('DOMContentLoaded', () => {
+    const toolbarLeft = document.querySelector('.toolbar-left .dropdown-group');
+    if (!document.getElementById('tenantInput')) {
+        const tenantInput = document.createElement('input');
+        tenantInput.type = 'text';
+        tenantInput.id = 'tenantInput';
+        tenantInput.className = 'toolbar-dropdown';
+        tenantInput.placeholder = 'Tenant ID';
+        tenantInput.style.width = '160px';
+        tenantInput.style.marginRight = '0.5rem';
+        // Load from sessionStorage if available
+        const savedTenant = sessionStorage.getItem('TenantId');
+        if (savedTenant) tenantInput.value = savedTenant;
+        // Add Save button
+        const saveBtn = document.createElement('button');
+        saveBtn.id = 'saveTenantBtn';
+        saveBtn.className = 'cta-button';
+        saveBtn.textContent = 'Save Tenant';
+        saveBtn.style.marginRight = '1rem';
+        saveBtn.onclick = function() {
+            const val = tenantInput.value.trim();
+            if (!val) {
+                alert('Please enter a Tenant ID.');
+                return;
+            }
+            sessionStorage.setItem('TenantId', val);
+            alert('Tenant ID saved for this session.');
+        };
+        toolbarLeft.insertBefore(saveBtn, toolbarLeft.firstChild);
+        toolbarLeft.insertBefore(tenantInput, toolbarLeft.firstChild);
+    }
+});
+
+// Helper to get current TenantId
+function getTenantId() {
+    const tenantInput = document.getElementById('tenantInput');
+    return tenantInput ? tenantInput.value.trim() : '';
+}
+
+function updateToolbarButtonsVisibility(isUpload = false, isContain = false) {
+    const sendBtn = document.getElementById('sendCommandBtn');
+    const refreshBtn = document.getElementById('refreshMachines');
+    if (isUpload || isContain) {
+        sendBtn.style.display = 'none';
+        refreshBtn.style.display = 'none';
+    } else {
+        sendBtn.style.display = '';
+        refreshBtn.style.display = '';
+    }
+}
+
+function updateCommandDropdown() {
+    const func = document.getElementById('functionDropdown').value;
+    const cmdDropdown = document.getElementById('commandDropdown');
+    cmdDropdown.innerHTML = '';
+    // Only show command dropdown for Dispatcher/Orchestrator
+    if (func === 'MDEProfiles') {
+        cmdDropdown.style.display = 'none';
+        updateExtraParams();
+        return;
+    } else {
+        cmdDropdown.style.display = '';
+    }
+    functionCommands[func].forEach(cmd => {
+        const opt = document.createElement('option');
+        opt.value = cmd.value;
+        opt.textContent = cmd.label;
+        opt.setAttribute('data-extra', cmd.extra || '');
+        cmdDropdown.appendChild(opt);
+    });
+    updateExtraParams();
+}
+
+function updateExtraParams() {
+    const func = document.getElementById('functionDropdown').value;
+    const extraParamsDiv = document.getElementById('extraParams');
+    extraParamsDiv.innerHTML = '';
+    let isUpload = false;
+    let isContain = false;
+    if (func === 'MDEProfiles') {
+        // Show only the mode selector for Profiles
+        const select = document.createElement('select');
+        select.id = 'extraParamInput';
+        select.className = 'toolbar-dropdown';
+        select.setAttribute('data-param', 'mode');
+        ['Active', 'Passive'].forEach(opt => {
+            const o = document.createElement('option');
+            o.value = opt;
+            o.textContent = opt;
+            select.appendChild(o);
+        });
+        extraParamsDiv.appendChild(select);
+    } else {
+        const cmdDropdown = document.getElementById('commandDropdown');
+        const selected = cmdDropdown.options[cmdDropdown.selectedIndex];
+        const extra = selected ? selected.getAttribute('data-extra') : '';
+        const funcConfig = functionCommands[func][cmdDropdown.selectedIndex];
+        if (selected && selected.value === 'InvokeContainDevice') {
+            // UI for Contain Unmanaged Device
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.id = 'containDeviceIdInput';
+            input.placeholder = 'Enter DeviceId';
+            input.className = 'toolbar-dropdown';
+            extraParamsDiv.appendChild(input);
+            // Contain button
+            const containBtn = document.createElement('button');
+            containBtn.id = 'containBtn';
+            containBtn.className = 'cta-button';
+            containBtn.textContent = 'Contain';
+            containBtn.style.marginLeft = '1rem';
+            extraParamsDiv.appendChild(containBtn);
+            containBtn.onclick = async function() {
+                const deviceId = input.value.trim();
+                if (!deviceId) {
+                    alert('Please enter a DeviceId.');
+                    return;
+                }
+                await sendContainCommand('InvokeContainDevice', deviceId);
+            };
+            isContain = true;
+        } else if (selected && selected.value === 'UndoContainDevice') {
+            // UI for Release from Containment
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.id = 'containDeviceIdInput';
+            input.placeholder = 'Enter DeviceId';
+            input.className = 'toolbar-dropdown';
+            extraParamsDiv.appendChild(input);
+            // Release button
+            const releaseBtn = document.createElement('button');
+            releaseBtn.id = 'releaseContainBtn';
+            releaseBtn.className = 'cta-button';
+            releaseBtn.textContent = 'Release from Containment';
+            releaseBtn.style.marginLeft = '1rem';
+            extraParamsDiv.appendChild(releaseBtn);
+            releaseBtn.onclick = async function() {
+                const deviceId = input.value.trim();
+                if (!deviceId) {
+                    alert('Please enter a DeviceId.');
+                    return;
+                }
+                await sendContainCommand('UndoContainDevice', deviceId);
+            };
+            isContain = true;
+        } else if (selected && selected.value === 'InvokeUploadLR') {
+            // File upload for Live Response Library
+            // Remove any existing upload button to prevent multiple event handlers
+            const prevUploadBtn = document.getElementById('uploadFileBtn');
+            if (prevUploadBtn && prevUploadBtn.parentNode) {
+                prevUploadBtn.parentNode.removeChild(prevUploadBtn);
+            }
+            const prevFileInput = document.getElementById('extraFileInput');
+            if (prevFileInput && prevFileInput.parentNode) {
+                prevFileInput.parentNode.removeChild(prevFileInput);
+            }
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.id = 'extraFileInput';
+            fileInput.className = 'toolbar-dropdown';
+            fileInput.accept = '.zip,.ps1,.exe,.dll,.txt,.csv,.json,.gz,.tar,.7z,.rar,.bat,.cmd,.sh,.py,.rb,.pl,.vbs,.js,.jar,.msi,.msp,.reg,.xml,.conf,.ini,.log,.bin,.dat,.db,.bak,.sql,.cer,.crt,.pem,.pfx,.key,.asc,.md,.rtf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.jpg,.jpeg,.png,.gif,.bmp,.ico,.svg,.mp3,.wav,.mp4,.avi,.mov,.wmv,.flv,.mkv,.ts,.m4v,.webm,.ogg,.opus,.aac,.3gp,.3g2,.midi,.mid,.apk,.ipa,.appx,.xap,.cab,.iso,.img,.vhd,.vhdx,.ova,.ovf,.qcow,.qcow2,.vmdk,.vdi,.raw,.img,.dmg,.toast,.sparseimage,.sparsebundle,.sparsebundleimage,.sparsebundlevolume,.sparsebundlepartition,.sparsebundlepartitionimage,.sparsebundlepartitionvolume,.sparsebundlepartitionpartition,.sparsebundlepartitionpartitionimage,.sparsebundlepartitionpartitionvolume,.sparsebundlepartitionpartitionpartition,.sparsebundlepartitionpartitionpartitionimage,.sparsebundlepartitionpartitionpartitionvolume,.sparsebundlepartitionpartitionpartitionpartition,.sparsebundlepartitionpartitionpartitionpartitionimage,.sparsebundlepartitionpartitionpartitionpartitionvolume';
+            fileInput.maxSize = 250 * 1024 * 1024; // 250 MB
+            extraParamsDiv.appendChild(fileInput);
+            // Show file size warning
+            const note = document.createElement('span');
+            note.textContent = ' (Max 250 MB)';
+            note.style.marginLeft = '1rem';
+            note.style.color = '#888';
+            extraParamsDiv.appendChild(note);
+            // Add Upload button
+            const uploadBtn = document.createElement('button');
+            uploadBtn.id = 'uploadFileBtn';
+            uploadBtn.className = 'cta-button';
+            uploadBtn.textContent = 'Upload';
+            uploadBtn.style.marginLeft = '1rem';
+            extraParamsDiv.appendChild(uploadBtn);
+            uploadBtn.onclick = async function() {
+                if (!fileInput.files.length) {
+                    alert('Please select a file to upload.');
+                    return;
+                }
+                const file = fileInput.files[0];
+                if (file.size > 250 * 1024 * 1024) {
+                    alert('File size exceeds 250 MB limit.');
+                    return;
+                }
+                const formData = new FormData();
+                formData.append('function_name', func);
+                formData.append('Function', 'InvokeUploadLR');
+                formData.append('file', file);
+                formData.append('TenantId', getTenantId());
+                // TargetFileName is inferred from file.name
+                formData.append('TargetFileName', file.name);
+                const res = await fetch('/api/send_command', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await res.json();
+                alert(result.message || JSON.stringify(result));
+            };
+            isUpload = true;
+        } else if (extra && funcConfig) {
+            if (funcConfig.options) {
+                const select = document.createElement('select');
+                select.id = 'extraParamInput';
+                select.className = 'toolbar-dropdown';
+                select.setAttribute('data-param', extra);
+                funcConfig.options.forEach(opt => {
+                    const o = document.createElement('option');
+                    o.value = opt;
+                    o.textContent = opt;
+                    select.appendChild(o);
+                });
+                extraParamsDiv.appendChild(select);
+            } else {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.id = 'extraParamInput';
+                input.placeholder = 'Enter ' + extra;
+                input.className = 'toolbar-dropdown';
+                input.setAttribute('data-param', extra);
+                extraParamsDiv.appendChild(input);
+            }
+        }
+    }
+    updateToolbarButtonsVisibility(isUpload, isContain);
+}
+
+async function sendContainCommand(specificCommandName, deviceId) {
+    const tenantId = getTenantId();
+    if (!tenantId) {
+        alert('Tenant ID is required for sending command.');
+        return;
+    }
+    const payload = {
+        function_name: 'MDEDispatcher', // For Flask to select the Azure Function URL
+        command: specificCommandName,  // For Flask to determine the action, then map to 'Function' for PowerShell
+        DeviceIds: [deviceId],
+        TenantId: tenantId
+    };
+    console.log('Sending contain command payload:', JSON.stringify(payload, null, 2));
+    const res = await fetch('/api/send_command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    const result = await res.json();
+    alert(result.message || JSON.stringify(result));
+}
+
+document.getElementById('functionDropdown').onchange = updateCommandDropdown;
+document.getElementById('commandDropdown').onchange = function() {
+    updateExtraParams();
+};
+updateCommandDropdown();
+
+let selectedDeviceIds = [];
+function getDeviceIdColumnIndex(columns) {
+    return columns.findIndex(col => col.toLowerCase() === 'deviceid' || col.toLowerCase() === 'id');
+}
+async function loadMachines() {
+    if (!window.FUNCURL || !window.FUNCKEY) {
+        alert('FUNCURL and FUNCKEY are not set. Please contact your administrator.');
+        return;
+    }
+    const tenantId = getTenantId();
+    if (!tenantId) {
+        alert('Tenant ID is required.');
+        return;
+    }
+    const url = `https://${window.FUNCURL}/api/MDEAutomator?code=${window.FUNCKEY}`;
+    const payload = {
+        TenantId: tenantId,
+        Function: 'GetMachines'
+    };
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    console.log('Raw response from backend:', data); // Debug log
+    // Try to find the array of machines in the response
+    let machinesRaw = data.machines || data.value;
+    if (!Array.isArray(machinesRaw)) {
+        if (Array.isArray(data)) {
+            machinesRaw = data;
+        } else {
+            for (const key in data) {
+                if (Array.isArray(data[key])) {
+                    machinesRaw = data[key];
+                    break;
+                }
+            }
+        }
+    }
+    // DEBUG: Log the first row to verify keys
+    if (machinesRaw && machinesRaw.length > 0) {
+        console.log('First machine object:', machinesRaw[0]);
+    }
+    // The columns definition, ensuring 'Id' is the second data column after the checkbox.
+    const columns = [
+        { id: 'checkbox', name: '', width: '30px', formatter: (_, row) => gridjs.html(`<input type='checkbox' class='device-checkbox' data-deviceid='${row.cells[0].data}' />`) },
+        { id: 'id', name: 'DeviceId', width: 'minmax(100px, 1fr)' },
+        { id: 'computerDnsName', name: 'DeviceName', width: 'minmax(150px, 2fr)' },
+        { id: 'firstSeen', name: 'FirstSeen', width: 'minmax(120px, 1fr)' },
+        { id: 'lastSeen', name: 'LastSeen', width: 'minmax(120px, 1fr)' },
+        { id: 'osPlatform', name: 'OsPlatform', width: 'minmax(100px, 1fr)' },
+        { id: 'lastIpAddress', name: 'LastIpAddress', width: 'minmax(120px, 1fr)' },
+        { id: 'lastExternalIpAddress', name: 'LastExternalIpAddress', width: 'minmax(120px, 1fr)' },
+        { id: 'deviceValue', name: 'DeviceValue', width: 'minmax(100px, 1fr)' },
+        { id: 'rbacGroupName', name: 'RbacGroupName', width: 'minmax(120px, 1fr)' },
+        { id: 'riskScore', name: 'RiskScore', width: 'minmax(80px, 1fr)' },
+        { id: 'machineTags', name: 'MachineTags', width: 'minmax(120px, 1fr)' }
+    ];
+    const machines = machinesRaw.map(row => {
+        const machineId = row['Id'] || row['id'] || ''; 
+        return [
+            machineId, 
+            machineId, 
+            row['ComputerDnsName'] || row['computerDnsName'] || '',
+            row['FirstSeen'] || row['firstSeen'] || '',
+            row['LastSeen'] || row['lastSeen'] || '',
+            row['OsPlatform'] || row['osPlatform'] || '',
+            row['LastIpAddress'] || row['lastIpAddress'] || '',
+            row['LastExternalIpAddress'] || row['lastExternalIpAddress'] || '',
+            row['DeviceValue'] || row['deviceValue'] || '',
+            row['RbacGroupName'] || row['rbacGroupName'] || '',
+            row['RiskScore'] || row['riskScore'] || '',
+            Array.isArray(row['MachineTags'] || row['machineTags']) ? (row['MachineTags'] || row['machineTags']).join(', ') : (row['MachineTags'] || row['machineTags'] || '')
+        ];
+    });
+    if (window.machinesGrid) window.machinesGrid.destroy();
+    window.machinesGrid = new gridjs.Grid({
+        columns: columns,
+        data: machines,
+        search: true,
+        sort: true,
+        resizable: true,
+        pagination: false,
+        autoWidth: true,
+        width: '100vw',
+        height: '100%',
+        style: {
+            table: {
+                'table-layout': 'auto',
+                width: '100%',
+                'min-width': 'unset',
+                'max-width': '100vw',
+            },
+            th: {
+                'white-space': 'nowrap',
+                'overflow': 'hidden',
+                'text-overflow': 'ellipsis',
+                'max-width': '200px',
+            },
+            td: {
+                'white-space': 'nowrap',
+                'overflow': 'hidden',
+                'text-overflow': 'ellipsis',
+                'max-width': '200px',
+            }
+        }
+    }).render(document.getElementById('machines-table'));
+    setTimeout(() => {
+        document.querySelectorAll('.device-checkbox').forEach(cb => {
+            cb.addEventListener('change', function() {
+                const id = this.getAttribute('data-deviceid');
+                if (this.checked) {
+                    if (!selectedDeviceIds.includes(id)) selectedDeviceIds.push(id);
+                } else {
+                    selectedDeviceIds = selectedDeviceIds.filter(did => did !== id);
+                }
+            });
+        });
+    }, 500);
+}
+document.getElementById('refreshMachines').onclick = loadMachines;
+document.getElementById('sendCommandBtn').onclick = async function() {
+    const funcGroup = document.getElementById('functionDropdown').value;
+    const tenantId = getTenantId();
+
+    if (!tenantId && funcGroup !== 'SomeFunctionThatDoesNotNeedTenant') { 
+        alert('Tenant ID is required.');
+        return;
+    }
+
+    let payload = {
+        DeviceIds: selectedDeviceIds,
+        TenantId: tenantId
+    };
+
+    if (funcGroup === 'MDEProfiles') {
+        payload.function_name = funcGroup; 
+        payload.command = 'DeployPowerShellPolicy'; 
+        const modeInput = document.getElementById('extraParamInput');
+        if (!modeInput) {
+             alert('Mode selector not found for MDEProfiles. Please ensure UI elements are correctly loaded.');
+             return;
+        }
+        const mode = modeInput.value;
+        if (!mode) {
+            alert('Please select a mode for MDEProfiles.');
+            return;
+        }
+        payload.ps1Name = mode + '.ps1';
+    } else { 
+        payload.function_name = funcGroup; 
+        const cmdDropdown = document.getElementById('commandDropdown');
+        const specificCommand = cmdDropdown.value;
+
+        if (!specificCommand) {
+            alert('Please select a command from the dropdown.');
+            return;
+        }
+        payload.command = specificCommand; 
+
+        const selectedOption = cmdDropdown.options[cmdDropdown.selectedIndex];
+        const extraAttr = selectedOption ? selectedOption.getAttribute('data-extra') : null;
+
+        if (extraAttr) {
+            const extraInput = document.getElementById('extraParamInput');
+            if (!extraInput) {
+                alert(`Input field for '${extraAttr}' not found. Please ensure UI elements are correctly loaded.`);
+                return;
+            }
+            const extraValue = extraInput.value.trim();
+            if (!extraValue && extraAttr !== 'fileContent') { 
+                alert('Please enter a value for ' + extraAttr);
+                return;
+            }
+            payload[extraAttr] = extraValue; 
+        }
+    }
+
+    // Common validation for device selection for the main "Send to Selected Devices" button
+    if (selectedDeviceIds.length === 0) {
+        // This check applies if the command sent via this button requires selected devices.
+        // Commands like 'InvokeContainDevice' or 'InvokeUploadLR' are handled by separate buttons
+        // and have their own device/parameter handling.
+        alert('Please select at least one device from the table.');
+        return;
+    }
+
+    console.log('Sending payload via sendCommandBtn:', JSON.stringify(payload, null, 2)); // Debug log for the payload
+    const res = await fetch('/api/send_command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    const result = await res.json();
+    alert(result.message || JSON.stringify(result));
+};
+</script>
+{% endblock %}

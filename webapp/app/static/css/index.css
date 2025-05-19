@@ -1,0 +1,197 @@
+.index-container {
+    padding: 0;
+    margin: 0;
+    /* Remove centering for full-width table */
+    align-items: stretch;
+    justify-content: flex-start;
+    min-height: unset;
+    background-color: var(--background-color);
+    color: var(--text-color-dark);
+    /* Forcibly disable horizontal scrolling */
+    overflow-x: hidden;
+}
+
+.index-header {
+    color: var(--primary-color);
+    font-size: var(--font-size-heading);
+    margin-bottom: var(--spacing-medium);
+    text-align: center;
+}
+
+.index-description {
+    color: var(--text-color-light);
+    max-width: 600px;
+    text-align: center;
+    margin-bottom: var(--spacing-large);
+}
+
+.cta-button {
+    display: inline-block;
+    background-color: var(--secondary-color);
+    color: #101c11;
+    font-size: 0.85em;
+    padding: 0.35em 1.1em;
+    height: 2em;
+    text-decoration: none;
+    border-radius: 5px;
+    transition: background-color 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0,255,65,0.08);
+    border: 1px solid #00ff41;
+    font-family: 'Consolas', 'Courier New', monospace;
+}
+
+.cta-button:hover {
+    background-color: #1aff5c;
+    color: #101c11;
+    transform: translateY(-2px); /* Add a slight lift */
+    box-shadow: 0 4px 12px rgba(0,255,65,0.15); /* Enhance shadow */
+}
+
+.cta-button:active {
+    background-color: #00e639; /* Slightly darker green for click */
+    transform: translateY(0px); /* Reset lift */
+    box-shadow: 0 2px 8px rgba(0,255,65,0.08); /* Reset shadow to normal */
+}
+
+.toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 2rem;
+    background: #142a17;
+    border-bottom: 1px solid #00ff41;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.toolbar-title {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--primary-color);
+    margin-left: 2rem;
+    text-shadow: 0 0 8px #00ff41;
+}
+
+.toolbar-dropdown, .cta-button, #commandInput {
+    margin-right: 1rem;
+}
+
+.toolbar-dropdown, #commandInput {
+    background: #101c11;
+    color: var(--primary-color);
+    border: 1px solid #00ff41;
+    font-family: 'Consolas', 'Courier New', monospace;
+}
+
+.command-panel {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+#machines-table {
+    width: 100vw;
+    min-width: 0 !important;
+    max-width: 100vw !important;
+    height: calc(100vh - 70px);
+    overflow-x: auto !important;
+    overflow-y: auto;
+    margin: 0;
+    padding: 0;
+    background: #101c11;
+    color: var(--primary-color);
+    zoom: var(--table-zoom, 0.85);
+}
+
+.gridjs-wrapper {
+    width: 100vw !important;
+    min-width: 0 !important;
+    max-width: 100vw !important;
+    overflow-x: auto !important;
+    display: block !important;
+}
+
+.gridjs-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100vw !important;
+    table-layout: auto !important;
+    background: #101c11 !important;
+    color: var(--primary-color) !important;
+    border-color: #00ff41 !important;
+}
+
+.gridjs-th, .gridjs-td {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 200px !important;
+}
+
+.gridjs-thead, .gridjs-th, .gridjs-tr, .gridjs-td {
+    background: #101c11 !important;
+    color: var(--primary-color) !important;
+    border-color: #00ff41 !important;
+}
+
+.gridjs-thead .gridjs-th {
+    background: #142a17 !important;
+    color: #7fff7f !important;
+    border-bottom: 2px solid #00ff41 !important;
+}
+
+.gridjs-pagination, .gridjs-search {
+    background: #101c11 !important;
+    color: var(--primary-color) !important;
+}
+
+.gridjs-search input[type="search"] {
+    background: #142a17 !important;
+    color: var(--primary-color) !important;
+    border: 1px solid #00ff41 !important;
+    font-family: 'Consolas', 'Courier New', monospace;
+    box-shadow: none !important;
+}
+
+/* Helper: set a CSS variable for zoom on the table wrapper */
+:root {
+    --table-zoom: 1;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .index-header {
+        font-size: calc(var(--font-size-heading) * 0.9);
+    }
+    
+    .index-description {
+        padding: 0 var(--spacing-small);
+    }
+
+    .toolbar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .toolbar-title {
+        margin-left: 0;
+        align-self: flex-end;
+    }
+
+    #machines-table, .gridjs-wrapper, .gridjs-table {
+        max-width: 100vw !important;
+        min-width: 0 !important;
+    }
+    .gridjs-th, .gridjs-td {
+        max-width: 120px !important;
+        font-size: 0.9em;
+    }
+}
