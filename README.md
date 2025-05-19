@@ -18,7 +18,6 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
     - `UndoMachineIsolation`: Removes network isolation.
     - `InvokeContainDevice`: Instructs endpoints to deny all connections from this device.
     - `UndoContainDevice`: Restores communication with endpoints.
-    - `UndoMachineIsolation`: Removes network isolation.
     - `InvokeRestrictAppExecution`: Enables Microsoft-only code integrity policy. (Microsoft-signed code only permitted to run)
     - `UndoRestrictAppExecution`- Removes Microsoft-only code integrity policy.
     - `InvokeCollectInvestigationPackage` - Collects Investigation Packages and uploads them to the `packages` blob container.
