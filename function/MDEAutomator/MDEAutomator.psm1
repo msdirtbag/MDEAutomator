@@ -466,7 +466,7 @@ function Invoke-UploadLR {
         # Description part
         $descriptionString = "--$boundary$LF" +
                              "Content-Disposition: form-data; name=`"Description`"$LF$LF" +
-                             "test description$LF" # Hardcoded value
+                             "MDEAutomator$LF" # Hardcoded value
         $descriptionBytes = [System.Text.Encoding]::UTF8.GetBytes($descriptionString)
         $memoryStream.Write($descriptionBytes, 0, $descriptionBytes.Length)
         

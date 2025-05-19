@@ -1,4 +1,4 @@
-# MDEAutomatorapp Function App
+# MDEAutomator Main Function App
 # 1.5.6
 
 using namespace System.Net

@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.35.1.17967",
-      "templateHash": "5333583974430296973"
+      "templateHash": "331296039499323663"
     }
   },
   "parameters": {
@@ -175,7 +175,7 @@
     {
       "type": "Microsoft.Web/serverfarms",
       "apiVersion": "2024-04-01",
-      "name": "[format('asp-mdeautomator-{0}', variables('environmentid'))]",
+      "name": "[format('asp-mdeautomator-func-{0}', variables('environmentid'))]",
       "location": "[variables('location')]",
       "properties": {
         "reserved": false,
@@ -200,7 +200,7 @@
         }
       },
       "properties": {
-        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('asp-mdeautomator-{0}', variables('environmentid')))]",
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('asp-mdeautomator-func-{0}', variables('environmentid')))]",
         "publicNetworkAccess": "Enabled",
         "httpsOnly": true,
         "siteConfig": {
@@ -210,7 +210,8 @@
           "cors": {
             "allowedOrigins": [
               "https://portal.azure.com",
-              "https://preview.portal.azure.com"
+              "https://preview.portal.azure.com",
+              "[reference(resourceId('Microsoft.Web/sites', format('ase-mdeautomator-{0}', variables('environmentid'))), '2022-09-01').defaultHostName]"
             ],
             "supportCredentials": true
           },
@@ -291,9 +292,92 @@
       },
       "dependsOn": [
         "[resourceId('Microsoft.Insights/components', format('appi-mdeauto{0}', variables('environmentid')))]",
-        "[resourceId('Microsoft.Web/serverfarms', format('asp-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Web/sites', format('ase-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Web/serverfarms', format('asp-mdeautomator-func-{0}', variables('environmentid')))]",
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid')))]",
         "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2024-04-01",
+      "name": "[format('asp-mdeautomator-web-{0}', variables('environmentid'))]",
+      "location": "[variables('location')]",
+      "properties": {
+        "reserved": true
+      },
+      "sku": {
+        "tier": "Basic",
+        "name": "B1"
+      },
+      "kind": "linux"
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2022-09-01",
+      "name": "[format('ase-mdeautomator-{0}', variables('environmentid'))]",
+      "location": "[variables('location')]",
+      "kind": "container",
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('asp-mdeautomator-web-{0}', variables('environmentid')))]",
+        "publicNetworkAccess": "Enabled",
+        "httpsOnly": true,
+        "siteConfig": {
+          "linuxFxVersion": "DOCKER|msdirtbag/mdeautomator:latest",
+          "numberOfWorkers": 1,
+          "requestTracingEnabled": false,
+          "remoteDebuggingEnabled": false,
+          "httpLoggingEnabled": true,
+          "logsDirectorySizeLimit": 35,
+          "detailedErrorLoggingEnabled": true,
+          "webSocketsEnabled": true,
+          "alwaysOn": true,
+          "autoHealEnabled": true,
+          "ipSecurityRestrictions": [
+            {
+              "ipAddress": "Any",
+              "action": "Allow",
+              "priority": 2147483647,
+              "name": "Allow all",
+              "description": "Allow all access"
+            }
+          ],
+          "scmIpSecurityRestrictions": [
+            {
+              "ipAddress": "Any",
+              "action": "Deny",
+              "priority": 2147483647,
+              "name": "Block all",
+              "description": "Block all access"
+            }
+          ],
+          "scmIpSecurityRestrictionsUseMain": false,
+          "http20Enabled": false,
+          "minTlsVersion": "1.2",
+          "scmMinTlsVersion": "1.2",
+          "ftpsState": "Disabled",
+          "minimumElasticInstanceCount": 1
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', format('asp-mdeautomator-web-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/sites/config",
+      "apiVersion": "2022-09-01",
+      "name": "[format('{0}/{1}', format('ase-mdeautomator-{0}', variables('environmentid')), 'appsettings')]",
+      "kind": "calappsettings",
+      "properties": {
+        "WEBSITES_ENABLE_APP_SERVICE_STORAGE": "false",
+        "FUNCKEY": "[format('{0}', listKeys(resourceId('Microsoft.Web/sites', format('funcmdeauto{0}', variables('environmentid'))), '2023-12-01').keys[0].value)]",
+        "FUNCURL": "[reference(resourceId('Microsoft.Web/sites', format('funcmdeauto{0}', variables('environmentid'))), '2023-12-01').defaultHostName]",
+        "WEBSITE_HTTPLOGGING_RETENTION_DAYS": "30",
+        "WEBSITES_PORT": "5000"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', format('ase-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Web/sites', format('funcmdeauto{0}', variables('environmentid')))]"
       ]
     }
   ]

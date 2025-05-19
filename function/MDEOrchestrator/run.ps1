@@ -1,5 +1,5 @@
 # MDEOrchestrator Function App
-# 1.5.5
+# 1.5.6
 
 using namespace System.Net
 
@@ -28,6 +28,21 @@ try {
     Connect-AzAccount -Identity -AccountId $ManagedIdentityId | Out-Null
     $subscriptionId = [System.Environment]::GetEnvironmentVariable('SUBSCRIPTION_ID', 'Process')
     Set-AzContext -Subscription $subscriptionId -ErrorAction Stop
+
+    # Early upload if fileContent and TargetFileName are present
+    if ($fileContent -and $TargetFileName) {
+        $bytesToUpload = if ($fileContent -is [byte[]]) { $fileContent } else { [System.Text.Encoding]::UTF8.GetBytes($fileContent) }
+        $results = Invoke-UploadLR -token $token -fileContent $bytesToUpload -TargetFileName $TargetFileName
+        $output = [PSCustomObject]@{
+            Status = "Upload attempt finished. Check logs for details."
+        }
+        Write-Host "Invoke-UploadLR completed."
+        Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
+            StatusCode = [HttpStatusCode]::OK
+            Body = $output | ConvertTo-Json -Depth 10
+        })
+        return
+    }
 
     # Device discovery: get all or filtered devices if requested
     if ($allDevices -eq $true) {
@@ -64,9 +79,9 @@ try {
         $DeviceIds = @("$DeviceIds")
     }
 
-    # If no devices to process, return early
-    if ($DeviceIds.Count -eq 0) {
-        Write-Host "No DeviceIds to process."
+    # If no devices to process and no file content is provided, return early
+    if ($DeviceIds.Count -eq 0 -and (-not $fileContent)) {
+        Write-Host "No DeviceIds to process and no fileContent provided. Exiting."
         Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
             StatusCode = [HttpStatusCode]::OK
             Body = "No DeviceIds to process."
@@ -112,19 +127,6 @@ try {
                     $results = Invoke-PutFile -token $using:token -DeviceIds @($DeviceId) -fileName $using:fileName
                     foreach ($res in $results) {
                         $output += $res
-                    }
-                    return $output
-                }
-                "Invoke-UploadLR" {
-                    $output = @() 
-                    if ($using:fileContent -and $using:TargetFileName) {
-                        $bytesToUpload = if ($using:fileContent -is [byte[]]) { $using:fileContent } else { [System.Text.Encoding]::UTF8.GetBytes($using:fileContent) }
-                        $results = Invoke-UploadLR -token $using:token -fileContent $bytesToUpload -TargetFileName $using:TargetFileName
-                    } else {
-                        throw "For Invoke-UploadLR, both 'fileContent' and 'TargetFileName' parameters are required for this orchestrator path."
-                    }
-                    $output += [PSCustomObject]@{
-                        Status = "Upload attempt finished. Check logs for details."
                     }
                     return $output
                 }

@@ -147,8 +147,8 @@ resource appinsights01 'Microsoft.Insights/components@2020-02-02' = {
 }
 
 // App Service Plan
-resource appservice 'Microsoft.Web/serverfarms@2024-04-01' = {
-  name: 'asp-mdeautomator-${environmentid}'
+resource appservicefunc 'Microsoft.Web/serverfarms@2024-04-01' = {
+  name: 'asp-mdeautomator-func-${environmentid}'
   location: location
   properties: {
     reserved: false
@@ -173,7 +173,7 @@ resource function01 'Microsoft.Web/sites@2023-12-01' = {
     }
   }
   properties: {
-    serverFarmId: appservice.id
+    serverFarmId: appservicefunc.id
     publicNetworkAccess: 'Enabled'
     httpsOnly: true
     siteConfig: {
@@ -184,6 +184,7 @@ resource function01 'Microsoft.Web/sites@2023-12-01' = {
         allowedOrigins: [
           'https://portal.azure.com'
           'https://preview.portal.azure.com'
+          'https://${appservice.properties.defaultHostName}'
         ]
         supportCredentials: true
       }
@@ -263,3 +264,78 @@ resource function01 'Microsoft.Web/sites@2023-12-01' = {
     }
   }
 }
+
+//App Service Plan
+resource appserviceplan 'Microsoft.Web/serverfarms@2024-04-01' = {
+  name: 'asp-mdeautomator-web-${environmentid}'
+  location: location
+  properties: {
+    reserved: true
+  }
+  sku: {
+    tier: 'Basic'
+    name: 'B1'    
+  }
+  kind: 'linux'
+}
+
+//This deploys the Azure App Service.
+resource appservice 'Microsoft.Web/sites@2022-09-01' = {
+  name: 'ase-mdeautomator-${environmentid}'
+  location: location
+  kind: 'container'
+  properties: {
+    serverFarmId: appserviceplan.id
+    publicNetworkAccess: 'Enabled'
+    httpsOnly: true
+    siteConfig: {
+      linuxFxVersion: 'DOCKER|msdirtbag/mdeautomator:latest'
+      numberOfWorkers: 1
+      requestTracingEnabled: false
+      remoteDebuggingEnabled: false
+      httpLoggingEnabled: true
+      logsDirectorySizeLimit: 35
+      detailedErrorLoggingEnabled: true
+      webSocketsEnabled: true
+      alwaysOn: true
+      autoHealEnabled: true
+      ipSecurityRestrictions: [
+        {
+          ipAddress: 'Any'
+          action: 'Allow'
+          priority: 2147483647
+          name: 'Allow all'
+          description: 'Allow all access'
+        }
+      ]
+      scmIpSecurityRestrictions: [
+        {
+          ipAddress: 'Any'
+          action: 'Deny'
+          priority: 2147483647
+          name: 'Block all'
+          description: 'Block all access'
+        }
+      ]
+      scmIpSecurityRestrictionsUseMain: false
+      http20Enabled: false
+      minTlsVersion: '1.2'
+      scmMinTlsVersion: '1.2'
+      ftpsState: 'Disabled'
+      minimumElasticInstanceCount: 1
+    }
+  }
+}
+
+// This configures the app settings for the Azure Function.
+resource appsettings 'Microsoft.Web/sites/config@2022-09-01' = {
+  name: 'appsettings'
+  kind: 'calappsettings'
+  parent: appservice
+  properties: {
+    FUNCKEY: listKeys(resourceId('Microsoft.Web/sites/host', function01.name, 'default'), '2022-03-01').functionKeys.default
+    FUNCURL: function01.properties.defaultHostName
+  }
+}
+
+

@@ -10,7 +10,7 @@ if ($env:MSI_SECRET) {
 }
 
 # Import MDEAutomator module
-Import-Module -Name ./MDEAutomator
+Import-Module -Name ./MDEAutomator -ErrorAction Stop -Force
 
 # Import PowerShell Gallery modules
 Import-Module -Name Az.Accounts

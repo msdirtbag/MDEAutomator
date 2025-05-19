@@ -60,17 +60,22 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 - Bulk Custom Detection syncronization from Azure Storage
 - Convenient upload of endpoint packages/files to Azure Storage
 
+## Development Features
+
+- Python-based GUI hosted in a Azure App Service
+
 ---
 
 ## Azure Resources Deployed
 
 - Application Insights
 - Azure Function
-- App Service Plan (EP1)
+- Azure App Service
+- App Service Plan 
 - Azure Storage
 - User Managed Identity
 
-MDEAutomator Estimated Monthly Azure Cost: ~$180 USD
+MDEAutomator Estimated Monthly Azure Cost: ~$210 USD
 
 ---
 
@@ -677,6 +682,10 @@ Undo-TiURL -token $token -URLs @("malicious.example.com")
 The `$token` parameter is the OAuth2 access token you receive from the `Connect-MDE` function. You must call `Connect-MDE` first and use its output as the `-token` value for these functions. These tokens typically expire every 60 minutes.
 
 The `-filePath` parameter specifies the full path to the script or file you want to upload or retrieve. For upload operations, provide the local path to the file on your system (e.g., `"C:\Scripts\MyScript.ps1"`). 
+
+The `-fileContent` parameter can be leverage to upload files as a byte array. When this option is used `-TargetFileName` is always required.
+
+The `-TargetFileName` parameter specifies the name of the file that will be uploaded to the Live Response Library. 
 
 - `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
 - `-filePath` (string, required): Path to the script file to upload.

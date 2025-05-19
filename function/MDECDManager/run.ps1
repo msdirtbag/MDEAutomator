@@ -1,5 +1,5 @@
 # MDECDManager Function App
-# 1.5.5
+# 1.5.6
 
 using namespace System.Net
 
