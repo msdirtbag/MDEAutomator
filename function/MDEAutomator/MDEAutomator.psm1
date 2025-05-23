@@ -387,6 +387,89 @@ function Invoke-FullDiskScan {
     return $responses
 }
 
+function Invoke-MachineOffboard {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$token,
+        [Parameter(Mandatory = $true)]
+        [string[]]$DeviceIds
+    )
+    $headers = @{
+        "Authorization" = "Bearer $token"
+    }
+    $body = @{
+        "Comment" = "MDEAutomator"
+    }
+    $responses = @()
+
+    foreach ($DeviceId in $DeviceIds) {
+        $uri = "https://api.securitycenter.microsoft.com/api/machines/$DeviceId/offboard"
+        try {
+            Write-Host "Attempting to offboard DeviceId: $DeviceId"
+            
+            try {
+                $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body ($body | ConvertTo-Json) -ContentType "application/json" -ErrorAction Stop
+            }
+            catch {
+                if ($_.Exception.Response.StatusCode -eq 400 -and 
+                    $_.Exception.Response.Content -match '"code":\s*"ActiveRequestAlreadyExists"') {
+                    Write-Host "Action already in progress for DeviceId: $DeviceId"
+                    $responses += [PSCustomObject]@{
+                        DeviceId = $DeviceId
+                        Response = [PSCustomObject]@{
+                            Status = "InProgress"
+                            Message = "Action already in progress"
+                        }
+                    }
+                    continue
+                }
+                throw 
+            }
+            
+            if ([string]::IsNullOrEmpty($response.id)) {
+                Write-Host "No machine action ID received for DeviceId: $DeviceId"
+                $responses += [PSCustomObject]@{
+                    DeviceId = $DeviceId
+                    Response = [PSCustomObject]@{
+                        Status = "Failed"
+                        Message = "No action ID received"
+                    }
+                }
+                continue
+            }
+
+            $actionId = $response.id
+            Start-Sleep -Seconds 5
+            $statusSucceeded = Get-MachineActionStatus -machineActionId $actionId -token $token
+
+            $responses += [PSCustomObject]@{
+                DeviceId = $DeviceId
+                Response = [PSCustomObject]@{
+                    Id = $response.id
+                    Type = $response.type
+                    Title = $response.title
+                    Status = if ($statusSucceeded) { "Succeeded" } else { "Failed" }
+                    MachineId = $response.machineId
+                    ComputerDnsName = $response.computerDnsName
+                    CreationDateTimeUtc = $response.creationDateTimeUtc
+                }
+            }
+            Write-Host "Offboarding status for DeviceId $DeviceId : $(if ($statusSucceeded) { 'Succeeded' } else { 'Failed' })"
+
+        } catch {
+            Write-Error "Failed to offboard DeviceId: $DeviceId. Error: $_"
+            $responses += [PSCustomObject]@{
+                DeviceId = $DeviceId
+                Response = [PSCustomObject]@{
+                    Status = "Error"
+                    Message = $_.Exception.Message
+                }
+            }
+        }
+    }
+    return $responses
+}
+
 function Invoke-UploadLR {
     [CmdletBinding(DefaultParameterSetName = "ByPath")]
     param (
@@ -2594,6 +2677,6 @@ function Undo-DetectionRule {
 Export-ModuleMember -Function Connect-MDE, Get-RequestParam, Invoke-WithRetry,
     Get-Machines, Get-Actions, Undo-Actions, Get-IPInfo, Get-FileInfo, Get-URLInfo, Get-LoggedInUsers, Get-MachineActionStatus, Invoke-AdvancedHunting,
     Invoke-UploadLR, Invoke-PutFile, Invoke-GetFile, Invoke-LRScript, Get-LiveResponseOutput,
-    Invoke-MachineIsolation, Undo-MachineIsolation, Invoke-ContainDevice, Undo-ContainDevice, Get-DetectionRules, Install-DetectionRule, Update-DetectionRule, Undo-DetectionRule,
+    Invoke-MachineIsolation, Undo-MachineIsolation, Invoke-ContainDevice, Undo-ContainDevice, Invoke-MachineOffboard, Get-DetectionRules, Install-DetectionRule, Update-DetectionRule, Undo-DetectionRule,
     Invoke-RestrictAppExecution, Undo-RestrictAppExecution, Invoke-FullDiskScan, Invoke-StopAndQuarantineFile, Invoke-CollectInvestigationPackage,
     Get-Indicators, Invoke-TiFile, Undo-TiFile, Invoke-TiCert, Undo-TiCert, Invoke-TiIP, Undo-TiIP, Invoke-TiURL, Undo-TiURL
