@@ -117,6 +117,7 @@ MDEAutomator Estimated Monthly Azure Cost: ~$210 USD
    - Machine.Isolate
    - Machine.StopAndQuarantine
    - Machine.LiveResponse
+   - Machine.Offboard
    - Machine.ReadWrite.All
    - Machine.RestrictExecution
    - Machine.Scan
@@ -158,7 +159,7 @@ Below are example usage patterns for the MDEAutomator PowerShell module.
 ### Installing & Importing
 ```powershell
 
-# Import MDEAutomator module from source repo
+# Import MDEAutomator module from Git repo source
 Import-Module -Name ./function/MDEAutomator -ErrorAction Stop -Force
 
 # Install & Import from PowerShell Gallery
@@ -228,6 +229,11 @@ Invoke-TiURL -token $token -URLs $urls
 
 > ⚠️ **Warning:**  
 > MDEAutomator is a powerful tool that, if misused by a threat actor, could cause significant harm. Treat all credentials, scripts, and deployments with the highest level of security.
+
+### App Service Authentication
+Critical! Configure Authentication on the Azure App Service so Entra ID auth is required before MDEAutomator's control panel.
+
+   ![Auth](./media/auth.png)
 
 ### PowerShell Security Hygiene
 
@@ -765,7 +771,26 @@ $results = Invoke-AdvancedHunting -Queries $queries
 $results | ConvertTo-Json -Depth 5
 ```
 
-## 26. Get-DetectionRules
+## 26. Invoke-MachineOffboard
+
+**Description:**  
+`Invoke-MachineOffboard` offboards one or more devices from Microsoft Defender for Endpoint. This action removes the device from active management and monitoring in MDE. Offboarding is typically used when a device is being decommissioned or is no longer required to be managed by Defender for Endpoint.
+
+**Warning:**  
+The action is permanant. 
+
+**Parameters:**
+
+- `-token` (securestring, required): OAuth2 access token. Obtain this from `Connect-MDE`.
+- `-DeviceIds` (string[], required): Array of device IDs to offboard. Use `Get-Machines` to obtain IDs.
+
+**Example:**
+```powershell
+$deviceIds = Get-Machines -token $token | Select-Object -ExpandProperty Id
+Invoke-MachineOffboard -token $token -DeviceIds $deviceIds
+```
+
+## 27. Get-DetectionRules
 
 **Description:**  
 `Get-DetectionRules` retrieves all Microsoft Defender Custom Detection rules via Microsoft Graph API as objects.
@@ -783,7 +808,7 @@ $rules | ConvertTo-Json -Depth 50
 Write-Host $rules 
 ```
 
-## 27. Install-DetectionRule
+## 28. Install-DetectionRule
 
 **Description:**  
 `Install-DetectionRule` installs a new Custom Detection rule in Microsoft Defender via Microsoft Graph API. Accepts a PowerShell object representing the rule definition.
@@ -801,7 +826,7 @@ $jsonContent = Get-Content .\MyDetectionRule.json | ConvertFrom-Json
 Install-DetectionRule -jsonContent $jsonContent
 ```
 
-## 28. Update-DetectionRule
+## 29. Update-DetectionRule
 
 **Description:**  
 `Update-DetectionRule` updates an existing Custom Detection rule in Microsoft Defender via Microsoft Graph API. Accepts the rule ID and the updated rule definition.
@@ -820,7 +845,7 @@ $jsonContent = Get-Content .\UpdatedDetectionRule.json | ConvertFrom-Json
 Update-DetectionRule -RuleId $ruleId -jsonContent $jsonContent
 ```
 
-## 29. Undo-DetectionRule
+## 30. Undo-DetectionRule
 
 **Description:**  
 `Undo-DetectionRule` deletes an existing Custom Detection rule in Microsoft Defender via Microsoft Graph API. Accepts the rule ID of the detection rule to remove.
