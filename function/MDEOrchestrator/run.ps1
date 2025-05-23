@@ -108,6 +108,7 @@ try {
                             try {
                                 $transcriptObj = Get-LiveResponseOutput -machineActionId $res.MachineActionId -token $using:token
                                 $transcript = $transcriptObj
+                                Write-Host "Transcript $($transcriptObj | ConvertTo-Json -Compress)"
                             } catch {
                                 $transcript = "Failed to get transcript: $($_.Exception.Message)"
                             }
