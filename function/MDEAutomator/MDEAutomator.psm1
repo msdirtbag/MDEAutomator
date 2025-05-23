@@ -397,8 +397,11 @@ function Invoke-MachineOffboard {
         [Parameter(Mandatory = $true)]
         [string[]]$DeviceIds
     )
+    $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+    )
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $plainToken"
     }
     $body = @{
         "Comment" = "MDEAutomator"
