@@ -80,6 +80,9 @@ try {
                 "InvokeStopAndQuarantineFile" { 
                     Invoke-StopAndQuarantineFile -token $using:token -Sha1s $Sha1s
                 }
+                "InvokeMachineOffboard" { 
+                    Invoke-MachineOffboard -token $using:token -Sha1s $Sha1s
+                }
                 "InvokeCollectInvestigationPackage" {
                     
                     $output = @()

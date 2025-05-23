@@ -62,7 +62,10 @@
         
     Invoke-FullDiskScan
         Initiates a full antivirus scan on specified devices.
-
+    
+    Invoke-MachineOffboard
+        Offboards specified devices from MDE.
+        
     Invoke-StopAndQuarantineFile
         Stops and quarantines a file on all onboarded devices.
 
