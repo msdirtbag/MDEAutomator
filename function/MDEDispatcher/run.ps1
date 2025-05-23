@@ -81,7 +81,7 @@ try {
                     Invoke-StopAndQuarantineFile -token $using:token -Sha1s $Sha1s
                 }
                 "InvokeMachineOffboard" { 
-                    Invoke-MachineOffboard -token $using:token -Sha1s $Sha1s
+                    Invoke-MachineOffboard -token $using:token -DeviceIds $deviceId 
                 }
                 "InvokeCollectInvestigationPackage" {
                     
