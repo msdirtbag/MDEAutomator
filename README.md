@@ -23,6 +23,7 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
     - `InvokeCollectInvestigationPackage` - Collects Investigation Packages and uploads them to the `packages` blob container.
     - `InvokeStopAndQuarantineFile` - Searches for file on disk, encrypts the file and saves the file in the local WDAV quarantine folder.
     - `InvokeFullDiskScan` - Starts Full-disk WDAV scan jobs.
+    - `InvokeMachineOffboard` - Attempts to offboard the endpoint from MDE monitoring.   
   - **MDEOrchestrator**  
     Automates bulk management of Live Response commands:
     - `InvokeUploadLR`- Uploads local file to Live Response Library using byte array.
