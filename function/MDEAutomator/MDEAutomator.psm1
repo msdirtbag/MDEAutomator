@@ -393,7 +393,7 @@ function Invoke-FullDiskScan {
 function Invoke-MachineOffboard {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$token,
+        [securestring]$token,
         [Parameter(Mandatory = $true)]
         [string[]]$DeviceIds
     )
