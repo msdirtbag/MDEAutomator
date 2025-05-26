@@ -274,7 +274,7 @@ This software is provided "as is", without warranty of any kind, express or impl
 
 ## Working with MDEAutomator Storage Account
 
-MDEAutomator leverages a Azure Storage Account to save investigation packages & file ZIP's collected from MDE endpoints, AutoHunt JSON output, and Custom Detection JSON's. 
+MDEAutomator leverages a Azure Storage Account to save investigation packages zips & file gzips collected from MDE endpoints, AutoHunt JSON output, and Custom Detection JSON's. 
 
 Azure Portal:
 
@@ -283,7 +283,7 @@ Azure Portal:
 Azure Storage Explorer
 
 ![StorageEx](./media/storagex.png)
-[Download](https://azure.microsoft.com/en-us/products/storage/storage-explorer/#Download-4)
+[Download Azure Storage Explorer](https://azure.microsoft.com/en-us/products/storage/storage-explorer/#Download-4)
 
 ---
 
