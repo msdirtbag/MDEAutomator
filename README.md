@@ -4,6 +4,12 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 
 ![main](./media/main.png)
 
+
+![iocmanager](./media/iocmanager.png)
+
+
+![cdmanager](./media/cdmanager.png)
+
 ---
 
 ## Core Components
@@ -46,6 +52,12 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
   - **MDECDManager**  
     Automates synchronization of Custom Detections from a blob container:
     - Installs or updates Defender Custom Detections based on JSON files in the Detections blob container.
+    - Backs up existing Custom Detections as JSON files to a blob container
+
+  ![CustomDetections](./media/cds.png)
+
+
+  ![StorageEx](./media/storageex.png)
 
 ---
 
@@ -65,7 +77,8 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 
 - Python/Flask-based GUI hosted in a Azure App Service. 
 - Core functionality: Dispatcher, Orchestator, Profiles
-- Future functionality: Custom Detection Manager & AutoHunt Manager
+- Threat Intelligence Manager
+- Future functionality: Hunter Console
 
 ---
 
@@ -252,6 +265,21 @@ Critical! Configure Authentication on the Azure App Service so Entra ID auth is 
 ## Disclaimer
 
 This software is provided "as is", without warranty of any kind, express or implied. The author and contributors are not responsible for any damages, losses, or issues arising from the use of this software. Use at your own risk.
+
+---
+
+## Working with MDEAutomator Storage Account
+
+MDEAutomator leverages a Azure Storage Account to save investigation packages & file ZIP's collected from MDE endpoints, AutoHunt JSON output, and Custom Detection JSON's. 
+
+Azure Portal:
+
+![AzPortal](./media/blobstorage.png)
+
+Azure Storage Explorer
+
+![StorageEx](./media/storageex.png)
+[Download](https://azure.microsoft.com/en-us/products/storage/storage-explorer/#Download-4)
 
 ---
 
