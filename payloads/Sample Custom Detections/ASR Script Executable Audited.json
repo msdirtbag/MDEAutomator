@@ -1,0 +1,31 @@
+{
+  "displayName": "ASR Script Executable Audited",
+  "schedule": {
+    "period": "0"
+  },
+  "detectionAction": {
+    "organizationalScope": null,
+    "alertTemplate": {
+      "description": ".",
+      "mitreTechniques": [
+        "T1059.001",
+        "T1059.006"
+      ],
+      "recommendedActions": null,
+      "impactedAssets": [
+        {
+          "@odata.type": "#microsoft.graph.security.impactedDeviceAsset",
+          "identifier": "deviceName"
+        }
+      ],
+      "category": "Execution",
+      "title": "ASR Script Executable Audited",
+      "severity": "medium"
+    },
+    "responseActions": []
+  },
+  "isEnabled": true,
+  "queryCondition": {
+    "queryText": "DeviceEvents\n| where ActionType in (\"AsrScriptExecutableDownloadAudited\")\n"
+  }
+}

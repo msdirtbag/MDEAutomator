@@ -199,3 +199,11 @@ def send_command():
 
     current_app.logger.info(f"Command '{specific_action}' for Azure Function '{function_name_for_url}' processed. Result: {result}")
     return jsonify({'message': 'Command sent successfully!', 'result': result})
+
+@main_bp.route('/timanager', methods=['GET'])
+def timanager():
+    return render_template(
+        'TIManager.html',
+        FUNCURL=current_app.config.get('FUNCURL'),
+        FUNCKEY=current_app.config.get('FUNCKEY')
+    )

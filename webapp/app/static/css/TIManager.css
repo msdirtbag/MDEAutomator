@@ -1,13 +1,14 @@
 .index-container {
     padding: 0;
     margin: 0;
+    /* Remove centering for full-width table */
     align-items: stretch;
     justify-content: flex-start;
     min-height: unset;
     background-color: var(--background-color);
     color: var(--text-color-dark);
+    /* Forcibly disable horizontal scrolling */
     overflow-x: hidden;
-    height: calc(100vh - 140px);
 }
 
 .index-header {
@@ -59,10 +60,9 @@
     padding: 1rem 2rem;
     background: #142a17;
     border-bottom: 1px solid #00ff41;
-    position: relative;
+    position: sticky;
     top: 0;
     z-index: 10;
-    min-height: 3.5rem; /* Ensure enough height for vertical centering */
 }
 
 .toolbar-left {
@@ -99,8 +99,7 @@
 #machines-table {
     width: 100%;
     height: calc(100vh - 140px);
-    overflow-x: hidden;
-    overflow-y: auto;
+    overflow: hidden;
     margin: 0;
     padding: 0;
     background: #101c11;
@@ -110,9 +109,7 @@
 .gridjs-wrapper {
     width: 100% !important;
     overflow-x: hidden !important;
-    overflow-y: auto !important;
     display: block !important;
-    max-height: calc(100vh - 140px);
 }
 
 .gridjs-table {
@@ -192,22 +189,23 @@
     }
 }
 
-/* Responsive table containers for TIManager */
+/* Responsive table containers for TIManager only */
 #iocTableContainer, #detectionsTableContainer {
-  overflow-x: auto;
+  overflow-x: hidden; /* Prevent horizontal scrollbars */
   width: 100%;
   box-sizing: border-box;
 }
 
-/* Restore gridjs default width, only set min-width for scroll */
-.gridjs-table {
+#iocTableContainer .gridjs-table,
+#detectionsTableContainer .gridjs-table {
   width: 100% !important;
-  table-layout: fixed !important;
+  table-layout: fixed !important; /* Distribute columns evenly */
 }
 
-.gridjs-wrapper {
+#iocTableContainer .gridjs-wrapper,
+#detectionsTableContainer .gridjs-wrapper {
   width: 100%;
-  overflow-x: hidden;
+  overflow-x: hidden; /* Prevent horizontal scrollbars */
 }
 
 .index-title-bar, .ti-title-bar {
@@ -226,4 +224,9 @@
     transform: translate(-50%, -50%);
     right: 0;
     /* Now perfectly centered both horizontally and vertically */
+}
+
+.toolbar {
+    position: relative;
+    min-height: 3.5rem; /* Ensure enough height for vertical centering */
 }

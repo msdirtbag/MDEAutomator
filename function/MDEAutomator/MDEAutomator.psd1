@@ -1,6 +1,6 @@
 @{
     # Module Identity
-    ModuleVersion     = '1.5.7'
+    ModuleVersion     = '1.5.8'
     GUID              = '010c4ef2-f71c-4bce-84cc-de9752cf1577'
     RootModule        = 'MDEAutomator.psm1'
 
@@ -9,6 +9,11 @@
     Copyright         = '(c) All Rights Reserved.'
     Description       = 'Microsoft Defender for Endpoint Automation Module'
     PowerShellVersion = '5.1'
+
+    # Required Modules
+    RequiredModules = @(
+        'Microsoft.Graph.Authentication'
+    )
 
     # Export Settings
     FunctionsToExport = @(

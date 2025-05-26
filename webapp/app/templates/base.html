@@ -7,6 +7,29 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
+    <div style="position: absolute; top: 0.5rem; right: 2rem; z-index: 100;">
+        <select id="pageNavDropdown" class="toolbar-dropdown" style="min-width: 160px;">
+            <option value="/">MDEAutomator</option>
+            <option value="/timanager">TIManager</option>
+        </select>
+    </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const nav = document.getElementById('pageNavDropdown');
+        if (nav) {
+            const current = window.location.pathname.toLowerCase();
+            for (let i = 0; i < nav.options.length; i++) {
+                if (nav.options[i].value.toLowerCase() === current) {
+                    nav.selectedIndex = i;
+                    break;
+                }
+            }
+            nav.onchange = function() {
+                window.location.href = nav.value;
+            };
+        }
+    });
+    </script>
     {% block content %}{% endblock %}
     
     <script src="{{ url_for('static', filename='js/base.js') }}"></script>

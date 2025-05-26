@@ -1,5 +1,5 @@
 # MDECDManager Function App
-# 1.5.7
+# 1.5.8
 
 using namespace System.Net
 
@@ -24,15 +24,13 @@ try {
     $subscriptionId = [System.Environment]::GetEnvironmentVariable('SUBSCRIPTION_ID', 'Process')
     Set-AzContext -Subscription $subscriptionId -ErrorAction Stop
 
-    # Connect to Azure Storage
+    # 1. Get current tenant rules first
+    $currentRules = Get-DetectionRules
+    Write-Host "Current detection rules: $($currentRules.Count)"
+
+    # 2. Get blob library
     $ctx = New-AzStorageContext -StorageAccountName $StorageAccountName -UseConnectedAccount
-
-    # Download all JSON files from 'detections' container
     $blobs = Get-AzStorageBlob -Container $ContainerName -Context $ctx | Where-Object { $_.Name -like '*.json' }
-    if (-not $blobs) {
-        throw "No JSON files found in the 'detections' blob container."
-    }
-
     $localTemp = [System.IO.Path]::GetTempPath()
     $repoRules = @()
     foreach ($blob in $blobs) {
@@ -49,37 +47,52 @@ try {
         }
     }
 
-    if (-not $repoRules) {
-        throw "No valid repository rules found."
+    # 3. Backup tenant rules not found in blob library
+    $repoRuleNames = $repoRules | ForEach-Object { $_.Content.DisplayName.ToLower() }
+    $tenantOnlyRules = $currentRules | Where-Object { $repoRuleNames -notcontains $_.displayName.ToLower() }
+    foreach ($rule in $tenantOnlyRules) {
+        try {
+            $sanitizedName = ($rule.displayName -replace '[^a-zA-Z0-9_-]', '_')
+            $backupFileName = ("{0}-bak.json" -f $sanitizedName)
+            $ruleJson = $rule | ConvertTo-Json -Depth 10
+            $localBackupPath = Join-Path $localTemp $backupFileName
+            $ruleJson | Out-File -FilePath $localBackupPath -Encoding utf8 -Force
+            Set-AzStorageBlobContent -File $localBackupPath -Container $ContainerName -Blob $backupFileName -Context $ctx -Force | Out-Null
+            Write-Host "Backed up tenant-only rule: $($rule.displayName) to blob storage as $backupFileName"
+        } catch {
+            Write-Host "Failed to back up rule: $($rule.displayName). Error: $_"
+        }
     }
 
-    $currentRules = Get-DetectionRules
-    Write-Host "Current detection rules: $($currentRules.Count)"
+    # 4. Filter out any -bak.json files from repoRules so they are not repushed
+    $repoRules = $repoRules | Where-Object { -not $_.FileName.ToLower().EndsWith('-bak.json') }
 
     $installedCount = 0
     $updatedCount = 0
 
-    if (-not $currentRules) {
-        Write-Host "No current detection rules found. Installing all repository rules."
-        foreach ($repoRule in $repoRules) {
-            Install-DetectionRule -jsonContent $repoRule.Content
-            $installedCount++
-        }
-    } else {
-        foreach ($repoRule in $repoRules) {
-            $repoDisplayName = $repoRule.Content.DisplayName.ToLower()
-            $currentRule = $currentRules | Where-Object { $_.displayName.ToLower() -eq $repoDisplayName } | Select-Object -First 1
-            if ($currentRule) {
+    # 5. Install/update rules based on the non -bak.json rules found in the library
+    foreach ($repoRule in $repoRules) {
+        $repoDisplayName = $repoRule.Content.DisplayName.ToLower()
+        $currentRule = $currentRules | Where-Object { $_.displayName.ToLower() -eq $repoDisplayName } | Select-Object -First 1
+        if ($currentRule) {
+            try {
                 Write-Host "Updating rule: $($repoRule.Content.DisplayName)"
                 Update-DetectionRule -RuleId $currentRule.id -jsonContent $repoRule.Content
                 $updatedCount++
-            } else {
+            } catch {
+                Write-Host "Failed to update rule: $($repoRule.Content.DisplayName). Error: $_"
+            }
+        } else {
+            try {
                 Write-Host "Installing new rule: $($repoRule.Content.DisplayName)"
                 Install-DetectionRule -jsonContent $repoRule.Content
                 $installedCount++
+            } catch {
+                Write-Host "Failed to install new rule: $($repoRule.Content.DisplayName). Error: $_"
             }
         }
     }
+    Write-Host "Sync complete: Installed $installedCount rules, Updated $updatedCount rules."
     $Body = @{
         Installed = $installedCount
         Updated   = $updatedCount

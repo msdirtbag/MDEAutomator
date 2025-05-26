@@ -1,5 +1,5 @@
 # MDETIManager Function App
-# 1.5.7
+# 1.5.8
 
 using namespace System.Net
 
@@ -61,6 +61,12 @@ try {
         "UndoTiCert" {
             if (-not $Sha1s) { throw "Sha1s parameter is required for UndoTiCert" }
             Undo-TiCert -token $token -Sha1s $Sha1s
+        }
+        "GetIndicators" {
+            Get-Indicators -token $token
+        }
+        "GetDetectionRules" {
+            Get-DetectionRules
         }
         default {
             $Result = [HttpStatusCode]::BadRequest

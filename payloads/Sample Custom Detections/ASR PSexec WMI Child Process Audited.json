@@ -1,0 +1,31 @@
+{
+  "displayName": "ASR PSexec WMI Child Process Audited",
+  "schedule": {
+    "period": "0"
+  },
+  "detectionAction": {
+    "organizationalScope": null,
+    "alertTemplate": {
+      "description": ".",
+      "mitreTechniques": [
+        "T1021",
+        "T1021.006"
+      ],
+      "recommendedActions": null,
+      "impactedAssets": [
+        {
+          "@odata.type": "#microsoft.graph.security.impactedDeviceAsset",
+          "identifier": "deviceName"
+        }
+      ],
+      "category": "LateralMovement",
+      "title": "ASR PSexec-WMI Child Process Audited",
+      "severity": "low"
+    },
+    "responseActions": []
+  },
+  "isEnabled": true,
+  "queryCondition": {
+    "queryText": "DeviceEvents\n| where ActionType in (\"AsrPsexecWmiChildProcessAudited\")"
+  }
+}

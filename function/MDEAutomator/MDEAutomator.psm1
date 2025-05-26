@@ -411,36 +411,21 @@ function Invoke-MachineOffboard {
     foreach ($DeviceId in $DeviceIds) {
         $uri = "https://api.securitycenter.microsoft.com/api/machines/$DeviceId/offboard"
         try {
-            Write-Host "Attempting to offboard DeviceId: $DeviceId"
-            
+            $response = $null
             try {
                 $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body ($body | ConvertTo-Json) -ContentType "application/json" -ErrorAction Stop
-            }
-            catch {
+            } catch {
                 if ($_.Exception.Response.StatusCode -eq 400 -and 
                     $_.Exception.Response.Content -match '"code":\s*"ActiveRequestAlreadyExists"') {
-                    Write-Host "Action already in progress for DeviceId: $DeviceId"
-                    $responses += [PSCustomObject]@{
-                        DeviceId = $DeviceId
-                        Response = [PSCustomObject]@{
-                            Status = "InProgress"
-                            Message = "Action already in progress"
-                        }
-                    }
-                    continue
+                    Write-Host "ActiveRequestAlreadyExists for DeviceId: $DeviceId"
+                } else {
+                    Write-Host "Error offboarding DeviceId: $DeviceId - $($_.Exception.Message)"
                 }
-                throw 
+                continue
             }
-            
+
             if ([string]::IsNullOrEmpty($response.id)) {
                 Write-Host "No machine action ID received for DeviceId: $DeviceId"
-                $responses += [PSCustomObject]@{
-                    DeviceId = $DeviceId
-                    Response = [PSCustomObject]@{
-                        Status = "Failed"
-                        Message = "No action ID received"
-                    }
-                }
                 continue
             }
 
@@ -452,8 +437,6 @@ function Invoke-MachineOffboard {
                 DeviceId = $DeviceId
                 Response = [PSCustomObject]@{
                     Id = $response.id
-                    Type = $response.type
-                    Title = $response.title
                     Status = if ($statusSucceeded) { "Succeeded" } else { "Failed" }
                     MachineId = $response.machineId
                     ComputerDnsName = $response.computerDnsName
@@ -461,16 +444,8 @@ function Invoke-MachineOffboard {
                 }
             }
             Write-Host "Offboarding status for DeviceId $DeviceId : $(if ($statusSucceeded) { 'Succeeded' } else { 'Failed' })"
-
         } catch {
-            Write-Error "Failed to offboard DeviceId: $DeviceId. Error: $_"
-            $responses += [PSCustomObject]@{
-                DeviceId = $DeviceId
-                Response = [PSCustomObject]@{
-                    Status = "Error"
-                    Message = $_.Exception.Message
-                }
-            }
+            Write-Host "Error offboarding DeviceId: $DeviceId - $($_.Exception.Message)"
         }
     }
     return $responses
@@ -2052,8 +2027,9 @@ function Invoke-TiFile {
                 "indicatorType" = "FileSha1"
                 "title" = "MDEAutomator $Sha1"
                 "action" = "BlockAndRemediate"
+                "generateAlert" = $true
                 "severity" = "High"
-                "description" = "MDEautomator has created this Custom Threat Indicator."
+                "description" = "MDEAutomator has created this Custom Threat Indicator."
                 "recommendedActions" = "Investigate & take appropriate action."
             }
             try {
@@ -2082,8 +2058,9 @@ function Invoke-TiFile {
                 "indicatorType" = "FileSha256"
                 "title" = "MDEAutomator $Sha256"
                 "action" = "BlockAndRemediate"
+                "generateAlert" = $true
                 "severity" = "High"
-                "description" = "MDEautomator has created this Custom Threat Indicator."
+                "description" = "MDEAutomator has created this Custom Threat Indicator."
                 "recommendedActions" = "Investigate & take appropriate action."
             }
             try {
@@ -2193,7 +2170,6 @@ function Undo-TiFile {
             }
         }
     }
-
     return $responses 
 }
 
@@ -2232,9 +2208,10 @@ function Invoke-TiIP {
                 "indicatorValue" = $IP
                 "indicatorType" = "IpAddress"
                 "action" = "Block"
+                "generateAlert" = $true
                 "severity" = "High"
                 "title" = "MDEAutomator $IP"
-                "description" = "MDEautomator has created this Custom Threat Indicator."
+                "description" = "MDEAutomator has created this Custom Threat Indicator."
                 "recommendedActions" = "Investigate & take appropriate action."
             }
             try {
@@ -2337,9 +2314,10 @@ function Invoke-TiURL {
             "indicatorValue" = "$URL"
             "indicatorType" = "DomainName"
             "action" = "Block"
+            "generateAlert" = $true
             "severity" = "High"
             "title" = "MDEAutomator $URL"
-            "description" = "MDEautomator has created this Custom Threat Indicator."
+            "description" = "MDEAutomator has created this Custom Threat Indicator."
             "recommendedActions" = "Investigate & take appropriate action."
         }
         try {
@@ -2434,8 +2412,9 @@ function Invoke-TiCert {
                 "indicatorType" = "CertificateThumbprint"
                 "title" = "MDEAutomator $Sha1"
                 "action" = "Block"
+                "generateAlert" = $true
                 "severity" = "High"
-                "description" = "MDEautomator has created this Custom Threat Indicator."
+                "description" = "MDEAutomator has created this Custom Threat Indicator."
                 "recommendedActions" = "Investigate & take appropriate action."
             }
             try {

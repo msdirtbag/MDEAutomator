@@ -5,6 +5,8 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 ![main](./media/main.png)
 
 
+### Threat Intelligence Manager
+
 ![iocmanager](./media/iocmanager.png)
 
 
@@ -28,7 +30,7 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
     - `UndoRestrictAppExecution`- Removes Microsoft-only code integrity policy.
     - `InvokeCollectInvestigationPackage` - Collects Investigation Packages and uploads them to the `packages` blob container.
     - `InvokeStopAndQuarantineFile` - Searches for file on disk, encrypts the file and saves the file in the local WDAV quarantine folder.
-    - `InvokeFullDiskScan` - Starts Full-disk WDAV scan jobs.
+    - `InvokeFullDiskScan` - Starts full-disk WDAV scan jobs.
     - `InvokeMachineOffboard` - Attempts to offboard the endpoint from MDE monitoring.   
   - **MDEOrchestrator**  
     Automates bulk management of Live Response commands:
@@ -48,7 +50,7 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
     - `InvokeTiCert` / `UndoTiCert`: Creates/removes certificate-based indicators (by thumbprint)
   - **MDEAutoHunt**  
     Automates bulk threat hunting and exports output to Azure Storage:
-    - Relays groups of KQL queries to the MDE API, exports responses as JSON, and saves to Azure Storage.
+    - Relays groups of KQL queries to the Graph API, exports responses as JSON, and saves to a blob container.
   - **MDECDManager**  
     Automates synchronization of Custom Detections from a blob container:
     - Installs or updates Defender Custom Detections based on JSON files in the Detections blob container.
@@ -57,7 +59,7 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
   ![CustomDetections](./media/cds.png)
 
 
-  ![StorageEx](./media/storageex.png)
+  ![StorageEx](./media/storagex.png)
 
 ---
 
@@ -70,7 +72,7 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 - Secretless App Registration/UMI auth + manual `$SPNSECRET` flexibility
 - Ability to deliver key configuration settings via PowerShell that are not available in Endpoint Security Profiles. 
 - Bulk Threat Hunting via Microsoft Graph
-- Bulk Custom Detection syncronization from Azure Storage
+- Bulk Custom Detection syncronization with Azure Storage
 - Convenient upload of endpoint packages/files to Azure Storage
 
 ## Development Features
@@ -90,6 +92,8 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 - App Service Plan 
 - Azure Storage
 - User Managed Identity
+
+  ![AzureParts](./media/azureparts.png)
 
 MDEAutomator Estimated Monthly Azure Cost: ~$210 USD
 
@@ -278,7 +282,7 @@ Azure Portal:
 
 Azure Storage Explorer
 
-![StorageEx](./media/storageex.png)
+![StorageEx](./media/storagex.png)
 [Download](https://azure.microsoft.com/en-us/products/storage/storage-explorer/#Download-4)
 
 ---

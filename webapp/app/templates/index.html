@@ -8,19 +8,25 @@
 {% block content %}
 <div class="toolbar">
     <div class="toolbar-left">
-        <div class="dropdown-group">
-            <select id="functionDropdown" class="toolbar-dropdown">
-                <option value="MDEDispatcher">Dispatcher</option>
-                <option value="MDEOrchestrator">Orchestrator</option>
-                <option value="MDEProfiles">Profiles</option>
-            </select>
-            <select id="commandDropdown" class="toolbar-dropdown"></select>
-            <span id="extraParams"></span>
+        <div class="dropdown-group" style="display: flex; align-items: center;">
+            <input type="text" id="tenantInput" class="toolbar-dropdown" placeholder="Tenant ID" style="width: 160px; margin-right: 0.5rem;" />
+            <button id="saveTenantBtn" class="cta-button" style="margin-right: 2.5rem;">Save Tenant</button>
+            <span class="index-title-bar" style="font-size: 2.1rem; font-weight: bold; color: #7fff7f; margin-right: 2.5rem; letter-spacing: 0.5px; text-shadow: 0 0 8px #00ff41;">MDEAutomator</span>
         </div>
+    </div>
+</div>
+<div class="toolbar" style="border-top: none; border-bottom: 2px solid #00ff41; background: #101c11;">
+    <div class="toolbar-left">
+        <select id="functionDropdown" class="toolbar-dropdown">
+            <option value="MDEDispatcher">Dispatcher</option>
+            <option value="MDEOrchestrator">Orchestrator</option>
+            <option value="MDEProfiles">Profiles</option>
+        </select>
+        <select id="commandDropdown" class="toolbar-dropdown"></select>
+        <span id="extraParams"></span>
         <button id="sendCommandBtn" class="cta-button">Send to Selected Devices</button>
         <button id="refreshMachines" class="cta-button">Refresh Machines</button>
     </div>
-    <div class="toolbar-title">MDEAutomator</div>
 </div>
 <div class="index-container">
     <div id="machines-table"></div>
@@ -37,7 +43,6 @@ window.FUNCKEY = "{{ FUNCKEY }}";
 </script>
 {% endif %}
 <script>
-// Real backend function names and required extra params
 const functionCommands = {
     'MDEDispatcher': [
         { label: 'Isolate Device', value: 'InvokeMachineIsolation' },
@@ -59,7 +64,6 @@ const functionCommands = {
     'MDEProfiles': []
 };
 
-// Add tenant selector UI to toolbar with Save button
 window.addEventListener('DOMContentLoaded', () => {
     const toolbarLeft = document.querySelector('.toolbar-left .dropdown-group');
     if (!document.getElementById('tenantInput')) {
@@ -70,10 +74,8 @@ window.addEventListener('DOMContentLoaded', () => {
         tenantInput.placeholder = 'Tenant ID';
         tenantInput.style.width = '160px';
         tenantInput.style.marginRight = '0.5rem';
-        // Load from sessionStorage if available
         const savedTenant = sessionStorage.getItem('TenantId');
         if (savedTenant) tenantInput.value = savedTenant;
-        // Add Save button
         const saveBtn = document.createElement('button');
         saveBtn.id = 'saveTenantBtn';
         saveBtn.className = 'cta-button';
@@ -93,7 +95,6 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Helper to get current TenantId
 function getTenantId() {
     const tenantInput = document.getElementById('tenantInput');
     return tenantInput ? tenantInput.value.trim() : '';
@@ -115,7 +116,6 @@ function updateCommandDropdown() {
     const func = document.getElementById('functionDropdown').value;
     const cmdDropdown = document.getElementById('commandDropdown');
     cmdDropdown.innerHTML = '';
-    // Only show command dropdown for Dispatcher/Orchestrator
     if (func === 'MDEProfiles') {
         cmdDropdown.style.display = 'none';
         updateExtraParams();
@@ -140,7 +140,6 @@ function updateExtraParams() {
     let isUpload = false;
     let isContain = false;
     if (func === 'MDEProfiles') {
-        // Show only the mode selector for Profiles
         const select = document.createElement('select');
         select.id = 'extraParamInput';
         select.className = 'toolbar-dropdown';
@@ -158,14 +157,12 @@ function updateExtraParams() {
         const extra = selected ? selected.getAttribute('data-extra') : '';
         const funcConfig = functionCommands[func][cmdDropdown.selectedIndex];
         if (selected && selected.value === 'InvokeContainDevice') {
-            // UI for Contain Unmanaged Device
             const input = document.createElement('input');
             input.type = 'text';
             input.id = 'containDeviceIdInput';
             input.placeholder = 'Enter DeviceId';
             input.className = 'toolbar-dropdown';
             extraParamsDiv.appendChild(input);
-            // Contain button
             const containBtn = document.createElement('button');
             containBtn.id = 'containBtn';
             containBtn.className = 'cta-button';
@@ -182,14 +179,12 @@ function updateExtraParams() {
             };
             isContain = true;
         } else if (selected && selected.value === 'UndoContainDevice') {
-            // UI for Release from Containment
             const input = document.createElement('input');
             input.type = 'text';
             input.id = 'containDeviceIdInput';
             input.placeholder = 'Enter DeviceId';
             input.className = 'toolbar-dropdown';
             extraParamsDiv.appendChild(input);
-            // Release button
             const releaseBtn = document.createElement('button');
             releaseBtn.id = 'releaseContainBtn';
             releaseBtn.className = 'cta-button';
@@ -206,8 +201,6 @@ function updateExtraParams() {
             };
             isContain = true;
         } else if (selected && selected.value === 'InvokeUploadLR') {
-            // File upload for Live Response Library
-            // Remove any existing upload button to prevent multiple event handlers
             const prevUploadBtn = document.getElementById('uploadFileBtn');
             if (prevUploadBtn && prevUploadBtn.parentNode) {
                 prevUploadBtn.parentNode.removeChild(prevUploadBtn);
@@ -221,15 +214,13 @@ function updateExtraParams() {
             fileInput.id = 'extraFileInput';
             fileInput.className = 'toolbar-dropdown';
             fileInput.accept = '.zip,.ps1,.exe,.dll,.txt,.csv,.json,.gz,.tar,.7z,.rar,.bat,.cmd,.sh,.py,.rb,.pl,.vbs,.js,.jar,.msi,.msp,.reg,.xml,.conf,.ini,.log,.bin,.dat,.db,.bak,.sql,.cer,.crt,.pem,.pfx,.key,.asc,.md,.rtf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.jpg,.jpeg,.png,.gif,.bmp,.ico,.svg,.mp3,.wav,.mp4,.avi,.mov,.wmv,.flv,.mkv,.ts,.m4v,.webm,.ogg,.opus,.aac,.3gp,.3g2,.midi,.mid,.apk,.ipa,.appx,.xap,.cab,.iso,.img,.vhd,.vhdx,.ova,.ovf,.qcow,.qcow2,.vmdk,.vdi,.raw,.img,.dmg,.toast,.sparseimage,.sparsebundle,.sparsebundleimage,.sparsebundlevolume,.sparsebundlepartition,.sparsebundlepartitionimage,.sparsebundlepartitionvolume,.sparsebundlepartitionpartition,.sparsebundlepartitionpartitionimage,.sparsebundlepartitionpartitionvolume,.sparsebundlepartitionpartitionpartition,.sparsebundlepartitionpartitionpartitionimage,.sparsebundlepartitionpartitionpartitionvolume,.sparsebundlepartitionpartitionpartitionpartition,.sparsebundlepartitionpartitionpartitionpartitionimage,.sparsebundlepartitionpartitionpartitionpartitionvolume';
-            fileInput.maxSize = 250 * 1024 * 1024; // 250 MB
+            fileInput.maxSize = 250 * 1024 * 1024; 
             extraParamsDiv.appendChild(fileInput);
-            // Show file size warning
             const note = document.createElement('span');
             note.textContent = ' (Max 250 MB)';
             note.style.marginLeft = '1rem';
             note.style.color = '#888';
             extraParamsDiv.appendChild(note);
-            // Add Upload button
             const uploadBtn = document.createElement('button');
             uploadBtn.id = 'uploadFileBtn';
             uploadBtn.className = 'cta-button';
@@ -251,7 +242,6 @@ function updateExtraParams() {
                 formData.append('Function', 'InvokeUploadLR');
                 formData.append('file', file);
                 formData.append('TenantId', getTenantId());
-                // TargetFileName is inferred from file.name
                 formData.append('TargetFileName', file.name);
                 const res = await fetch('/api/send_command', {
                     method: 'POST',
@@ -295,8 +285,8 @@ async function sendContainCommand(specificCommandName, deviceId) {
         return;
     }
     const payload = {
-        function_name: 'MDEDispatcher', // For Flask to select the Azure Function URL
-        command: specificCommandName,  // For Flask to determine the action, then map to 'Function' for PowerShell
+        function_name: 'MDEDispatcher',
+        command: specificCommandName, 
         DeviceIds: [deviceId],
         TenantId: tenantId
     };
@@ -320,6 +310,7 @@ let selectedDeviceIds = [];
 function getDeviceIdColumnIndex(columns) {
     return columns.findIndex(col => col.toLowerCase() === 'deviceid' || col.toLowerCase() === 'id');
 }
+
 async function loadMachines() {
     if (!window.FUNCURL || !window.FUNCKEY) {
         alert('FUNCURL and FUNCKEY are not set. Please contact your administrator.');
@@ -341,8 +332,6 @@ async function loadMachines() {
         body: JSON.stringify(payload)
     });
     const data = await res.json();
-    console.log('Raw response from backend:', data); // Debug log
-    // Try to find the array of machines in the response
     let machinesRaw = data.machines || data.value;
     if (!Array.isArray(machinesRaw)) {
         if (Array.isArray(data)) {
@@ -356,11 +345,6 @@ async function loadMachines() {
             }
         }
     }
-    // DEBUG: Log the first row to verify keys
-    if (machinesRaw && machinesRaw.length > 0) {
-        console.log('First machine object:', machinesRaw[0]);
-    }
-    // The columns definition, ensuring 'Id' is the second data column after the checkbox.
     const columns = [
         { id: 'checkbox', name: '', width: '30px', formatter: (_, row) => gridjs.html(`<input type='checkbox' class='device-checkbox' data-deviceid='${row.cells[0].data}' />`) },
         { id: 'id', name: 'DeviceId', width: 'minmax(100px, 1fr)' },
@@ -371,9 +355,9 @@ async function loadMachines() {
         { id: 'lastIpAddress', name: 'LastIpAddress', width: 'minmax(120px, 1fr)' },
         { id: 'lastExternalIpAddress', name: 'LastExternalIpAddress', width: 'minmax(120px, 1fr)' },
         { id: 'deviceValue', name: 'DeviceValue', width: 'minmax(100px, 1fr)' },
-        { id: 'rbacGroupName', name: 'RbacGroupName', width: 'minmax(120px, 1fr)' },
+        { id: 'rbacGroupName', name: 'DeviceGroup', width: 'minmax(120px, 1fr)' },
         { id: 'riskScore', name: 'RiskScore', width: 'minmax(80px, 1fr)' },
-        { id: 'machineTags', name: 'MachineTags', width: 'minmax(120px, 1fr)' }
+        { id: 'machineTags', name: 'DeviceTags', width: 'minmax(120px, 1fr)' }
     ];
     const machines = machinesRaw.map(row => {
         const machineId = row['Id'] || row['id'] || ''; 
@@ -437,16 +421,15 @@ async function loadMachines() {
         });
     }, 500);
 }
+
 document.getElementById('refreshMachines').onclick = loadMachines;
 document.getElementById('sendCommandBtn').onclick = async function() {
     const funcGroup = document.getElementById('functionDropdown').value;
     const tenantId = getTenantId();
-
     if (!tenantId && funcGroup !== 'SomeFunctionThatDoesNotNeedTenant') { 
         alert('Tenant ID is required.');
         return;
     }
-
     let payload = {
         DeviceIds: selectedDeviceIds,
         TenantId: tenantId
@@ -494,17 +477,10 @@ document.getElementById('sendCommandBtn').onclick = async function() {
             payload[extraAttr] = extraValue; 
         }
     }
-
-    // Common validation for device selection for the main "Send to Selected Devices" button
     if (selectedDeviceIds.length === 0) {
-        // This check applies if the command sent via this button requires selected devices.
-        // Commands like 'InvokeContainDevice' or 'InvokeUploadLR' are handled by separate buttons
-        // and have their own device/parameter handling.
         alert('Please select at least one device from the table.');
         return;
     }
-
-    console.log('Sending payload via sendCommandBtn:', JSON.stringify(payload, null, 2)); // Debug log for the payload
     const res = await fetch('/api/send_command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
