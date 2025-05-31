@@ -7,10 +7,11 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <div style="position: absolute; top: 0.5rem; right: 2rem; z-index: 100;">
+    <div style="position: absolute; top: 0; right: 2rem; height: 3.5rem; z-index: 100; display: flex; align-items: center;">
         <select id="pageNavDropdown" class="toolbar-dropdown" style="min-width: 160px;">
             <option value="/">MDEAutomator</option>
             <option value="/timanager">TIManager</option>
+            <option value="/actionmanager">ActionManager</option>
         </select>
     </div>
     <script>

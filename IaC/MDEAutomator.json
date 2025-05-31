@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.35.1.17967",
-      "templateHash": "6152226012410346450"
+      "version": "0.36.1.42791",
+      "templateHash": "2700608257173883686"
     }
   },
   "parameters": {
@@ -33,6 +33,19 @@
       "name": "[guid(variables('environmentid'), 'ba92f5b4-2d11-453d-a403-e96b0029c9fe', subscription().id)]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid'))), '2024-11-30').principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(variables('environmentid'), '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3', subscription().id)]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3')]",
         "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid'))), '2024-11-30').principalId]",
         "principalType": "ServicePrincipal"
       },
@@ -154,6 +167,17 @@
       "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
       "apiVersion": "2024-01-01",
       "name": "[format('{0}/{1}/{2}', format('stmdeauto{0}', variables('environmentid')), 'default', 'detections')]",
+      "properties": {
+        "publicAccess": "None"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', format('stmdeauto{0}', variables('environmentid')), 'default')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2024-01-01",
+      "name": "[format('{0}/{1}/{2}', format('stmdeauto{0}', variables('environmentid')), 'default', 'huntquery')]",
       "properties": {
         "publicAccess": "None"
       },

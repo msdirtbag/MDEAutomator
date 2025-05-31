@@ -41,11 +41,45 @@ body {
     background: none;
 }
 
+/* App Switcher Specific Styles */
+#pageNavDropdown {
+    font-size: 1.20rem !important; /* 75% increase from 1rem base */
+    background: #101c11 !important;
+    color: var(--primary-color) !important;
+    border: 1px solid #00ff41 !important;
+    font-family: var(--font-family-primary) !important;
+    vertical-align: middle !important;
+    line-height: 1.2 !important;
+    height: auto !important;
+    padding: 0.5rem !important; /* Ensure consistent padding */
+    border-radius: 3px !important; /* Ensure consistent border radius */
+    min-width: 160px !important; /* Ensure consistent width */
+    box-sizing: border-box !important;
+    margin-right: 0 !important; /* Override any margin from toolbar-dropdown */
+}
+
+#pageNavDropdown:focus {
+    outline: none !important;
+    border-color: #00ff41 !important;
+    box-shadow: 0 0 5px rgba(0, 255, 65, 0.3) !important;
+}
+
+#pageNavDropdown:hover {
+    background: #142a17 !important;
+    border-color: #1aff5c !important;
+}
+
 /* Responsive Typography */
 @media (max-width: 768px) {
     :root {
         --font-size-base: 14px;
         --font-size-heading: 1.3rem;
+    }
+    
+    #pageNavDropdown {
+        font-size: 1.05rem !important; /* Slightly smaller on mobile but still proportional */
+        padding: 0.4rem !important; /* Slightly smaller padding on mobile */
+        min-width: 140px !important; /* Slightly smaller minimum width on mobile */
     }
 }
 

@@ -2,16 +2,16 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridjs/dist/theme/mermaid.min.css">
 {% endblock %}
 
 {% block content %}
 <div class="toolbar">
     <div class="toolbar-left">
-        <div class="dropdown-group" style="display: flex; align-items: center;">
-            <input type="text" id="tenantInput" class="toolbar-dropdown" placeholder="Tenant ID" style="width: 160px; margin-right: 0.5rem;" />
-            <button id="saveTenantBtn" class="cta-button" style="margin-right: 2.5rem;">Save Tenant</button>
-            <span class="index-title-bar" style="font-size: 2.1rem; font-weight: bold; color: #7fff7f; margin-right: 2.5rem; letter-spacing: 0.5px; text-shadow: 0 0 8px #00ff41;">MDEAutomator</span>
+        <div class="dropdown-group" style="display: flex; align-items: center;">            <select id="tenantDropdown" class="toolbar-dropdown" style="width: 280px; margin-right: 0.5rem;">
+                <option value="">Select Tenant...</option>
+            </select>
+            <button id="manageTenantBtn" class="cta-button" style="margin-right: 0.5rem;">Manage Tenants</button>
+            <span class="page-title-bar">MDEAutomator</span>
         </div>
     </div>
 </div>
@@ -23,14 +23,57 @@
             <option value="MDEProfiles">Profiles</option>
         </select>
         <select id="commandDropdown" class="toolbar-dropdown"></select>
-        <span id="extraParams"></span>
         <button id="sendCommandBtn" class="cta-button">Send to Selected Devices</button>
+        <button id="sendAllDevicesBtn" class="cta-button" style="background-color: #ff4400; border-color: #ff4400;">Send to All Devices</button>
         <button id="refreshMachines" class="cta-button">Refresh Machines</button>
+        <button id="selectAllPage" class="cta-button">Select All on Page</button>
+        <button id="clearSelection" class="cta-button">Clear All Selected</button>
+        <span id="selectedCount" style="margin-left: 1rem; color: #7fff7f; font-family: Consolas, monospace;">Selected: 0</span>
+    </div>
+</div>
+<!-- Secondary parameter line (hidden by default) -->
+<div id="secondaryParamsBar" class="toolbar" style="border-top: none; border-bottom: 2px solid #00ff41; background: #0d1f10; display: none; padding: 0.75rem 2rem;">
+    <div class="toolbar-left">
+        <span id="paramLabel" style="color: #7fff7f; margin-right: 1rem; font-family: Consolas, monospace;"></span>
+        <div id="paramInputContainer" style="display: flex; align-items: center; gap: 1rem;"></div>
     </div>
 </div>
 <div class="index-container">
     <div id="machines-table"></div>
 </div>
+
+<!-- Tenant Management Modal -->
+<div id="tenantModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8);">
+    <div class="modal-content" style="background-color: #1a1a1a; border: 2px solid #00ff41; margin: 5% auto; padding: 20px; width: 60%; max-width: 600px; border-radius: 8px; color: #7fff7f; font-family: Consolas, monospace;">
+        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #00ff41; padding-bottom: 10px;">
+            <h2 style="margin: 0; color: #00ff41;">Manage Tenants</h2>
+            <span class="close" style="color: #00ff41; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
+        </div>
+        
+        <!-- Add New Tenant Form -->
+        <div class="add-tenant-section" style="margin-bottom: 30px; padding: 15px; background: #0f1f0f; border: 1px solid #00ff41; border-radius: 4px;">
+            <h3 style="margin-top: 0; color: #00ff41;">Add New Tenant</h3>
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <input type="text" id="newTenantId" placeholder="Tenant ID" style="flex: 1; padding: 8px; background: #1a1a1a; border: 1px solid #00ff41; color: #7fff7f; font-family: Consolas, monospace;">
+                <input type="text" id="newClientName" placeholder="Client Name" style="flex: 1; padding: 8px; background: #1a1a1a; border: 1px solid #00ff41; color: #7fff7f; font-family: Consolas, monospace;">
+            </div>
+            <button id="addTenantBtn" class="cta-button" style="margin: 0;">Add Tenant</button>
+        </div>
+        
+        <!-- Existing Tenants List -->
+        <div class="tenants-list-section">
+            <h3 style="color: #00ff41;">Existing Tenants</h3>
+            <div id="tenantsList" style="max-height: 300px; overflow-y: auto;">
+                <!-- Tenant list will be populated here -->
+            </div>
+        </div>
+        
+        <div style="text-align: right; margin-top: 20px; border-top: 1px solid #00ff41; padding-top: 15px;">
+            <button id="closeTenantModal" class="cta-button">Close</button>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -65,40 +108,8 @@ const functionCommands = {
 };
 
 window.addEventListener('DOMContentLoaded', () => {
-    const toolbarLeft = document.querySelector('.toolbar-left .dropdown-group');
-    if (!document.getElementById('tenantInput')) {
-        const tenantInput = document.createElement('input');
-        tenantInput.type = 'text';
-        tenantInput.id = 'tenantInput';
-        tenantInput.className = 'toolbar-dropdown';
-        tenantInput.placeholder = 'Tenant ID';
-        tenantInput.style.width = '160px';
-        tenantInput.style.marginRight = '0.5rem';
-        const savedTenant = sessionStorage.getItem('TenantId');
-        if (savedTenant) tenantInput.value = savedTenant;
-        const saveBtn = document.createElement('button');
-        saveBtn.id = 'saveTenantBtn';
-        saveBtn.className = 'cta-button';
-        saveBtn.textContent = 'Save Tenant';
-        saveBtn.style.marginRight = '1rem';
-        saveBtn.onclick = function() {
-            const val = tenantInput.value.trim();
-            if (!val) {
-                alert('Please enter a Tenant ID.');
-                return;
-            }
-            sessionStorage.setItem('TenantId', val);
-            alert('Tenant ID saved for this session.');
-        };
-        toolbarLeft.insertBefore(saveBtn, toolbarLeft.firstChild);
-        toolbarLeft.insertBefore(tenantInput, toolbarLeft.firstChild);
-    }
+    // Legacy tenant input/save button functionality removed - now using dropdown + Manage Tenants modal
 });
-
-function getTenantId() {
-    const tenantInput = document.getElementById('tenantInput');
-    return tenantInput ? tenantInput.value.trim() : '';
-}
 
 function updateToolbarButtonsVisibility(isUpload = false, isContain = false) {
     const sendBtn = document.getElementById('sendCommandBtn');
@@ -135,40 +146,78 @@ function updateCommandDropdown() {
 
 function updateExtraParams() {
     const func = document.getElementById('functionDropdown').value;
-    const extraParamsDiv = document.getElementById('extraParams');
-    extraParamsDiv.innerHTML = '';
+    const secondaryParamsBar = document.getElementById('secondaryParamsBar');
+    const paramLabel = document.getElementById('paramLabel');
+    const paramInputContainer = document.getElementById('paramInputContainer');
+    
+    // Clear and hide secondary parameter bar by default
+    paramInputContainer.innerHTML = '';
+    paramLabel.textContent = '';
+    secondaryParamsBar.style.display = 'none';
+    
     let isUpload = false;
-    let isContain = false;
-    if (func === 'MDEProfiles') {
+    let isContain = false;    if (func === 'MDEProfiles') {
+        paramLabel.textContent = 'Mode:';
         const select = document.createElement('select');
         select.id = 'extraParamInput';
         select.className = 'toolbar-dropdown';
         select.setAttribute('data-param', 'mode');
-        ['Active', 'Passive'].forEach(opt => {
-            const o = document.createElement('option');
-            o.value = opt;
-            o.textContent = opt;
-            select.appendChild(o);
-        });
-        extraParamsDiv.appendChild(select);
-    } else {
+        select.style.width = '200px';
+        
+        // Add options with friendly names
+        const activeOption = document.createElement('option');
+        activeOption.value = 'Active';
+        activeOption.textContent = 'Active';
+        select.appendChild(activeOption);
+        
+        const passiveOption = document.createElement('option');
+        passiveOption.value = 'Passive';
+        passiveOption.textContent = 'Passive';
+        select.appendChild(passiveOption);
+        
+        paramInputContainer.appendChild(select);
+          // Add description
+        const description = document.createElement('span');
+        description.style.cssText = 'color: #7fff7f; font-size: 0.9em; margin-left: 1rem;';
+        description.id = 'paramDescription';
+        
+        // Update description based on selection
+        const updateDescription = () => {
+            if (select.value === 'Active') {
+                description.textContent = 'This configures specific Set-MpPreference settings, registry settings, Attack Surface Reduction rules, Exploit Protection, and App Control for Business settings on endpoints.';
+            } else {
+                description.textContent = 'This configures specific Set-MpPreference settings and Attack Surface Reduction rules on endpoints.';
+            }
+        };
+        
+        select.addEventListener('change', updateDescription);
+        updateDescription(); // Set initial description
+        
+        paramInputContainer.appendChild(description);
+        secondaryParamsBar.style.display = 'flex';} else {
         const cmdDropdown = document.getElementById('commandDropdown');
         const selected = cmdDropdown.options[cmdDropdown.selectedIndex];
         const extra = selected ? selected.getAttribute('data-extra') : '';
-        const funcConfig = functionCommands[func][cmdDropdown.selectedIndex];
-        if (selected && selected.value === 'InvokeContainDevice') {
+        const funcConfig = functionCommands[func] && functionCommands[func][cmdDropdown.selectedIndex] ? functionCommands[func][cmdDropdown.selectedIndex] : null;        if (selected && selected.value === 'InvokeContainDevice') {            paramLabel.textContent = 'Contain Device:';
             const input = document.createElement('input');
             input.type = 'text';
             input.id = 'containDeviceIdInput';
-            input.placeholder = 'Enter DeviceId';
-            input.className = 'toolbar-dropdown';
-            extraParamsDiv.appendChild(input);
+            input.placeholder = 'Device ID';
+            input.style.cssText = 'background: #101c11; color: #00ff41; border: 1px solid #00ff41; padding: 0.5rem; font-family: Consolas, monospace; width: 300px;';
+            paramInputContainer.appendChild(input);
+            
             const containBtn = document.createElement('button');
             containBtn.id = 'containBtn';
             containBtn.className = 'cta-button';
             containBtn.textContent = 'Contain';
             containBtn.style.marginLeft = '1rem';
-            extraParamsDiv.appendChild(containBtn);
+            paramInputContainer.appendChild(containBtn);
+              // Add description
+            const description = document.createElement('span');
+            description.style.cssText = 'color: #7fff7f; font-size: 0.9em; margin-left: 1rem;';
+            description.textContent = 'This is the DeviceId of the unmanaged device that MDE endpoints will stop communicating with. (This must be found in Advanced Hunting or Device Inventory)';
+            paramInputContainer.appendChild(description);
+            
             containBtn.onclick = async function() {
                 const deviceId = input.value.trim();
                 if (!deviceId) {
@@ -177,20 +226,26 @@ function updateExtraParams() {
                 }
                 await sendContainCommand('InvokeContainDevice', deviceId);
             };
-            isContain = true;
-        } else if (selected && selected.value === 'UndoContainDevice') {
+            secondaryParamsBar.style.display = 'flex';
+            isContain = true;        } else if (selected && selected.value === 'UndoContainDevice') {            paramLabel.textContent = 'Release from Containment:';
             const input = document.createElement('input');
             input.type = 'text';
             input.id = 'containDeviceIdInput';
-            input.placeholder = 'Enter DeviceId';
-            input.className = 'toolbar-dropdown';
-            extraParamsDiv.appendChild(input);
-            const releaseBtn = document.createElement('button');
+            input.placeholder = 'Device ID';
+            input.style.cssText = 'background: #101c11; color: #00ff41; border: 1px solid #00ff41; padding: 0.5rem; font-family: Consolas, monospace; width: 300px;';
+            paramInputContainer.appendChild(input);
+              const releaseBtn = document.createElement('button');
             releaseBtn.id = 'releaseContainBtn';
             releaseBtn.className = 'cta-button';
-            releaseBtn.textContent = 'Release from Containment';
+            releaseBtn.textContent = 'Release';
             releaseBtn.style.marginLeft = '1rem';
-            extraParamsDiv.appendChild(releaseBtn);
+            paramInputContainer.appendChild(releaseBtn);
+              // Add description
+            const description = document.createElement('span');
+            description.style.cssText = 'color: #7fff7f; font-size: 0.9em; margin-left: 1rem;';
+            description.textContent = 'This is the DeviceId of the unmanaged device that that will be re-enabled for normal network communications.';
+            paramInputContainer.appendChild(description);
+            
             releaseBtn.onclick = async function() {
                 const deviceId = input.value.trim();
                 if (!deviceId) {
@@ -199,8 +254,9 @@ function updateExtraParams() {
                 }
                 await sendContainCommand('UndoContainDevice', deviceId);
             };
-            isContain = true;
-        } else if (selected && selected.value === 'InvokeUploadLR') {
+            secondaryParamsBar.style.display = 'flex';
+            isContain = true;        } else if (selected && selected.value === 'InvokeUploadLR') {
+            paramLabel.textContent = 'Upload File:';
             const prevUploadBtn = document.getElementById('uploadFileBtn');
             if (prevUploadBtn && prevUploadBtn.parentNode) {
                 prevUploadBtn.parentNode.removeChild(prevUploadBtn);
@@ -208,25 +264,26 @@ function updateExtraParams() {
             const prevFileInput = document.getElementById('extraFileInput');
             if (prevFileInput && prevFileInput.parentNode) {
                 prevFileInput.parentNode.removeChild(prevFileInput);
-            }
-            const fileInput = document.createElement('input');
+            }            const fileInput = document.createElement('input');
             fileInput.type = 'file';
             fileInput.id = 'extraFileInput';
-            fileInput.className = 'toolbar-dropdown';
             fileInput.accept = '.zip,.ps1,.exe,.dll,.txt,.csv,.json,.gz,.tar,.7z,.rar,.bat,.cmd,.sh,.py,.rb,.pl,.vbs,.js,.jar,.msi,.msp,.reg,.xml,.conf,.ini,.log,.bin,.dat,.db,.bak,.sql,.cer,.crt,.pem,.pfx,.key,.asc,.md,.rtf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.jpg,.jpeg,.png,.gif,.bmp,.ico,.svg,.mp3,.wav,.mp4,.avi,.mov,.wmv,.flv,.mkv,.ts,.m4v,.webm,.ogg,.opus,.aac,.3gp,.3g2,.midi,.mid,.apk,.ipa,.appx,.xap,.cab,.iso,.img,.vhd,.vhdx,.ova,.ovf,.qcow,.qcow2,.vmdk,.vdi,.raw,.img,.dmg,.toast,.sparseimage,.sparsebundle,.sparsebundleimage,.sparsebundlevolume,.sparsebundlepartition,.sparsebundlepartitionimage,.sparsebundlepartitionvolume,.sparsebundlepartitionpartition,.sparsebundlepartitionpartitionimage,.sparsebundlepartitionpartitionvolume,.sparsebundlepartitionpartitionpartition,.sparsebundlepartitionpartitionpartitionimage,.sparsebundlepartitionpartitionpartitionvolume,.sparsebundlepartitionpartitionpartitionpartition,.sparsebundlepartitionpartitionpartitionpartitionimage,.sparsebundlepartitionpartitionpartitionpartitionvolume';
             fileInput.maxSize = 250 * 1024 * 1024; 
-            extraParamsDiv.appendChild(fileInput);
-            const note = document.createElement('span');
-            note.textContent = ' (Max 250 MB)';
-            note.style.marginLeft = '1rem';
-            note.style.color = '#888';
-            extraParamsDiv.appendChild(note);
+            fileInput.style.cssText = 'background: #101c11; color: #00ff41; border: 1px solid #00ff41; padding: 0.5rem; font-family: Consolas, monospace; width: 300px;';
+            paramInputContainer.appendChild(fileInput);
+            
             const uploadBtn = document.createElement('button');
             uploadBtn.id = 'uploadFileBtn';
             uploadBtn.className = 'cta-button';
             uploadBtn.textContent = 'Upload';
             uploadBtn.style.marginLeft = '1rem';
-            extraParamsDiv.appendChild(uploadBtn);
+            paramInputContainer.appendChild(uploadBtn);
+              // Add description
+            const description = document.createElement('span');
+            description.style.cssText = 'color: #7fff7f; font-size: 0.9em; margin-left: 1rem;';
+            description.textContent = 'Upload a file to the Live Response library. Max 250 MB. Supported formats include scripts, executables, and archives.';
+            paramInputContainer.appendChild(description);
+            
             uploadBtn.onclick = async function() {
                 if (!fileInput.files.length) {
                     alert('Please select a file to upload.');
@@ -250,8 +307,42 @@ function updateExtraParams() {
                 const result = await res.json();
                 alert(result.message || JSON.stringify(result));
             };
-            isUpload = true;
+            secondaryParamsBar.style.display = 'flex';            isUpload = true;
+        } else if (selected && selected.value === 'InvokePutFile') {
+            // Put File
+            paramLabel.textContent = 'File Name:';
+            paramInputContainer.innerHTML = `
+                <input type="text" id="extraParamInput" placeholder="Enter file name" style="background: #101c11; color: #00ff41; border: 1px solid #00ff41; padding: 0.5rem; font-family: Consolas, monospace; width: 250px;" data-param="fileName" />
+                <span style="color: #7fff7f; font-size: 0.9em; margin-left: 1rem;">The name of the file in the Live Response library that you want to push to devices. This should match the exact file name as it appears in the library, including the file extension (e.g., "sysmon.exe"). The file must already be uploaded to the library.</span>
+            `;
+            secondaryParamsBar.style.display = 'flex';
+        } else if (selected && selected.value === 'InvokeGetFile') {
+            // Collect File
+            paramLabel.textContent = 'File Path:';
+            paramInputContainer.innerHTML = `
+                <input type="text" id="extraParamInput" placeholder="Enter file path" style="background: #101c11; color: #00ff41; border: 1px solid #00ff41; padding: 0.5rem; font-family: Consolas, monospace; width: 300px;" data-param="filePath" />
+                <span style="color: #7fff7f; font-size: 0.9em; margin-left: 1rem;">The file path of the file as it appears on disk on the endpoint (e.g., "C:\\Temp\\error.log"). This will collect the file from all selected devices and store them in the "files" blob container.</span>
+            `;
+            secondaryParamsBar.style.display = 'flex';
+        } else if (selected && selected.value === 'InvokeLRScript') {
+            // Run Live Response Script
+            paramLabel.textContent = 'Script Name:';
+            paramInputContainer.innerHTML = `
+                <input type="text" id="extraParamInput" placeholder="Enter script name" style="background: #101c11; color: #00ff41; border: 1px solid #00ff41; padding: 0.5rem; font-family: Consolas, monospace; width: 250px;" data-param="scriptName" />
+                <span style="color: #7fff7f; font-size: 0.9em; margin-left: 1rem;">The name of the script in the Live Response library that you want to execute on the devices (e.g., "runcollection.ps1" or "runcollection.sh"). The script must already be uploaded to the library.</span>
+            `;
+            secondaryParamsBar.style.display = 'flex';
+        } else if (selected && selected.value === 'InvokeStopAndQuarantineFile') {
+            // Stop and Quarantine File
+            paramLabel.textContent = 'File SHA1 Hash:';
+            paramInputContainer.innerHTML = `
+                <input type="text" id="extraParamInput" placeholder="Enter SHA1 hash" style="background: #101c11; color: #00ff41; border: 1px solid #00ff41; padding: 0.5rem; font-family: Consolas, monospace; width: 350px;" data-param="Sha1s" />
+                <span style="color: #7fff7f; font-size: 0.9em; margin-left: 1rem;">This is the SHA1 hash of the file you want to scan for and quarantine if found on disk.</span>
+            `;
+            secondaryParamsBar.style.display = 'flex';
         } else if (extra && funcConfig) {
+            // Generic fallback for any other parameter types
+            paramLabel.textContent = `${extra}:`;
             if (funcConfig.options) {
                 const select = document.createElement('select');
                 select.id = 'extraParamInput';
@@ -263,7 +354,7 @@ function updateExtraParams() {
                     o.textContent = opt;
                     select.appendChild(o);
                 });
-                extraParamsDiv.appendChild(select);
+                paramInputContainer.appendChild(select);
             } else {
                 const input = document.createElement('input');
                 input.type = 'text';
@@ -271,12 +362,35 @@ function updateExtraParams() {
                 input.placeholder = 'Enter ' + extra;
                 input.className = 'toolbar-dropdown';
                 input.setAttribute('data-param', extra);
-                extraParamsDiv.appendChild(input);
+                paramInputContainer.appendChild(input);
             }
+            secondaryParamsBar.style.display = 'flex';
         }
     }
     updateToolbarButtonsVisibility(isUpload, isContain);
 }
+
+// Debug function to verify secondary parameter bar behavior
+function debugSecondaryBar() {
+    const func = document.getElementById('functionDropdown').value;
+    const cmd = document.getElementById('commandDropdown').value;
+    const secondaryVisible = document.getElementById('secondaryParamsBar').style.display === 'flex';
+    console.log(`Function: ${func}, Command: ${cmd}, Secondary Bar Visible: ${secondaryVisible}`);
+}
+
+// Add debug logging to existing event handlers
+const originalFunctionChange = document.getElementById('functionDropdown').onchange;
+const originalCommandChange = document.getElementById('commandDropdown').onchange;
+
+document.getElementById('functionDropdown').onchange = function() {
+    originalFunctionChange.call(this);
+    setTimeout(debugSecondaryBar, 100);
+};
+
+document.getElementById('commandDropdown').onchange = function() {
+    originalCommandChange.call(this);
+    setTimeout(debugSecondaryBar, 100);
+};
 
 async function sendContainCommand(specificCommandName, deviceId) {
     const tenantId = getTenantId();
@@ -306,123 +420,13 @@ document.getElementById('commandDropdown').onchange = function() {
 };
 updateCommandDropdown();
 
-let selectedDeviceIds = [];
 function getDeviceIdColumnIndex(columns) {
     return columns.findIndex(col => col.toLowerCase() === 'deviceid' || col.toLowerCase() === 'id');
 }
 
-async function loadMachines() {
-    if (!window.FUNCURL || !window.FUNCKEY) {
-        alert('FUNCURL and FUNCKEY are not set. Please contact your administrator.');
-        return;
-    }
-    const tenantId = getTenantId();
-    if (!tenantId) {
-        alert('Tenant ID is required.');
-        return;
-    }
-    const url = `https://${window.FUNCURL}/api/MDEAutomator?code=${window.FUNCKEY}`;
-    const payload = {
-        TenantId: tenantId,
-        Function: 'GetMachines'
-    };
-    const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-    let machinesRaw = data.machines || data.value;
-    if (!Array.isArray(machinesRaw)) {
-        if (Array.isArray(data)) {
-            machinesRaw = data;
-        } else {
-            for (const key in data) {
-                if (Array.isArray(data[key])) {
-                    machinesRaw = data[key];
-                    break;
-                }
-            }
-        }
-    }
-    const columns = [
-        { id: 'checkbox', name: '', width: '30px', formatter: (_, row) => gridjs.html(`<input type='checkbox' class='device-checkbox' data-deviceid='${row.cells[0].data}' />`) },
-        { id: 'id', name: 'DeviceId', width: 'minmax(100px, 1fr)' },
-        { id: 'computerDnsName', name: 'DeviceName', width: 'minmax(150px, 2fr)' },
-        { id: 'firstSeen', name: 'FirstSeen', width: 'minmax(120px, 1fr)' },
-        { id: 'lastSeen', name: 'LastSeen', width: 'minmax(120px, 1fr)' },
-        { id: 'osPlatform', name: 'OsPlatform', width: 'minmax(100px, 1fr)' },
-        { id: 'lastIpAddress', name: 'LastIpAddress', width: 'minmax(120px, 1fr)' },
-        { id: 'lastExternalIpAddress', name: 'LastExternalIpAddress', width: 'minmax(120px, 1fr)' },
-        { id: 'deviceValue', name: 'DeviceValue', width: 'minmax(100px, 1fr)' },
-        { id: 'rbacGroupName', name: 'DeviceGroup', width: 'minmax(120px, 1fr)' },
-        { id: 'riskScore', name: 'RiskScore', width: 'minmax(80px, 1fr)' },
-        { id: 'machineTags', name: 'DeviceTags', width: 'minmax(120px, 1fr)' }
-    ];
-    const machines = machinesRaw.map(row => {
-        const machineId = row['Id'] || row['id'] || ''; 
-        return [
-            machineId, 
-            machineId, 
-            row['ComputerDnsName'] || row['computerDnsName'] || '',
-            row['FirstSeen'] || row['firstSeen'] || '',
-            row['LastSeen'] || row['lastSeen'] || '',
-            row['OsPlatform'] || row['osPlatform'] || '',
-            row['LastIpAddress'] || row['lastIpAddress'] || '',
-            row['LastExternalIpAddress'] || row['lastExternalIpAddress'] || '',
-            row['DeviceValue'] || row['deviceValue'] || '',
-            row['RbacGroupName'] || row['rbacGroupName'] || '',
-            row['RiskScore'] || row['riskScore'] || '',
-            Array.isArray(row['MachineTags'] || row['machineTags']) ? (row['MachineTags'] || row['machineTags']).join(', ') : (row['MachineTags'] || row['machineTags'] || '')
-        ];
-    });
-    if (window.machinesGrid) window.machinesGrid.destroy();
-    window.machinesGrid = new gridjs.Grid({
-        columns: columns,
-        data: machines,
-        search: true,
-        sort: true,
-        resizable: true,
-        pagination: false,
-        autoWidth: true,
-        width: '100vw',
-        height: '100%',
-        style: {
-            table: {
-                'table-layout': 'auto',
-                width: '100%',
-                'min-width': 'unset',
-                'max-width': '100vw',
-            },
-            th: {
-                'white-space': 'nowrap',
-                'overflow': 'hidden',
-                'text-overflow': 'ellipsis',
-                'max-width': '200px',
-            },
-            td: {
-                'white-space': 'nowrap',
-                'overflow': 'hidden',
-                'text-overflow': 'ellipsis',
-                'max-width': '200px',
-            }
-        }
-    }).render(document.getElementById('machines-table'));
-    setTimeout(() => {
-        document.querySelectorAll('.device-checkbox').forEach(cb => {
-            cb.addEventListener('change', function() {
-                const id = this.getAttribute('data-deviceid');
-                if (this.checked) {
-                    if (!selectedDeviceIds.includes(id)) selectedDeviceIds.push(id);
-                } else {
-                    selectedDeviceIds = selectedDeviceIds.filter(did => did !== id);
-                }
-            });
-        });
-    }, 500);
-}
-
 document.getElementById('refreshMachines').onclick = loadMachines;
+document.getElementById('selectAllPage').onclick = selectAllOnPage;
+document.getElementById('clearSelection').onclick = clearAllSelections;
 document.getElementById('sendCommandBtn').onclick = async function() {
     const funcGroup = document.getElementById('functionDropdown').value;
     const tenantId = getTenantId();
@@ -480,7 +484,79 @@ document.getElementById('sendCommandBtn').onclick = async function() {
     if (selectedDeviceIds.length === 0) {
         alert('Please select at least one device from the table.');
         return;
+    }    const res = await fetch('/api/send_command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });    const result = await res.json();
+    alert(result.message || JSON.stringify(result));
+};
+
+// Add "Send to All Devices" functionality
+document.getElementById('sendAllDevicesBtn').onclick = async function() {
+    const funcGroup = document.getElementById('functionDropdown').value;
+    const tenantId = getTenantId();
+    if (!tenantId) { 
+        alert('Tenant ID is required.');
+        return;
     }
+
+    // Confirm the action since it affects all devices
+    const confirmMessage = `⚠️ WARNING: This will send the command to ALL DEVICES in the tenant!\n\nAre you absolutely sure you want to proceed?`;
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+
+    let payload = {
+        allDevices: true,  // Use the backend override
+        TenantId: tenantId
+    };
+
+    if (funcGroup === 'MDEProfiles') {
+        payload.function_name = funcGroup; 
+        payload.command = 'DeployPowerShellPolicy'; 
+        const modeInput = document.getElementById('extraParamInput');
+        if (!modeInput) {
+             alert('Mode selector not found for MDEProfiles. Please ensure UI elements are correctly loaded.');
+             return;
+        }
+        const mode = modeInput.value;
+        if (!mode) {
+            alert('Please select a mode for MDEProfiles.');
+            return;
+        }
+        payload.ps1Name = mode + '.ps1';
+    } else { 
+        payload.function_name = funcGroup; 
+        const cmdDropdown = document.getElementById('commandDropdown');
+        const specificCommand = cmdDropdown.value;
+
+        if (!specificCommand) {
+            alert('Please select a command from the dropdown.');
+            return;
+        }
+        payload.command = specificCommand; 
+
+        const selectedOption = cmdDropdown.options[cmdDropdown.selectedIndex];
+        const extraAttr = selectedOption ? selectedOption.getAttribute('data-extra') : null;
+
+        if (extraAttr) {
+            const extraInput = document.getElementById('extraParamInput');
+            if (!extraInput) {
+                alert(`Input field for '${extraAttr}' not found. Please ensure UI elements are correctly loaded.`);
+                return;
+            }
+            const extraValue = extraInput.value.trim();
+            if (!extraValue && extraAttr !== 'fileContent') { 
+                alert('Please enter a value for ' + extraAttr);
+                return;
+            }
+            payload[extraAttr] = extraValue; 
+        }
+    }
+
+    console.log('Sending All Devices command payload:', JSON.stringify(payload, null, 2));
+    
     const res = await fetch('/api/send_command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -489,5 +565,12 @@ document.getElementById('sendCommandBtn').onclick = async function() {
     const result = await res.json();
     alert(result.message || JSON.stringify(result));
 };
+
+// Add event listeners for new selection buttons
+document.getElementById('selectAllPage').onclick = selectAllOnPage;
+document.getElementById('clearSelection').onclick = clearAllSelections;
+
+// Initialize selected count
+updateSelectedCount();
 </script>
 {% endblock %}

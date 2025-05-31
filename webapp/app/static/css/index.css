@@ -1,13 +1,15 @@
 .index-container {
     padding: 0;
     margin: 0;
+    width: 100%;
+    max-width: 100%;
     align-items: stretch;
     justify-content: flex-start;
     min-height: unset;
     background-color: var(--background-color);
     color: var(--text-color-dark);
-    overflow-x: hidden;
-    height: calc(100vh - 140px);
+    overflow-x: auto; /* Allow horizontal scrolling if needed */
+    overflow-y: visible;
 }
 
 .index-header {
@@ -52,6 +54,24 @@
     box-shadow: 0 2px 8px rgba(0,255,65,0.08); /* Reset shadow to normal */
 }
 
+/* Special styling for "All Devices" button */
+#sendAllDevicesBtn {
+    background-color: #ff4400 !important;
+    border-color: #ff4400 !important;
+    color: #ffffff !important;
+    font-weight: bold;
+}
+
+#sendAllDevicesBtn:hover {
+    background-color: #ff6600 !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(255,68,0,0.3) !important;
+}
+
+#sendAllDevicesBtn:active {
+    background-color: #cc3300 !important;
+}
+
 .toolbar {
     display: flex;
     align-items: center;
@@ -69,6 +89,19 @@
     display: flex;
     align-items: center;
     gap: 1rem;
+    flex: 1;
+}
+
+.page-title-bar {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 2.1rem !important;
+    font-weight: bold !important;
+    color: #7fff7f !important;
+    letter-spacing: 0.5px !important;
+    text-shadow: 0 0 8px #00ff41 !important;
+    z-index: 1;
 }
 
 .toolbar-title {
@@ -79,11 +112,11 @@
     text-shadow: 0 0 8px #00ff41;
 }
 
-.toolbar-dropdown, .cta-button, #commandInput {
+.toolbar-dropdown:not(#pageNavDropdown), .cta-button, #commandInput {
     margin-right: 1rem;
 }
 
-.toolbar-dropdown, #commandInput {
+.toolbar-dropdown:not(#pageNavDropdown), #commandInput {
     background: #101c11;
     color: var(--primary-color);
     border: 1px solid #00ff41;
@@ -98,9 +131,8 @@
 
 #machines-table {
     width: 100%;
-    height: calc(100vh - 140px);
-    overflow-x: hidden;
-    overflow-y: auto;
+    max-width: 100%;
+    overflow: visible; /* Let GridJS handle overflow */
     margin: 0;
     padding: 0;
     background: #101c11;
@@ -109,18 +141,20 @@
 
 .gridjs-wrapper {
     width: 100% !important;
-    overflow-x: hidden !important;
-    overflow-y: auto !important;
+    max-width: 100% !important;
+    overflow-x: auto !important; /* Allow horizontal scrolling if needed */
+    overflow-y: visible !important;
     display: block !important;
-    max-height: calc(100vh - 140px);
 }
 
 .gridjs-table {
     width: 100% !important;
-    table-layout: fixed !important;
+    max-width: 100% !important;
+    table-layout: auto !important;
     background: #101c11 !important;
     color: var(--primary-color) !important;
     border-color: #00ff41 !important;
+    font-size: 0.9rem !important; /* Slightly smaller font to fit more content */
 }
 
 .gridjs-th, .gridjs-td {
@@ -128,7 +162,50 @@
     white-space: nowrap !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
-    padding: 8px !important;
+    padding: 6px 4px !important; /* Reduced padding for tighter layout */
+    font-size: 0.85rem !important;
+    line-height: 1.2 !important;
+}
+
+/* Specific column sizing for optimal fit */
+.gridjs-th:nth-child(1), .gridjs-td:nth-child(1) { /* Checkbox */
+    width: 25px !important;
+    min-width: 25px !important;
+    max-width: 25px !important;
+    padding: 4px !important;
+    text-align: center !important;
+}
+.gridjs-th:nth-child(2), .gridjs-td:nth-child(2) { /* DeviceId */
+    width: 16% !important;
+    min-width: 120px !important;
+}
+.gridjs-th:nth-child(3), .gridjs-td:nth-child(3) { /* DeviceName */
+    width: 19% !important;
+    min-width: 140px !important;
+}
+.gridjs-th:nth-child(4), .gridjs-td:nth-child(4) { /* OS */
+    width: 8% !important;
+    min-width: 60px !important;
+}
+.gridjs-th:nth-child(5), .gridjs-td:nth-child(5) { /* Value */
+    width: 8% !important;
+    min-width: 60px !important;
+}
+.gridjs-th:nth-child(6), .gridjs-td:nth-child(6) { /* Risk */
+    width: 7% !important;
+    min-width: 50px !important;
+}
+.gridjs-th:nth-child(7), .gridjs-td:nth-child(7) { /* Group */
+    width: 18% !important;
+    min-width: 120px !important;
+}
+.gridjs-th:nth-child(8), .gridjs-td:nth-child(8) { /* LastSeen */
+    width: 12% !important;
+    min-width: 100px !important;
+}
+.gridjs-th:nth-child(9), .gridjs-td:nth-child(9) { /* IP */
+    width: 11% !important;
+    min-width: 90px !important;
 }
 
 .gridjs-thead, .gridjs-th, .gridjs-tr, .gridjs-td {
@@ -137,15 +214,201 @@
     border-color: #00ff41 !important;
 }
 
+/* Add specific border styling for body cells */
+.gridjs-td {
+    border: 1px solid #444 !important;
+    background: #101c11 !important;
+    color: #7fff7f !important;
+}
+
+/* Alternate row styling */
+.gridjs-tr:nth-child(even) .gridjs-td {
+    background: #0f1b10 !important;
+}
+
 .gridjs-thead .gridjs-th {
     background: #142a17 !important;
     color: #7fff7f !important;
+    border: 1px solid #00ff41 !important;
+    border-bottom: 2px solid #00ff41 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    position: relative !important;
+    font-weight: bold !important;
+}
+
+/* Ensure first header cell has left border */
+.gridjs-thead .gridjs-th:first-child {
+    border-left: 1px solid #00ff41 !important;
+}
+
+/* Ensure last header cell has right border */
+.gridjs-thead .gridjs-th:last-child {
+    border-right: 1px solid #00ff41 !important;
+}
+
+/* Add proper table border styling */
+.gridjs-thead {
+    border-collapse: collapse !important;
+    position: relative !important;
+    width: 100% !important;
+}
+
+/* Ensure table has proper border handling */
+.gridjs-thead tr {
+    border-collapse: collapse !important;
+}
+
+/* Override any default GridJS borders for table structure */
+.gridjs-table {
+    border-collapse: collapse !important;
+    border: 1px solid #00ff41 !important;
+}
+
+/* Ensure consistent header cell styling */
+.gridjs-table .gridjs-thead .gridjs-tr .gridjs-th {
+    border: 1px solid #00ff41 !important;
     border-bottom: 2px solid #00ff41 !important;
 }
 
 .gridjs-pagination, .gridjs-search {
     background: #101c11 !important;
     color: var(--primary-color) !important;
+}
+
+.gridjs-pagination .gridjs-pages {
+    background: #101c11 !important;
+}
+
+.gridjs-pagination .gridjs-pages button {
+    background: #142a17 !important;
+    color: var(--primary-color) !important;
+    border: 1px solid #00ff41 !important;
+    font-family: 'Consolas', 'Courier New', monospace !important;
+}
+
+.gridjs-pagination .gridjs-pages button:hover {
+    background: #00ff41 !important;
+    color: #101c11 !important;
+}
+
+.gridjs-pagination .gridjs-pages button[disabled] {
+    background: #0a1a0b !important;
+    color: #4d7f4f !important;
+    border-color: #4d7f4f !important;
+}
+
+.gridjs-pagination .gridjs-summary {
+    background: #101c11 !important;
+    color: #7fff7f !important;
+    font-family: 'Consolas', 'Courier New', monospace !important;
+    border: 1px solid #00ff41 !important;
+    border-radius: 4px !important;
+    padding: 8px 12px !important;
+    box-shadow: none !important;
+}
+
+/* Additional selectors to override Mermaid theme */
+.gridjs-footer .gridjs-summary,
+.gridjs-pagination-summary,
+.gridjs-summary,
+div[class*="summary"] {
+    background: #101c11 !important;
+    color: #7fff7f !important;
+    border: 1px solid #00ff41 !important;
+    border-radius: 4px !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+/* Override any potential conflicting mermaid theme styles */
+.gridjs-wrapper .gridjs-pagination .gridjs-summary,
+.gridjs-container .gridjs-pagination .gridjs-summary {
+    background: #101c11 !important;
+    color: #7fff7f !important;
+    border: 1px solid #00ff41 !important;
+    border-radius: 4px !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+/* Complete GridJS styling to replace Mermaid theme */
+.gridjs-container {
+    background: #101c11 !important;
+    color: var(--primary-color) !important;
+    border: none !important;
+}
+
+.gridjs-head {
+    background: #142a17 !important;
+}
+
+/* Ensure the table itself has proper border handling */
+.gridjs-table {
+    border-collapse: collapse !important;
+    border-spacing: 0 !important;
+}
+
+/* Make sure the thead element spans full width */
+.gridjs-thead {
+    display: table-header-group !important;
+    width: 100% !important;
+}
+
+/* Ensure header row spans full table width */
+.gridjs-thead .gridjs-tr {
+    display: table-row !important;
+    width: 100% !important;
+    border: none !important;
+}
+
+.gridjs-search input {
+    background: #142a17 !important;
+    color: var(--primary-color) !important;
+    border: 1px solid #00ff41 !important;
+    border-radius: 4px !important;
+}
+
+.gridjs-footer {
+    background: #101c11 !important;
+    border-top: 1px solid #00ff41 !important;
+}
+
+.gridjs-pagination {
+    justify-content: space-between !important;
+    align-items: center !important;
+    background: #101c11 !important;
+    padding: 1rem !important;
+}
+
+.gridjs-pagination .gridjs-summary,
+.gridjs-pagination .gridjs-pages {
+    background: transparent !important;
+}
+
+/* Ensure no default borders or backgrounds interfere */
+.gridjs-pagination * {
+    background: transparent !important;
+    border: none !important;
+}
+
+.gridjs-pagination .gridjs-summary {
+    background: #101c11 !important;
+    color: #7fff7f !important;
+    border: 1px solid #00ff41 !important;
+    border-radius: 4px !important;
+    padding: 8px 12px !important;
+    font-family: 'Consolas', 'Courier New', monospace !important;
+}
+
+.gridjs-pagination .gridjs-pages button {
+    background: #142a17 !important;
+    color: var(--primary-color) !important;
+    border: 1px solid #00ff41 !important;
+    font-family: 'Consolas', 'Courier New', monospace !important;
+    margin: 0 2px !important;
+    padding: 6px 12px !important;
+    border-radius: 4px !important;
 }
 
 .gridjs-search input[type="search"] {
@@ -156,12 +419,50 @@
     box-shadow: none !important;
 }
 
-/* Helper: set a CSS variable for zoom on the table wrapper */
-:root {
-    --table-zoom: 1;
+
+
+/* Secondary Parameter Bar Styling */
+#secondaryParamsBar {
+    border-top: 1px solid #333;
+}
+
+#paramLabel {
+    font-weight: 600;
+    font-size: 0.9rem;
+    min-width: fit-content;
+    white-space: nowrap;
+}
+
+#paramInputContainer {
+    flex: 1;
+}
+
+#paramInputContainer input,
+#paramInputContainer select {
+    min-width: 200px;
+}
+
+#paramInputContainer .cta-button {
+    margin-left: 1rem;
+    margin-right: 0;
 }
 
 /* Responsive Adjustments */
+@media (max-width: 1200px) {
+    .gridjs-th, .gridjs-td {
+        font-size: 0.8rem !important;
+        padding: 4px 2px !important;
+    }
+    
+    /* Make critical columns wider on medium screens */
+    .gridjs-th:nth-child(2), .gridjs-td:nth-child(2) { /* DeviceId */
+        width: 16% !important;
+    }
+    .gridjs-th:nth-child(3), .gridjs-td:nth-child(3) { /* DeviceName */
+        width: 20% !important;
+    }
+}
+
 @media (max-width: 768px) {
     .index-header {
         font-size: calc(var(--font-size-heading) * 0.9);
@@ -182,13 +483,17 @@
         align-self: flex-end;
     }
 
-    #machines-table, .gridjs-wrapper, .gridjs-table {
-        width: 100% !important;
-        table-layout: fixed !important;
+    .gridjs-wrapper {
+        overflow-x: auto !important;
     }
+
+    .gridjs-table {
+        min-width: 800px !important; /* Ensure minimum table width on mobile */
+    }
+    
     .gridjs-th, .gridjs-td {
-        font-size: 0.9em;
-        text-align: center !important;
+        font-size: 0.75rem !important;
+        padding: 4px 2px !important;
     }
 }
 

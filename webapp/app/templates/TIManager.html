@@ -14,23 +14,21 @@
 {% block content %}
 <div class="toolbar" style="margin-bottom: 1.5rem;">
     <div class="toolbar-left">
-        <div class="dropdown-group" style="display: flex; align-items: center;">
-            <input type="text" id="tenantInput" class="toolbar-dropdown" placeholder="Tenant ID" style="width: 160px; margin-right: 0.5rem;" />
-            <button id="saveTenantBtn" class="cta-button" style="margin-right: 1.5rem;">Save Tenant</button>
-            <span class="ti-title-bar" style="font-size: 2.1rem; font-weight: bold; color: #7fff7f; margin-right: 2.5rem; letter-spacing: 0.5px; text-shadow: 0 0 8px #00ff41;">Threat Intelligence Manager</span>
+        <div class="dropdown-group" style="display: flex; align-items: center;">            <select id="tenantDropdown" class="toolbar-dropdown" style="width: 280px; margin-right: 0.5rem;">
+                <option value="">Select Tenant...</option>
+            </select>
+            <span class="page-title-bar">Threat Intelligence Manager</span>
         </div>
     </div>
 </div>
 
 <div class="ti-section" style="margin: 2rem 0 1.5rem 0; padding: 1.5rem; background: #142a17; border-radius: 8px; border: 1px solid #00ff41;">
-    <h2 style="color: var(--primary-color); margin-bottom: 1rem;">IOC Manager</h2>
-    <div style="display: flex; flex-wrap: wrap; gap: 2rem; align-items: flex-end; margin-bottom: 1.5rem;">
-        <form id="tiManualForm" style="display: flex; flex-direction: column; gap: 0.5rem; min-width: 260px;">
-            <label style="color: var(--text-color-light);">Type
+    <h2 style="color: var(--primary-color); margin-bottom: 1rem;">IOC Manager</h2>    <div style="display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-end; margin-bottom: 1.5rem;">
+        <form id="tiManualForm" style="display: flex; flex-direction: column; gap: 0.5rem; min-width: 260px;">            <label style="color: var(--text-color-light);">Type
                 <select id="tiType" class="toolbar-dropdown" required>
-                    <option value="Sha1s">Certificate (SHA1)</option>
+                    <option value="CertSha1s">Certificate (SHA1)</option>
                     <option value="Sha1s">File (SHA1)</option>
-                    <option value="Sha256s">File (SHA256)</option>
+                    <option value="Sha256s" selected>File (SHA256)</option>
                     <option value="IPs">IP (v6/v4)</option>
                     <option value="URLs">URL</option>
                 </select>
@@ -38,16 +36,29 @@
             <label style="color: var(--text-color-light);">Value
                 <input id="tiValue" class="toolbar-dropdown" type="text" placeholder="Enter value" required />
             </label>
-            <button type="submit" class="cta-button" style="margin-top: 0.5rem;">Add</button>
+            <button type="submit" class="cta-button" style="margin-top: 0.5rem; height: 2.5em;">Add</button>
         </form>
-        <div style="display: flex; flex-direction: column; gap: 0.5rem; min-width: 260px;">
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; min-width: 200px;">
             <label style="color: var(--text-color-light);">Import CSV
                 <input id="tiCsvInput" type="file" accept=".csv" class="toolbar-dropdown" />
             </label>
-            <button id="tiCsvImportBtn" class="cta-button" style="margin-top: 0.5rem;">Import CSV</button>
-            <span id="tiCsvStatus" style="color: #7fff7f; font-size: 0.95em;"></span>
+            <button id="tiCsvImportBtn" class="cta-button" style="margin-top: 0.5rem; height: 2.5em;">Import CSV</button>
         </div>
-        <button id="refreshIndicatorsBtn" class="cta-button" style="height: 2.5em; align-self: flex-end;">Refresh List</button>
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; min-width: 160px;">
+            <label style="color: var(--text-color-light);">&nbsp;</label>
+            <button id="tiCsvExportBtn" class="cta-button" style="margin-top: 0.5rem; height: 2.5em;">Export CSV</button>
+        </div>        <div style="display: flex; flex-direction: column; gap: 0.5rem; min-width: 160px;">
+            <label style="color: var(--text-color-light);">&nbsp;</label>
+            <button id="refreshIndicatorsBtn" class="cta-button" style="margin-top: 0.5rem; height: 2.5em;">Refresh List</button>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; min-width: 160px;">
+            <label style="color: var(--text-color-light);">&nbsp;</label>
+            <button id="deleteSelectedBtn" class="cta-button" style="margin-top: 0.5rem; height: 2.5em;" disabled>Delete Selected</button>
+        </div>
+    </div>
+    <div style="margin-bottom: 1rem;">
+        <span id="tiCsvStatus" style="color: #7fff7f; font-size: 0.95em; display: none;"></span>
+        <span id="tiExportStatus" style="color: #7fff7f; font-size: 0.95em; display: none;"></span>
     </div>
     <div id="iocTableContainer"></div>
 </div>
@@ -56,10 +67,42 @@
     <h2 style="color: var(--primary-color); margin-bottom: 1rem;">Custom Detection Manager</h2>
     <div style="display: flex; gap: 1.5rem; align-items: flex-end; margin-bottom: 1.5rem;">
         <button id="refreshDetectionsBtn" class="cta-button">Refresh Detections</button>
-        <button id="syncDetectionsBtn" class="cta-button">Sync</button>
-    </div>
-    <div id="detectionsTableContainer"></div>
+        <button id="syncDetectionsBtn" class="cta-button">Sync</button>    </div>    <div id="detectionsTableContainer"></div>
 </div>
+
+<!-- Tenant Management Modal (for JavaScript compatibility - modal not directly accessible) -->
+<div id="tenantModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8);">
+    <div class="modal-content" style="background-color: #1a1a1a; border: 2px solid #00ff41; margin: 5% auto; padding: 20px; width: 60%; max-width: 600px; border-radius: 8px; color: #7fff7f; font-family: Consolas, monospace;">
+        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #00ff41; padding-bottom: 10px;">
+            <h2 style="margin: 0; color: #00ff41;">Manage Tenants</h2>
+            <span class="close" style="color: #00ff41; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
+        </div>
+        
+        <!-- Add New Tenant Form -->
+        <div class="add-tenant-section" style="margin-bottom: 30px; padding: 15px; background: #0f1f0f; border: 1px solid #00ff41; border-radius: 4px;">
+            <h3 style="margin-top: 0; color: #00ff41;">Add New Tenant</h3>
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <input type="text" id="newTenantId" placeholder="Tenant ID" style="flex: 1; padding: 8px; background: #1a1a1a; border: 1px solid #00ff41; color: #7fff7f; font-family: Consolas, monospace;">
+                <input type="text" id="newClientName" placeholder="Client Name" style="flex: 1; padding: 8px; background: #1a1a1a; border: 1px solid #00ff41; color: #7fff7f; font-family: Consolas, monospace;">
+            </div>
+            <button id="addTenantBtn" class="cta-button" style="margin: 0;">Add Tenant</button>
+        </div>
+        
+        <!-- Existing Tenants List -->
+        <div class="tenants-list-section">
+            <h3 style="color: #00ff41;">Existing Tenants</h3>
+            <div id="tenantsList" style="max-height: 300px; overflow-y: auto;">
+                <!-- Tenant list will be populated here -->
+            </div>
+        </div>
+        
+        <div style="text-align: right; margin-top: 20px; border-top: 1px solid #00ff41; padding-top: 15px;">
+            <button id="closeTenantModal" class="cta-button">Close</button>
+        </div>
+    </div>
+</div>
+
+
 {% endblock %}
 
 {% block extra_js %}

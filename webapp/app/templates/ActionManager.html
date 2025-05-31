@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ActionManager.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+    <div class="toolbar-left">
+        <div class="dropdown-group" style="display: flex; align-items: center;">            <select id="tenantDropdown" class="toolbar-dropdown" style="width: 280px; margin-right: 0.5rem;">
+                <option value="">Select Tenant...</option>
+            </select>
+            <span class="page-title-bar">Action Manager</span>
+        </div>
+    </div>
+</div>
+<div class="toolbar" style="border-top: none; border-bottom: 2px solid #00ff41; background: #101c11;">
+    <div class="toolbar-left">
+        <button id="refreshActionsBtn" class="cta-button">Refresh</button>
+        <button id="undoActionsBtn" class="cta-button undo-button" style="background-color: #ff4400; border-color: #ff4400;">Undo All Pending Actions</button>
+        <span id="actionCount" style="margin-left: 1rem; color: #7fff7f; font-family: Consolas, monospace;">Total Actions: 0</span>
+    </div>
+</div>
+<div class="index-container">
+    <div id="actions-table"></div>
+</div>
+
+
+
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/gridjs/dist/gridjs.umd.js"></script>
+{% if FUNCURL and FUNCKEY %}
+<script>
+window.FUNCURL = "{{ FUNCURL }}";
+window.FUNCKEY = "{{ FUNCKEY }}";
+</script>
+{% endif %}
+<script src="{{ url_for('static', filename='js/ActionManager.js') }}"></script>
+{% endblock %}

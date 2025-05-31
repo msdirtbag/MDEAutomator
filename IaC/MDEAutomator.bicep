@@ -32,6 +32,16 @@ resource blobroleassign 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   }
 }
 
+// Storage Table Data Contributor Role Assignment
+resource tableroleassign 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(environmentid, '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3', subscription().id)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3')
+    principalId: managedidentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // Monitoring Metrics Publisher Role Assignment
 resource monitorroleassign 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(environmentid, '3913510d-42f4-4e42-8a64-420c390055eb', subscription().id)
@@ -129,6 +139,15 @@ resource outputcontainer 'Microsoft.Storage/storageAccounts/blobServices/contain
 // Detections Blob Container
 resource detectionscontainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' = {
   name: 'detections'
+  parent: blobservice
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+// Hunt Query Blob Container
+resource huntquerycontainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2024-01-01' = {
+  name: 'huntquery'
   parent: blobservice
   properties: {
     publicAccess: 'None'
@@ -246,12 +265,10 @@ resource function01 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
             name: 'SUBSCRIPTION_ID'
-            value: subscription().subscriptionId
-        }
+            value: subscription().subscriptionId        }
         {
             name: 'STORAGE_ACCOUNT'
-            value: storage01.name
-        }
+            value: storage01.name        }
         {
             name: 'SPNID'
             value: ''

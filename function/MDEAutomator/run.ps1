@@ -1,5 +1,5 @@
 # MDEAutomator Main Function App
-# 1.5.8
+# 1.5.9
 
 using namespace System.Net
 
@@ -23,49 +23,56 @@ try {
     $ActionId   = Get-RequestParam -Name "ActionId" -Request $Request
     $Sha1       = Get-RequestParam -Name "Sha1" -Request $Request
     $Url        = Get-RequestParam -Name "Url" -Request $Request
-    $Ip         = Get-RequestParam -Name "Ip" -Request $Request
-
-    # Validate required parameters
-    Test-NullOrEmpty $TenantId "TenantId"
+    $Ip         = Get-RequestParam -Name "Ip" -Request $Request 
+    
     Test-NullOrEmpty $Function "Function"
-
+    
+    # TenantId is required for all functions except GetTenantIds
+    if ($Function -ne "GetTenantIds") {
+        Test-NullOrEmpty $TenantId "TenantId"
+    }
+    
     # Get environment variables and connect
     $spnId = [System.Environment]::GetEnvironmentVariable('SPNID', 'Process')
     $ManagedIdentityId = [System.Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID', 'Process')
 
-    # Connect to MDE
-    $token = Connect-MDE -TenantId $TenantId -SpnId $spnId -ManagedIdentityId $ManagedIdentityId
+    # Connect to MDE (only for functions that need it)
+    $token = $null
+    if ($Function -notin @("SaveTenantId", "RemoveTenantId", "GetTenantIds")) {
+        $token = Connect-MDE -TenantId $TenantId -SpnId $spnId -ManagedIdentityId $ManagedIdentityId
+    }
 
     $Result = [HttpStatusCode]::OK
     Write-Host "Executing Function: $Function"
+    
     $output = switch ($Function) {
         'GetMachines'              { Get-Machines -token $token }
         'GetActions'               { Get-Actions -token $token }
         'UndoActions'              { Undo-Actions -token $token }
-        'GetIPInfo'                { 
+        'GetIPInfo'                 { 
                                         Test-NullOrEmpty $Ip "Ip"
                                         Get-IPInfo -token $token -IPs @($Ip)
                                     }
-        'GetFileInfo'              { 
+        'GetFileInfo'               { 
                                         Test-NullOrEmpty $Sha1 "Sha1"
                                         Get-FileInfo -token $token -Sha1s @($Sha1)
                                     }
-        'GetURLInfo'               { 
+        'GetURLInfo'                { 
                                         Test-NullOrEmpty $Url "Url"
                                         Get-URLInfo -token $token -URLs @($Url)
                                     }
-        'GetLoggedInUsers'         { 
+        'GetLoggedInUsers'          { 
                                         Test-NullOrEmpty $DeviceId "DeviceId"
                                         Get-LoggedInUsers -token $token -DeviceIds @($DeviceId)
                                     }
-        'GetMachineActionStatus'   { 
+        'GetMachineActionStatus'    { 
                                         Test-NullOrEmpty $ActionId "ActionId"
                                         Get-MachineActionStatus -machineActionId $ActionId -token $token
-                                    }
-        'GetLiveResponseOutput'    { 
+                                    }        
+        'GetLiveResponseOutput'     { 
                                         Test-NullOrEmpty $ActionId "ActionId"
                                         Get-LiveResponseOutput -machineActionId $ActionId -token $token
-                                    }
+                                    }          
         default { throw "Invalid function specified: $Function" }
     }
 

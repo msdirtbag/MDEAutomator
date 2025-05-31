@@ -1,0 +1,14 @@
+{
+  "bindings": [
+    {
+      "authLevel": "function",
+      "name": "Timer",
+      "type": "timerTrigger",
+      "direction": "in",
+      "schedule": "0 0 0 * * *"
+    }
+  ],
+  "disabled": false,
+  "scriptFile": "run.ps1",
+  "timeout": "-1"
+}
