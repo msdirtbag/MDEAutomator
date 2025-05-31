@@ -5,66 +5,30 @@ using namespace System.Net
 
 param($Timer)
 
-function Get-StorageTableContext {
-    param()
-    
-    try {
+function Get-TenantIdsFromTable {    
+    try {        
+          Write-Host "Starting Get-TenantIdsFromTable"
+        
         # Get storage account name from environment
         $storageAccountName = [System.Environment]::GetEnvironmentVariable('STORAGE_ACCOUNT', 'Process')
-        
         if ([string]::IsNullOrEmpty($storageAccountName)) {
             throw "STORAGE_ACCOUNT environment variable is required"
         }
         
-        # Create context for AzBobbyTables - try connection string first, then managed identity
-        Write-Host "Creating AzBobbyTables context for storage account: $storageAccountName"
-          # Prioritize connection string from AzureWebJobsStorage
-        $connectionString = [System.Environment]::GetEnvironmentVariable('AzureWebJobsStorage', 'Process')
-        
-        if (-not [string]::IsNullOrEmpty($connectionString)) {
-            Write-Host "Using AzureWebJobsStorage connection string authentication"
-            $ctx = New-AzDataTableContext -TableName "TenantIds" -ConnectionString $connectionString -ErrorAction Stop
-        } else {
-            Write-Host "No connection string found, falling back to managed identity authentication"
-            # Try with ClientId if available for user-assigned managed identity
-            $clientId = [System.Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID', 'Process')
-            if (-not [string]::IsNullOrEmpty($clientId)) {
-                Write-Host "Using user-assigned managed identity with ClientId: $clientId"
-                $ctx = New-AzDataTableContext -TableName "TenantIds" -StorageAccountName $storageAccountName -ManagedIdentity -ClientId $clientId -ErrorAction Stop
-            } else {
-                Write-Host "Using system-assigned managed identity"
-                $ctx = New-AzDataTableContext -TableName "TenantIds" -StorageAccountName $storageAccountName -ManagedIdentity -ErrorAction Stop
-            }
-        }
-        
-        return $ctx
-        
-    } catch {
-        Write-Host "ERROR: Failed to create storage context: $($_.Exception.Message)"
-        throw "Failed to create storage context: $($_.Exception.Message)"
-    }
-}
-
-function Get-TenantIdsFromTable {
-    
-    try {
-        Write-Host "Starting Get-TenantIdsFromTable"
-        
-        # Get authenticated storage context
-        $ctx = Get-StorageTableContext        # Get the TenantIds table
+        # Create context for AzBobbyTables - prioritize connection string authentication
         try {
-            $table = Get-AzDataTable -Context $ctx -ErrorAction Stop
+            Write-Host "Creating AzBobbyTables context for storage account: $storageAccountName"
+            
+            # Prioritize connection string from AzureWebJobsStorage
+            $connectionString = [System.Environment]::GetEnvironmentVariable('AzureWebJobsStorage', 'Process')
+            $context = New-AzDataTableContext -TableName "TenantIds" -ConnectionString $connectionString
+            Write-Host "Context created successfully"
         } catch {
-            return @{
-                Status = "Error"
-                Message = "TenantIds table not found in storage account"
-                TenantIds = @()
-                Count = 0
-            }
+            Write-Host "Failed to create context: $($_.Exception.Message)"
+            throw "Unable to create storage context: $($_.Exception.Message)"
         }
-
         # Get all tenant entities from the table using AzBobbyTables
-        $entities = Get-AzDataTableEntity -Context $ctx -Filter "PartitionKey eq 'TenantConfig'" -ErrorAction SilentlyContinue
+        $entities = Get-AzDataTableEntity -Context $context -Filter "PartitionKey eq 'TenantConfig'" -ErrorAction SilentlyContinue
         
         if (-not $entities) {
             return @{
@@ -72,6 +36,7 @@ function Get-TenantIdsFromTable {
                 Message = "No tenant IDs found in storage table"
                 TenantIds = @()
                 Count = 0
+                Timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
             }
         }
         
@@ -80,6 +45,7 @@ function Get-TenantIdsFromTable {
         foreach ($entity in $entities) {
             $tenantInfo = @{
                 TenantId = $entity.TenantId
+                ClientName = $entity.ClientName
                 Enabled = $entity.Enabled
                 AddedDate = $entity.AddedDate
                 AddedBy = $entity.AddedBy
@@ -98,12 +64,14 @@ function Get-TenantIdsFromTable {
         }
         
     } catch {
-        Write-Error "Error in Get-TenantIdsFromTable: $($_.Exception.Message)"
+        $errorMessage = "Failed to retrieve tenant IDs: $($_.Exception.Message)"
+        Write-Error $errorMessage
         return @{
             Status = "Error"
-            Message = "Failed to retrieve tenant IDs: $($_.Exception.Message)"
+            Message = $errorMessage
             TenantIds = @()
             Count = 0
+            Timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
         }
     }
 }
@@ -131,9 +99,20 @@ try {
     }
     
     $tenantIds = $enabledTenants | ForEach-Object { $_.TenantId }
-    Write-Host "Found $($tenantIds.Count) enabled tenant IDs: $($tenantIds -join ', ')"    # Download hunt queries from blob storage using centralized authentication
+    Write-Host "Found $($tenantIds.Count) enabled tenant IDs: $($tenantIds -join ', ')"
+    
+    # Download hunt queries from blob storage using UMI authentication
     $containerName = "huntquery"
-    $ctx = Get-StorageTableContext
+    
+    # Create storage context using User Managed Identity
+    try {
+        $ctx = New-AzStorageContext -StorageAccountName $storageAccountName -UseConnectedAccount
+        Write-Host "Storage context created successfully for blob operations using UMI"
+    } catch {
+        Write-Host "Failed to create storage context with UMI: $($_.Exception.Message)"
+        return
+    }
+    
     $huntQueries = @()
     
     try {
