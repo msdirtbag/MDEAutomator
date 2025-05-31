@@ -147,24 +147,15 @@ try {
         }
     } catch {
         Write-Host "Error accessing blob storage container '$containerName': $_"
-        return
-    }
-    
+        return    }
     if ($huntQueries.Count -eq 0) {
         Write-Host "No valid hunt queries loaded from blob storage."
         return
-    }
-    
-    Write-Host "Successfully loaded $($huntQueries.Count) hunt queries" 
+    }    Write-Host "Successfully loaded $($huntQueries.Count) hunt queries" 
     $functionUrl = [System.Environment]::GetEnvironmentVariable('WEBSITE_HOSTNAME', 'Process')
-    $functionKey = $env:AZURE_FUNCTIONS_ENVIRONMENT
-    if ([string]::IsNullOrEmpty($functionKey)) {
-        Write-Host "Using anonymous authentication for internal function call"
-        $useAuthentication = $false
-    } else {
-        Write-Host "Using internal authentication for function-to-function call"
-        $useAuthentication = $true
-    }
+    
+    # For internal function calls, we'll use UMI authentication with the correct resource
+    $managedIdentityId = [System.Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID', 'Process')
 
     $results = @()
     foreach ($tenantId in $tenantIds) {
@@ -175,18 +166,42 @@ try {
                 TenantId = $tenantId
                 Queries = $huntQueries
             }
-              $body = $payload | ConvertTo-Json -Depth 10
+            $body = $payload | ConvertTo-Json -Depth 10
             $uri = "https://$functionUrl/api/MDEAutoHunt"
             
+            # Use UMI authentication for secure internal calls
             $headers = @{
                 'Content-Type' = 'application/json'
-            }
-            
-            if ($useAuthentication) {
-                $headers['x-functions-key'] = $functionKey
-                Write-Host "Using internal function key authentication for Tenant: $tenantId"
-            } else {
-                Write-Host "Using anonymous authentication for Tenant: $tenantId (internal call)"
+            }         
+            try {
+                try {
+                    
+                    # Get access token using Azure PowerShell
+                    $tokenInfo = Get-AzAccessToken -ResourceUrl "https://management.azure.com/" -ErrorAction Stop
+                    $headers['Authorization'] = "Bearer $($tokenInfo.Token)"
+                    Write-Host "Using UMI authentication via Azure PowerShell for Tenant: $tenantId"
+                } catch {
+                    Write-Host "Azure PowerShell approach failed, trying direct IMDS call: $($_.Exception.Message)"
+                    
+                    # Fallback to direct IMDS call
+                    $resourceUrl = "https://management.azure.com/"
+                    $tokenUrl = "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=$resourceUrl&client_id=$managedIdentityId"
+                    $tokenResponse = Invoke-RestMethod -Uri $tokenUrl -Method GET -Headers @{ 'Metadata' = 'true' } -ErrorAction Stop
+                    $headers['Authorization'] = "Bearer $($tokenResponse.access_token)"
+                    Write-Host "Using UMI authentication via IMDS for Tenant: $tenantId"
+                }
+            } catch {
+                Write-Host "Failed to get UMI token for Tenant: $tenantId - $($_.Exception.Message)"
+                # Fallback: try without UMI client_id specified
+                try {
+                    $tokenUrl = "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/"
+                    $tokenResponse = Invoke-RestMethod -Uri $tokenUrl -Method GET -Headers @{ 'Metadata' = 'true' } -ErrorAction Stop
+                    $headers['Authorization'] = "Bearer $($tokenResponse.access_token)"
+                    Write-Host "Using system-assigned managed identity for Tenant: $tenantId"
+                } catch {
+                    Write-Host "Failed to get any managed identity token for Tenant: $tenantId - $($_.Exception.Message)"
+                    throw "Authentication failed: Unable to get UMI or system-assigned token"
+                }
             }
             
             # Call MDEAutoHunt function

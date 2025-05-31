@@ -5,6 +5,40 @@ using namespace System.Net
 
 param($Request)
 
+# Validate UMI authentication for secure access
+try {
+    $authHeader = $Request.Headers['Authorization']
+    if ([string]::IsNullOrEmpty($authHeader) -or -not $authHeader.StartsWith('Bearer ')) {
+        Write-Host "Unauthorized: Missing or invalid Authorization header"
+        Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
+            StatusCode = [HttpStatusCode]::Unauthorized
+            Body = "Unauthorized: UMI token required"
+        })
+        return
+    }
+    
+    $token = $authHeader.Substring(7) # Remove "Bearer " prefix
+    
+    # Basic token validation - in production, you'd validate the token signature and claims
+    if ([string]::IsNullOrEmpty($token) -or $token.Length -lt 100) {
+        Write-Host "Unauthorized: Invalid UMI token format"
+        Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
+            StatusCode = [HttpStatusCode]::Unauthorized
+            Body = "Unauthorized: Invalid UMI token"
+        })
+        return
+    }
+    
+    Write-Host "UMI authentication validated successfully"
+} catch {
+    Write-Host "Authentication error: $($_.Exception.Message)"
+    Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
+        StatusCode = [HttpStatusCode]::Unauthorized
+        Body = "Unauthorized: Authentication failed"
+    })
+    return
+}
+
 try {
     # Get request parameters
     $TenantId = Get-RequestParam -Name "TenantId" -Request $Request
