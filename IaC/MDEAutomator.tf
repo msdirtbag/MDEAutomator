@@ -27,6 +27,12 @@ variable "env" {
   }
 }
 
+variable "app_insights_log_analytics_workspace_id" {
+  description = "The ID of the Application Insights workspace to use."
+  type        = string
+  default     = "" # Optional, can be set if you have an existing workspace
+}
+
 resource "random_string" "environmentid" {
   length  = 8
   special = false
@@ -118,6 +124,7 @@ resource "azurerm_storage_container" "huntquery" {
 }
 
 resource "azurerm_log_analytics_workspace" "app_insights_workspace" {
+  count               = var.app_insights_log_analytics_workspace_id != "" ? 0 : 1
   name                = "law-mdeauto-${random_string.environmentid.result}"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
@@ -131,7 +138,7 @@ resource "azurerm_application_insights" "app_insights" {
   resource_group_name = azurerm_resource_group.rg.name
   application_type    = "web"
   retention_in_days   = 60
-  workspace_id        = azurerm_log_analytics_workspace.app_insights_workspace.id
+  workspace_id        = var.app_insights_log_analytics_workspace_id != "" ? var.app_insights_log_analytics_workspace_id : azurerm_log_analytics_workspace.app_insights_workspace[0].id
   depends_on          = [azurerm_log_analytics_workspace.app_insights_workspace]
 }
 
