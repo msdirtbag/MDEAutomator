@@ -132,7 +132,7 @@ resource "azurerm_application_insights" "app_insights" {
   application_type    = "web"
   retention_in_days   = 60
   workspace_id        = azurerm_log_analytics_workspace.app_insights_workspace.id
-  depends_on = [ azurerm_log_analytics_workspace.app_insights_workspace ]
+  depends_on          = [azurerm_log_analytics_workspace.app_insights_workspace]
 }
 
 resource "azurerm_service_plan" "func_service_plan" {
@@ -182,7 +182,7 @@ resource "azurerm_linux_function_app" "func" {
       powershell_core_version = "7.4"
     }
   }
-  depends_on = [ azurerm_service_plan.func_service_plan, azurerm_application_insights.app_insights ]
+  depends_on = [azurerm_service_plan.func_service_plan, azurerm_application_insights.app_insights]
   lifecycle {
     ignore_changes = [
       app_settings["SPNID"]
@@ -252,7 +252,7 @@ resource "azurerm_linux_web_app" "webapp" {
   app_settings = {
     WEBSITES_ENABLE_APP_SERVICE_STORAGE = "false" # typical for Docker containers
   }
-  depends_on = [ azurerm_service_plan.webapp_service_plan, azurerm_application_insights.app_insights ]
+  depends_on = [azurerm_service_plan.webapp_service_plan, azurerm_application_insights.app_insights]
 }
 
 output "function_app_url" {
