@@ -8,7 +8,6 @@ targetScope = 'resourceGroup'
 //Variables
 var environmentid = uniqueString(tenant().tenantId, subscription().id, env)
 var location = resourceGroup().location
-var computedLogAnalyticsWorkspaceName = !empty(logAnalyticsWorkspaceName) ? logAnalyticsWorkspaceName : 'law-mdeauto-${environmentid}'
 
 //Parameters
 
@@ -21,8 +20,6 @@ param useExistingWorkspace bool = false
 @description('Resource ID of existing Log Analytics Workspace (required if useExistingWorkspace is true)')
 param existingWorkspaceResourceId string = ''
 
-@description('Name for the new Log Analytics Workspace (used only if useExistingWorkspace is false)')
-param logAnalyticsWorkspaceName string = ''
 
 //Resources
 
@@ -166,7 +163,7 @@ resource huntquerycontainer 'Microsoft.Storage/storageAccounts/blobServices/cont
 
 // Log Analytics Workspace (conditional creation)
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = if (!useExistingWorkspace) {
-  name: computedLogAnalyticsWorkspaceName
+  name: 'log-mdeautomator-${environmentid}'
   location: location
   properties: {
     sku: {

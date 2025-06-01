@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.36.1.42791",
-      "templateHash": "6753797267058612763"
+      "templateHash": "2559819710382385703"
     }
   },
   "parameters": {
@@ -28,19 +28,11 @@
       "metadata": {
         "description": "Resource ID of existing Log Analytics Workspace (required if useExistingWorkspace is true)"
       }
-    },
-    "logAnalyticsWorkspaceName": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Name for the new Log Analytics Workspace (used only if useExistingWorkspace is false)"
-      }
     }
   },
   "variables": {
     "environmentid": "[uniqueString(tenant().tenantId, subscription().id, parameters('env'))]",
-    "location": "[resourceGroup().location]",
-    "computedLogAnalyticsWorkspaceName": "[if(not(empty(parameters('logAnalyticsWorkspaceName'))), parameters('logAnalyticsWorkspaceName'), format('law-mdeauto-{0}', variables('environmentid')))]"
+    "location": "[resourceGroup().location]"
   },
   "resources": [
     {
@@ -211,7 +203,7 @@
       "condition": "[not(parameters('useExistingWorkspace'))]",
       "type": "Microsoft.OperationalInsights/workspaces",
       "apiVersion": "2023-09-01",
-      "name": "[variables('computedLogAnalyticsWorkspaceName')]",
+      "name": "[format('log-mdeautomator-{0}', variables('environmentid'))]",
       "location": "[variables('location')]",
       "properties": {
         "sku": {
@@ -229,10 +221,10 @@
       "properties": {
         "Application_Type": "web",
         "RetentionInDays": 60,
-        "WorkspaceResourceId": "[if(parameters('useExistingWorkspace'), parameters('existingWorkspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', variables('computedLogAnalyticsWorkspaceName')))]"
+        "WorkspaceResourceId": "[if(parameters('useExistingWorkspace'), parameters('existingWorkspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid'))))]"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('computedLogAnalyticsWorkspaceName'))]"
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid')))]"
       ]
     },
     {
