@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.36.1.42791",
-      "templateHash": "9063914431826825445"
+      "templateHash": "6753797267058612763"
     }
   },
   "parameters": {
@@ -14,11 +14,33 @@
       "metadata": {
         "description": "Chose a variable for the environment. Example: dev, test, soc"
       }
+    },
+    "useExistingWorkspace": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Set to true to use an existing Log Analytics Workspace, false to create a new one"
+      }
+    },
+    "existingWorkspaceResourceId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource ID of existing Log Analytics Workspace (required if useExistingWorkspace is true)"
+      }
+    },
+    "logAnalyticsWorkspaceName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name for the new Log Analytics Workspace (used only if useExistingWorkspace is false)"
+      }
     }
   },
   "variables": {
     "environmentid": "[uniqueString(tenant().tenantId, subscription().id, parameters('env'))]",
-    "location": "[resourceGroup().location]"
+    "location": "[resourceGroup().location]",
+    "computedLogAnalyticsWorkspaceName": "[if(not(empty(parameters('logAnalyticsWorkspaceName'))), parameters('logAnalyticsWorkspaceName'), format('law-mdeauto-{0}', variables('environmentid')))]"
   },
   "resources": [
     {
@@ -186,6 +208,19 @@
       ]
     },
     {
+      "condition": "[not(parameters('useExistingWorkspace'))]",
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('computedLogAnalyticsWorkspaceName')]",
+      "location": "[variables('location')]",
+      "properties": {
+        "sku": {
+          "name": "PerGB2018"
+        },
+        "retentionInDays": 30
+      }
+    },
+    {
       "type": "Microsoft.Insights/components",
       "apiVersion": "2020-02-02",
       "name": "[format('appi-mdeauto{0}', variables('environmentid'))]",
@@ -193,8 +228,12 @@
       "kind": "web",
       "properties": {
         "Application_Type": "web",
-        "RetentionInDays": 60
-      }
+        "RetentionInDays": 60,
+        "WorkspaceResourceId": "[if(parameters('useExistingWorkspace'), parameters('existingWorkspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', variables('computedLogAnalyticsWorkspaceName')))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('computedLogAnalyticsWorkspaceName'))]"
+      ]
     },
     {
       "type": "Microsoft.Web/serverfarms",

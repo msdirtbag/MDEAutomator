@@ -8,11 +8,21 @@ targetScope = 'resourceGroup'
 //Variables
 var environmentid = uniqueString(tenant().tenantId, subscription().id, env)
 var location = resourceGroup().location
+var computedLogAnalyticsWorkspaceName = !empty(logAnalyticsWorkspaceName) ? logAnalyticsWorkspaceName : 'law-mdeauto-${environmentid}'
 
 //Parameters
 
 @description('Chose a variable for the environment. Example: dev, test, soc')
 param env string
+
+@description('Set to true to use an existing Log Analytics Workspace, false to create a new one')
+param useExistingWorkspace bool = false
+
+@description('Resource ID of existing Log Analytics Workspace (required if useExistingWorkspace is true)')
+param existingWorkspaceResourceId string = ''
+
+@description('Name for the new Log Analytics Workspace (used only if useExistingWorkspace is false)')
+param logAnalyticsWorkspaceName string = ''
 
 //Resources
 
@@ -154,6 +164,18 @@ resource huntquerycontainer 'Microsoft.Storage/storageAccounts/blobServices/cont
   }
 }
 
+// Log Analytics Workspace (conditional creation)
+resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = if (!useExistingWorkspace) {
+  name: computedLogAnalyticsWorkspaceName
+  location: location
+  properties: {
+    sku: {
+      name: 'PerGB2018'
+    }
+    retentionInDays: 30
+  }
+}
+
 // Application Insights
 resource appinsights01 'Microsoft.Insights/components@2020-02-02' = {
   name: 'appi-mdeauto${environmentid}'
@@ -162,6 +184,7 @@ resource appinsights01 'Microsoft.Insights/components@2020-02-02' = {
   properties: {
     Application_Type: 'web'
     RetentionInDays: 60
+    WorkspaceResourceId: useExistingWorkspace ? existingWorkspaceResourceId : logAnalyticsWorkspace.id
   }
 }
 
@@ -222,7 +245,7 @@ resource function01 'Microsoft.Web/sites@2023-12-01' = {
         {
             name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
             value: appinsights01.properties.ConnectionString
-        }
+        }        
         {
             name: 'APPLICATIONINSIGHTS_AUTHENTICATION_STRING'
             value: 'Authorization=AAD;ClientId=${managedidentity.properties.clientId}'
@@ -241,11 +264,11 @@ resource function01 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
             name: 'AzureWebJobsStorage'
-            value: 'DefaultEndpointsProtocol=https;AccountName=${storage01.name};AccountKey=${listKeys(storage01.id, storage01.apiVersion).keys[0].value}'
+            value: 'DefaultEndpointsProtocol=https;AccountName=${storage01.name};AccountKey=${storage01.listKeys().keys[0].value}'
         }
         {
             name: 'WEBSITE_CONTENTAZUREFILECONNECTIONSTRING'
-            value: 'DefaultEndpointsProtocol=https;AccountName=${storage01.name};AccountKey=${listKeys(storage01.id, storage01.apiVersion).keys[0].value}'
+            value: 'DefaultEndpointsProtocol=https;AccountName=${storage01.name};AccountKey=${storage01.listKeys().keys[0].value}'
         }
         {
             name: 'WEBSITE_RUN_FROM_PACKAGE'
@@ -265,10 +288,12 @@ resource function01 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
             name: 'SUBSCRIPTION_ID'
-            value: subscription().subscriptionId        }
+            value: subscription().subscriptionId
+        }
         {
             name: 'STORAGE_ACCOUNT'
-            value: storage01.name        }
+            value: storage01.name
+        }
         {
             name: 'SPNID'
             value: ''
