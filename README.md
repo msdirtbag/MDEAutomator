@@ -4,14 +4,6 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 
 ![main](./media/main.png)
 
-
-### Threat Intelligence Manager
-
-![iocmanager](./media/iocmanager.png)
-
-
-![cdmanager](./media/cdmanager.png)
-
 ---
 
 ## Core Components
