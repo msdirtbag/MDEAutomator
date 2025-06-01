@@ -95,11 +95,58 @@ function getTenantId() {
     return tenantDropdown ? tenantDropdown.value.trim() : '';
 }
 
+// Loading indicator functions
+function showLoadingIndicator(message = 'Loading...') {
+    // Create or update loading overlay
+    let overlay = document.getElementById('loadingOverlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'loadingOverlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            color: #00ff41;
+            font-family: Consolas, monospace;
+            font-size: 18px;
+        `;
+        document.body.appendChild(overlay);
+    }
+    overlay.innerHTML = `<div style="text-align: center;">
+        <div style="border: 2px solid #00ff41; border-radius: 50%; width: 40px; height: 40px; border-top: 2px solid transparent; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
+        ${message}
+    </div>`;
+    overlay.style.display = 'flex';
+    
+    // Add CSS animation if not already present
+    if (!document.getElementById('loadingStyles')) {
+        const style = document.createElement('style');
+        style.id = 'loadingStyles';
+        style.textContent = '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
+        document.head.appendChild(style);
+    }
+}
+
+function hideLoadingIndicator() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+}
+
 async function loadActions() {
     const tenantId = getTenantId();
     if (!tenantId) return;
     
     console.log('Loading actions for tenant:', tenantId);
+    showLoadingIndicator('Loading Actions...');
     
     try {
         // Call Azure Function directly like TIManager does
@@ -124,6 +171,7 @@ async function loadActions() {
         
         allActions = actionsRaw;
         renderActionsTable(allActions);
+        console.log('Actions loading completed');
         
     } catch (error) {
         console.error('Error loading actions:', error);
@@ -138,6 +186,8 @@ async function loadActions() {
         // Clear the table or show empty state
         allActions = [];
         renderActionsTable(allActions);
+    } finally {
+        hideLoadingIndicator();
     }
 }
 
@@ -377,6 +427,7 @@ function setupEventListeners() {
     }
 }
 
+// Simplified tenant loading for dropdown only
 async function loadTenants() {
     try {
         console.log('Loading tenants from backend...');
@@ -417,8 +468,8 @@ function populateTenantDropdown(tenants) {
         return;
     }
     
-    // Clear existing options except the default
-    tenantDropdown.innerHTML = '<option value="">Select Tenant...</option>';
+    // Clear existing options
+    tenantDropdown.innerHTML = '';
     
     // Add tenant options - Client Name first, then Tenant ID in parentheses
     tenants.forEach(tenant => {

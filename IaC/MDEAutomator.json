@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.36.1.42791",
-      "templateHash": "2700608257173883686"
+      "templateHash": "9063914431826825445"
     }
   },
   "parameters": {
@@ -310,8 +310,7 @@
           ],
           "use32BitWorkerProcess": false,
           "ftpsState": "Disabled",
-          "powerShellVersion": "7.4",
-          "netFrameworkVersion": "v8.0"
+          "powerShellVersion": "7.4"
         }
       },
       "dependsOn": [

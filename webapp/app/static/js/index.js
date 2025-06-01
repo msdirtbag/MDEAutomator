@@ -2,6 +2,12 @@
 let selectedDeviceIds = [];
 let machinesGrid = null;
 
+// Tenant management state
+let isLoadingTenants = false;
+let tenantCache = null;
+let lastTenantRefresh = 0;
+const TENANT_CACHE_DURATION = 30000; // 30 seconds
+
 document.addEventListener('DOMContentLoaded', () => {
     console.log('Index page JavaScript loaded');
     
@@ -45,6 +51,52 @@ function getTenantId() {
     return tenantDropdown ? tenantDropdown.value.trim() : '';
 }
 
+// Optimized loading function with immediate feedback
+function showLoadingIndicator(message = 'Loading...') {
+    // Create or update loading overlay
+    let overlay = document.getElementById('loadingOverlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'loadingOverlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            color: #00ff41;
+            font-family: Consolas, monospace;
+            font-size: 18px;
+        `;
+        document.body.appendChild(overlay);
+    }
+    overlay.innerHTML = `<div style="text-align: center;">
+        <div style="border: 2px solid #00ff41; border-radius: 50%; width: 40px; height: 40px; border-top: 2px solid transparent; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
+        ${message}
+    </div>`;
+    overlay.style.display = 'flex';
+    
+    // Add CSS animation if not already present
+    if (!document.getElementById('loadingStyles')) {
+        const style = document.createElement('style');
+        style.id = 'loadingStyles';
+        style.textContent = '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
+        document.head.appendChild(style);
+    }
+}
+
+function hideLoadingIndicator() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+}
+
 async function loadMachines() {
     if (!window.FUNCURL || !window.FUNCKEY) {
         alert('FUNCURL and FUNCKEY are not set. Please contact your administrator.');
@@ -58,6 +110,7 @@ async function loadMachines() {
     }
     
     console.log('Loading machines for tenant:', tenantId);
+    showLoadingIndicator('Loading machines...');
     
     try {
         const url = `https://${window.FUNCURL}/api/MDEAutomator?code=${window.FUNCKEY}`;
@@ -66,11 +119,19 @@ async function loadMachines() {
             Function: 'GetMachines'
         };
         
+        // Reduced timeout for better UX
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+        
         const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
+        hideLoadingIndicator();
         
         const data = await res.json();
         let machinesRaw = data.machines || data.value;
@@ -78,21 +139,26 @@ async function loadMachines() {
         if (!Array.isArray(machinesRaw)) {
             if (Array.isArray(data)) {
                 machinesRaw = data;
+            } else if (data.value && Array.isArray(data.value)) {
+                machinesRaw = data.value;
             } else {
-                for (const key in data) {
-                    if (Array.isArray(data[key])) {
-                        machinesRaw = data[key];
-                        break;
-                    }
-                }
+                console.log('No machines data found in response:', data);
+                machinesRaw = [];
             }
         }
         
-        renderMachinesTable(machinesRaw || []);
+        console.log('Machines loaded:', machinesRaw.length);
+        renderMachinesTable(machinesRaw);
         
     } catch (error) {
-        console.error('Error loading machines:', error);
-        alert('Error loading machines. Please check console for details.');
+        hideLoadingIndicator();
+        if (error.name === 'AbortError') {
+            console.error('Load machines request timed out');
+            alert('Loading machines timed out. The operation may still be processing. Please try again.');
+        } else {
+            console.error('Error loading machines:', error);
+            alert('Error loading machines. Please check console for details.');
+        }
     }
 }
 
@@ -451,13 +517,27 @@ function setupEventListeners() {
     }
 }
 
-async function loadTenants() {
+async function loadTenants(force = false) {
+    // Check cache first
+    const now = Date.now();
+    if (!force && tenantCache && (now - lastTenantRefresh) < TENANT_CACHE_DURATION) {
+        console.log('Using cached tenant data');
+        populateTenantDropdown(tenantCache);
+        return;
+    }
+    
+    if (isLoadingTenants) {
+        console.log('Tenant loading already in progress');
+        return;
+    }
+    
     try {
+        isLoadingTenants = true;
         console.log('Loading tenants from backend...');
         
-        // Add timeout controller for longer operations
+        // Reduced timeout for better UX
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
         
         const response = await fetch('/api/tenants', {
             signal: controller.signal
@@ -487,14 +567,20 @@ async function loadTenants() {
             return;
         }
         
+        // Update cache
+        tenantCache = tenants;
+        lastTenantRefresh = now;
+        
         populateTenantDropdown(tenants);
     } catch (error) {
         if (error.name === 'AbortError') {
             console.error('Load tenants request timed out');
-            alert('Loading tenants timed out. Please try again.');
+            // Don't show alert for background loading
         } else {
             console.error('Error fetching tenants:', error);
         }
+    } finally {
+        isLoadingTenants = false;
     }
 }
 
@@ -502,8 +588,8 @@ function populateTenantDropdown(tenants) {
     const dropdown = document.getElementById('tenantDropdown');
     if (!dropdown) return;
     
-    // Clear existing options except the first one
-    dropdown.innerHTML = '<option value="">Select Tenant...</option>';
+    // Clear existing options
+    dropdown.innerHTML = '';
     
     // Add tenant options - Client Name first, then Tenant ID in parentheses
     tenants.forEach(tenant => {
@@ -559,9 +645,15 @@ function closeTenantModal() {
 
 async function loadTenantsForModal() {
     try {
-        // Add timeout controller for longer operations
+        // Show loading state in modal
+        const tenantsList = document.getElementById('tenantsList');
+        if (tenantsList) {
+            tenantsList.innerHTML = '<p style="color: #00ff41; text-align: center;">Loading tenants...</p>';
+        }
+        
+        // Reduced timeout for modal loading
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
         
         const response = await fetch('/api/tenants', {
             signal: controller.signal
@@ -571,6 +663,9 @@ async function loadTenantsForModal() {
         
         if (!response.ok) {
             console.error('HTTP error response:', response.status, response.statusText);
+            if (tenantsList) {
+                tenantsList.innerHTML = '<p style="color: #ff4444; text-align: center;">Error loading tenants</p>';
+            }
             return;
         }
         
@@ -582,13 +677,22 @@ async function loadTenantsForModal() {
             // Handle different error response formats
             const errorMessage = data.Message || data.error || 'Unknown error occurred';
             console.error('Error loading tenants for modal:', errorMessage);
+            if (tenantsList) {
+                tenantsList.innerHTML = `<p style="color: #ff4444; text-align: center;">Error: ${errorMessage}</p>`;
+            }
         }
     } catch (error) {
+        const tenantsList = document.getElementById('tenantsList');
         if (error.name === 'AbortError') {
             console.error('Load tenants for modal request timed out');
-            // Don't show alert here as this is background loading
+            if (tenantsList) {
+                tenantsList.innerHTML = '<p style="color: #ff4444; text-align: center;">Loading timed out. Please close and reopen the modal.</p>';
+            }
         } else {
             console.error('Error fetching tenants for modal:', error);
+            if (tenantsList) {
+                tenantsList.innerHTML = '<p style="color: #ff4444; text-align: center;">Error loading tenants</p>';
+            }
         }
     }
 }
@@ -624,6 +728,7 @@ function populateTenantsListForModal(tenants) {
 async function addTenant() {
     const newTenantId = document.getElementById('newTenantId');
     const newClientName = document.getElementById('newClientName');
+    const addTenantBtn = document.getElementById('addTenantBtn');
     
     if (!newTenantId || !newClientName) return;
     
@@ -635,12 +740,18 @@ async function addTenant() {
         return;
     }
     
+    // Disable button and show loading state
+    const originalButtonText = addTenantBtn.textContent;
+    addTenantBtn.disabled = true;
+    addTenantBtn.textContent = 'Adding...';
+    addTenantBtn.style.background = '#666';
+    
     try {
         console.log('Adding tenant:', tenantId, clientName);
         
-        // Add timeout controller for longer operations
+        // Reduced timeout for better UX
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
         
         const response = await fetch('/api/tenants', {
             method: 'POST',
@@ -671,14 +782,32 @@ async function addTenant() {
             newTenantId.value = '';
             newClientName.value = '';
             
-            // Reload the tenants list in modal and dropdown
+            // Immediately add to cache to provide instant feedback
+            if (tenantCache) {
+                const newTenant = {
+                    TenantId: tenantId,
+                    ClientName: clientName,
+                    Enabled: true,
+                    AddedDate: new Date().toISOString(),
+                    AddedBy: 'User'
+                };
+                tenantCache.push(newTenant);
+                populateTenantDropdown(tenantCache);
+            }
+            
+            // Update modal list with immediate feedback
             loadTenantsForModal();
-            loadTenants();
+            
+            // Background refresh of tenant cache
+            setTimeout(() => loadTenants(true), 100);
             
             alert('Tenant added successfully!');
         } else if (data.Status === 'Warning') {
             const warningMessage = data.Message || 'Warning occurred';
             alert(`Warning: ${warningMessage}`);
+            // Still refresh in case it was added
+            loadTenantsForModal();
+            loadTenants(true);
         } else {
             // Handle different error response formats
             const errorMessage = data.Message || data.error || 'Unknown error occurred';
@@ -688,11 +817,21 @@ async function addTenant() {
     } catch (error) {
         if (error.name === 'AbortError') {
             console.error('Add tenant request timed out');
-            alert('Adding tenant timed out. Please try again.');
+            alert('Adding tenant timed out. The operation may still be processing. Please check the tenant list.');
+            // Refresh to see if it was actually added
+            setTimeout(() => {
+                loadTenantsForModal();
+                loadTenants(true);
+            }, 1000);
         } else {
             console.error('Error adding tenant:', error);
             alert('Error adding tenant. Please check console for details.');
         }
+    } finally {
+        // Re-enable button
+        addTenantBtn.disabled = false;
+        addTenantBtn.textContent = originalButtonText;
+        addTenantBtn.style.background = '';
     }
 }
 
@@ -701,12 +840,20 @@ async function deleteTenant(tenantId) {
         return;
     }
     
+    // Find and disable the delete button for immediate feedback
+    const deleteButtons = document.querySelectorAll(`button[onclick*="${tenantId}"]`);
+    deleteButtons.forEach(btn => {
+        btn.disabled = true;
+        btn.textContent = 'Deleting...';
+        btn.style.background = '#666';
+    });
+    
     try {
         console.log('Deleting tenant:', tenantId);
         
-        // Add timeout controller for longer operations
+        // Reduced timeout for better UX
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout (reduced from 45s)
         
         const response = await fetch(`/api/tenants/${encodeURIComponent(tenantId)}`, {
             method: 'DELETE',
@@ -726,9 +873,11 @@ async function deleteTenant(tenantId) {
         if (data.Status === 'Success') {
             console.log('Tenant deleted successfully');
             
-            // Reload the tenants list in modal and dropdown
-            loadTenantsForModal();
-            loadTenants();
+            // Immediately remove from cache for instant feedback
+            if (tenantCache) {
+                tenantCache = tenantCache.filter(tenant => tenant.TenantId !== tenantId);
+                populateTenantDropdown(tenantCache);
+            }
             
             // Clear selection if the deleted tenant was selected
             const currentTenant = getTenantId();
@@ -740,6 +889,12 @@ async function deleteTenant(tenantId) {
                 }
             }
             
+            // Update modal list with immediate feedback
+            loadTenantsForModal();
+            
+            // Background refresh of tenant cache
+            setTimeout(() => loadTenants(true), 100);
+            
             alert('Tenant deleted successfully!');
         } else {
             // Handle different error response formats
@@ -750,11 +905,25 @@ async function deleteTenant(tenantId) {
     } catch (error) {
         if (error.name === 'AbortError') {
             console.error('Delete tenant request timed out');
-            alert('Deleting tenant timed out. Please try again.');
+            alert('Deleting tenant timed out. The operation may still be processing. Please refresh the tenant list.');
+            // Refresh to see if it was actually deleted
+            setTimeout(() => {
+                loadTenantsForModal();
+                loadTenants(true);
+            }, 1000);
         } else {
             console.error('Error deleting tenant:', error);
             alert('Error deleting tenant. Please check console for details.');
         }
+    } finally {
+        // Re-enable buttons (they might be removed from DOM by now if delete succeeded)
+        deleteButtons.forEach(btn => {
+            if (btn.parentNode) {
+                btn.disabled = false;
+                btn.textContent = 'Delete';
+                btn.style.background = '';
+            }
+        });
     }
 }
 

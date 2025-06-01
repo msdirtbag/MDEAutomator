@@ -31,8 +31,20 @@ def call_azure_function(function_name, payload, read_timeout=3):
             current_app.logger.debug(f"Response from {function_name} (status {resp.status_code}): {response_json}")
             return response_json
         except requests.exceptions.JSONDecodeError:
-            current_app.logger.error(f"Failed to decode JSON response from {function_name}. Status: {resp.status_code}. Response text (first 500 chars): {resp.text[:500]}")
-            return {'error': 'Invalid JSON response from Azure Function.', 'status_code': resp.status_code, 'response_text': resp.text}
+            # Log detailed error information for debugging
+            current_app.logger.error(f"Failed to decode JSON response from {function_name}. Status: {resp.status_code}. Response text (first 1000 chars): {resp.text[:1000]}")
+            
+            # Check what type of response we got
+            response_preview = resp.text[:200] if resp.text else "Empty response"
+            
+            if resp.text.strip().startswith('<!DOCTYPE') or resp.text.strip().startswith('<html'):
+                current_app.logger.error(f"Azure Function {function_name} returned HTML error page instead of JSON")
+                return {'error': 'Azure Function returned HTML error page instead of JSON response.', 'status_code': resp.status_code, 'response_preview': response_preview}
+            elif not resp.text.strip():
+                current_app.logger.error(f"Azure Function {function_name} returned empty response")
+                return {'error': 'Azure Function returned empty response.', 'status_code': resp.status_code}
+            else:
+                return {'error': 'Invalid JSON response from Azure Function.', 'status_code': resp.status_code, 'response_text': resp.text[:500]}
 
     except requests.exceptions.ReadTimeout:
         current_app.logger.info(f"Read timeout occurred for {function_name} as expected for long-running task. Assuming task initiated.")
@@ -83,12 +95,12 @@ def get_machines():
             for k, v in flat['VmMetadata'].items():
                 flat[f'VmMetadata.{k}'] = v
             del flat['VmMetadata']
-        # Flatten first IP address for display
-        if 'IpAddresses' in flat and isinstance(flat['IpAddresses'], list) and flat['IpAddresses']:
+        # Flatten first IP address for display        if 'IpAddresses' in flat and isinstance(flat['IpAddresses'], list) and flat['IpAddresses']:
             for k, v in flat['IpAddresses'][0].items():
                 flat[f'IpAddresses.0.{k}'] = v
             del flat['IpAddresses']
         return flat
+    
     flat_machines = [flatten_machine(m) for m in machines]
     # Ensure MachineTags is the 6th column
     columns = list(flat_machines[0].keys())
@@ -646,7 +658,6 @@ def clear_threat_intelligence():
             return jsonify({'error': response['error']}), 500
             
         return jsonify(response)
-        
     except Exception as e:
         current_app.logger.error(f"Exception in clear_threat_intelligence: {str(e)}")
         return jsonify({'error': str(e)}), 500
@@ -990,8 +1001,12 @@ def debug_actions():
     // Auto-run initial test
     window.addEventListener('DOMContentLoaded', () => {
         log('Debug page loaded, ready for testing...');
-    });
-    </script>
+    });    </script>
 </body>
 </html>
     ''')
+
+@main_bp.route('/debug-tenants')
+def debug_tenants():
+    """Debug page for tenant management functionality"""
+    return render_template_string(open('debug_tenants.html', 'r').read())

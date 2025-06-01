@@ -1,5 +1,5 @@
 //MDEAutomator
-//Version: 1.5.5
+//Version: 1.5.9
 //Author: msdirtbag
 
 //Scope
@@ -277,7 +277,6 @@ resource function01 'Microsoft.Web/sites@2023-12-01' = {
       use32BitWorkerProcess: false
       ftpsState: 'Disabled'
       powerShellVersion: '7.4'
-      netFrameworkVersion: 'v8.0'
     }
   }
 }

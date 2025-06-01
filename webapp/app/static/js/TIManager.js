@@ -1,3 +1,4 @@
+
 window.addEventListener('DOMContentLoaded', () => {
     console.log('TIManager page JavaScript loaded');
     
@@ -21,8 +22,7 @@ window.addEventListener('DOMContentLoaded', () => {
                     if (option.value === savedTenant) {
                         tenantDropdown.value = savedTenant;
                         // Auto-load data if tenant is saved
-                        loadIndicators();
-                        loadDetections();
+                        loadThreatIntelligence();
                         break;
                     }
                 }
@@ -39,18 +39,17 @@ window.addEventListener('DOMContentLoaded', () => {
     const syncDetectionsBtn = document.getElementById('syncDetectionsBtn');
     const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
     
-    refreshIndicatorsBtn.addEventListener('click', loadIndicators);
+    refreshIndicatorsBtn.addEventListener('click', loadThreatIntelligence);
     tiManualForm.addEventListener('submit', tiManualFormSubmit);
     tiCsvImportBtn.addEventListener('click', tiCsvImportBtnClick);
     tiCsvExportBtn.addEventListener('click', tiCsvExportBtnClick);
-    refreshDetectionsBtn.addEventListener('click', loadDetections);
+    refreshDetectionsBtn.addEventListener('click', loadThreatIntelligence);
     syncDetectionsBtn.addEventListener('click', syncDetections);
     deleteSelectedBtn.addEventListener('click', deleteSelectedIOCs);
     
     // Load data on page load if no saved tenant
     if (!savedTenant) {
-        loadIndicators();
-        loadDetections();
+        loadThreatIntelligence();
     }
 });
 
@@ -59,9 +58,81 @@ function getTenantId() {
     return tenantDropdown ? tenantDropdown.value.trim() : '';
 }
 
-async function loadIndicators() {
+// Loading indicator functions
+function showLoadingIndicator(message = 'Loading...') {
+    // Create or update loading overlay
+    let overlay = document.getElementById('loadingOverlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'loadingOverlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            color: #00ff41;
+            font-family: Consolas, monospace;
+            font-size: 18px;
+        `;
+        document.body.appendChild(overlay);
+    }
+    overlay.innerHTML = `<div style="text-align: center;">
+        <div style="border: 2px solid #00ff41; border-radius: 50%; width: 40px; height: 40px; border-top: 2px solid transparent; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
+        ${message}
+    </div>`;
+    overlay.style.display = 'flex';
+    
+    // Add CSS animation if not already present
+    if (!document.getElementById('loadingStyles')) {
+        const style = document.createElement('style');
+        style.id = 'loadingStyles';
+        style.textContent = '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
+        document.head.appendChild(style);
+    }
+}
+
+function hideLoadingIndicator() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+}
+
+// Combined function to load all threat intelligence data
+async function loadThreatIntelligence() {
+    const tenantId = getTenantId();
+    if (!tenantId) {
+        console.warn('No tenant selected for loading threat intelligence');
+        return;
+    }
+
+    console.log('Starting threat intelligence loading...');
+    showLoadingIndicator('Loading Threat Intelligence...');
+
+    try {
+        // Load both indicators and detections concurrently
+        await Promise.all([
+            loadIndicatorsInternal(),
+            loadDetectionsInternal()
+        ]);
+        console.log('Threat intelligence loading completed');
+    } catch (error) {
+        console.error('Error loading threat intelligence:', error);
+    } finally {
+        hideLoadingIndicator();
+    }
+}
+
+async function loadIndicatorsInternal() {
     const tenantId = getTenantId();
     if (!tenantId) return;
+
     const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
     const payload = { TenantId: tenantId, Function: 'GetIndicators' };
     const res = await fetch(url, {
@@ -80,6 +151,23 @@ async function loadIndicators() {
     }) : [];
     
     renderIndicatorsTable(filteredIndicators);
+}
+
+async function loadDetectionsInternal() {
+    const tenantId = getTenantId();
+    if (!tenantId) return;
+
+    const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
+    const payload = { TenantId: tenantId, Function: 'GetDetectionRules' };
+    const res = await fetch(url, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify(payload) 
+    });
+    const result = await res.json();
+    let detections = result.value || result.machines || result || [];
+    if (!Array.isArray(detections) && detections.value) detections = detections.value;
+    renderDetectionsTable(Array.isArray(detections) ? detections : []);
 }
 
 function renderIndicatorsTable(indicators) {
@@ -153,7 +241,7 @@ async function tiManualFormSubmit(e) {
     const payload = { TenantId: tenantId, Function: mapping.func };
     payload[mapping.param] = [value];
     await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    loadIndicators();
+    loadThreatIntelligence();
 }
 
 function getTypeAndFunctionForDelete(type) {
@@ -272,7 +360,7 @@ async function deleteSelectedIOCs() {
 
     if (deletedCount > 0) {
         alert(`Successfully deleted ${deletedCount} IOC(s).`);
-        loadIndicators(); // Refresh the table
+        loadThreatIntelligence(); // Refresh the table
     }
 }
 
@@ -368,7 +456,7 @@ async function tiCsvImportBtnClick() {
         } else {
             console.log(`CSV Import complete. Processed: ${processingSummary.join(', ')}`);
         }
-        loadIndicators();
+        loadThreatIntelligence();
     };
     reader.readAsText(file);
 };
@@ -462,18 +550,6 @@ async function tiCsvExportBtnClick() {
     }
 }
 
-async function loadDetections() {
-    const tenantId = getTenantId();
-    if (!tenantId) return;
-    const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
-    const payload = { TenantId: tenantId, Function: 'GetDetectionRules' };
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    const result = await res.json();
-    let detections = result.value || result.machines || result || [];
-    if (!Array.isArray(detections) && detections.value) detections = detections.value;
-    renderDetectionsTable(Array.isArray(detections) ? detections : []);
-}
-
 function renderDetectionsTable(detections) {
     const container = document.getElementById('detectionsTableContainer');
     container.innerHTML = '';
@@ -506,11 +582,12 @@ async function syncDetections() {
     const url = `https://${window.FUNCURL}/api/MDECDManager?code=${window.FUNCKEY}`;
     const payload = { TenantId: tenantId, Function: 'Sync' };
     await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    loadDetections();
+    loadThreatIntelligence();
 };
 
 // Tenant Management Functions (copied from index.js)
 
+// Simplified event listeners for tenant dropdown only
 function setupEventListeners() {
     console.log('Setting up event listeners...');
     
@@ -523,9 +600,8 @@ function setupEventListeners() {
             if (selectedTenant) {
                 sessionStorage.setItem('TenantId', selectedTenant);
                 console.log('Selected tenant:', selectedTenant);
-                // Auto-load data when tenant is selected
-                loadIndicators();
-                loadDetections();
+                // Auto-load all threat intelligence data when tenant is selected
+                loadThreatIntelligence();
             } else {
                 sessionStorage.removeItem('TenantId');
             }
@@ -533,57 +609,13 @@ function setupEventListeners() {
     } else {
         console.log('Tenant dropdown not found');
     }
-    
-    // Manage tenants button
-    const manageTenantBtn = document.getElementById('manageTenantBtn');
-    if (manageTenantBtn) {
-        console.log('Found manage tenant button, adding click listener');
-        manageTenantBtn.addEventListener('click', function(e) {
-            console.log('Manage tenant button clicked');
-            e.preventDefault();
-            try {
-                openTenantModal();
-            } catch (error) {
-                console.error('Error in button click handler:', error);
-                alert('Error: ' + error.message);
-            }
-        });
-    } else {
-        console.log('Manage tenant button not found');
-    }
-    
-    // Modal close events
-    const closeModal = document.querySelector('#tenantModal .close');
-    const closeTenantModalBtn = document.getElementById('closeTenantModal');
-    if (closeModal) closeModal.addEventListener('click', closeTenantModal);
-    if (closeTenantModalBtn) closeTenantModalBtn.addEventListener('click', closeTenantModal);
-    
-    // Add tenant button
-    const addTenantBtn = document.getElementById('addTenantBtn');
-    if (addTenantBtn) addTenantBtn.addEventListener('click', addTenant);
-    
-    // Close modal when clicking outside of it
-    window.addEventListener('click', function(event) {
-        const modal = document.getElementById('tenantModal');
-        if (event.target === modal) {
-            closeTenantModal();
-        }
-    });
 }
 
+// Simplified tenant loading for dropdown only
 async function loadTenants() {
     try {
         console.log('Loading tenants from backend...');
-        
-        // Add timeout controller for longer operations
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
-        
-        const response = await fetch('/api/tenants', {
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
+        const response = await fetch('/api/tenants');
         
         if (!response.ok) {
             console.error('HTTP error response:', response.status, response.statusText);
@@ -609,12 +641,7 @@ async function loadTenants() {
         
         populateTenantDropdown(tenants);
     } catch (error) {
-        if (error.name === 'AbortError') {
-            console.error('Load tenants request timed out');
-            alert('Loading tenants timed out. Please try again.');
-        } else {
-            console.error('Error fetching tenants:', error);
-        }
+        console.error('Error fetching tenants:', error);
     }
 }
 
@@ -625,8 +652,8 @@ function populateTenantDropdown(tenants) {
         return;
     }
     
-    // Clear existing options except the default
-    tenantDropdown.innerHTML = '<option value="">Select Tenant...</option>';
+    // Clear existing options
+    tenantDropdown.innerHTML = '';
     
     // Add tenant options - Client Name first, then Tenant ID in parentheses
     tenants.forEach(tenant => {
@@ -637,220 +664,3 @@ function populateTenantDropdown(tenants) {
     });
 }
 
-function openTenantModal() {
-    console.log('openTenantModal function called');
-    
-    try {
-        const modal = document.getElementById('tenantModal');
-        if (modal) {
-            console.log('Found tenant modal, showing it');
-            modal.style.display = 'block';
-            loadTenantsForModal();
-            
-            // Clear the add form
-            const newTenantId = document.getElementById('newTenantId');
-            const newClientName = document.getElementById('newClientName');
-            if (newTenantId) newTenantId.value = '';
-            if (newClientName) newClientName.value = '';
-            
-            console.log('Modal should now be visible');
-        } else {
-            console.log('Tenant modal not found!');
-            alert('Error: Tenant modal element not found!');
-        }
-    } catch (error) {
-        console.error('Error in openTenantModal:', error);
-        alert('Error opening tenant modal: ' + error.message);
-    }
-}
-
-function closeTenantModal() {
-    const modal = document.getElementById('tenantModal');
-    if (modal) {
-        modal.style.display = 'none';
-    }
-}
-
-async function loadTenantsForModal() {
-    try {
-        // Add timeout controller for longer operations
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
-        
-        const response = await fetch('/api/tenants', {
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            console.error('HTTP error response:', response.status, response.statusText);
-            return;
-        }
-        
-        const data = await response.json();
-        console.log('Tenant API response data for modal:', data);
-        
-        // Handle both response formats for backward compatibility
-        let tenants = [];
-        if (data.Status === 'Success') {
-            tenants = data.TenantIds || [];
-        } else if (Array.isArray(data)) {
-            tenants = data;
-        } else {
-            const errorMessage = data.Message || data.error || 'Unknown error occurred';
-            console.error('Error loading tenants for modal:', errorMessage);
-            return;
-        }
-        
-        populateTenantsListForModal(tenants);
-    } catch (error) {
-        if (error.name === 'AbortError') {
-            console.error('Load tenants for modal request timed out');
-            // Don't show alert here as this is background loading
-        } else {
-            console.error('Error loading tenants for modal:', error);
-        }
-    }
-}
-
-function populateTenantsListForModal(tenants) {
-    const tenantsList = document.getElementById('tenantsList');
-    if (!tenantsList) {
-        console.error('Tenants list container not found');
-        return;
-    }
-    
-    tenantsList.innerHTML = '';
-    
-    if (tenants.length === 0) {
-        tenantsList.innerHTML = '<p style="color: #888; text-align: center; padding: 20px;">No tenants found</p>';
-        return;
-    }
-    
-    tenants.forEach(tenant => {
-        const tenantItem = document.createElement('div');
-        tenantItem.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 10px; margin: 5px 0; background: #1a1a1a; border: 1px solid #333; border-radius: 4px;';
-        
-        const tenantInfo = document.createElement('div');
-        tenantInfo.innerHTML = `
-            <strong style="color: #00ff41;">${tenant.ClientName}</strong><br>
-            <small style="color: #888;">ID: ${tenant.TenantId}</small>
-        `;
-        
-        const deleteBtn = document.createElement('button');
-        deleteBtn.textContent = 'Delete';
-        deleteBtn.className = 'cta-button';
-        deleteBtn.style.cssText = 'background: #ff4400; border-color: #ff4400; margin: 0; padding: 5px 10px; font-size: 12px;';
-        deleteBtn.onclick = () => deleteTenant(tenant.TenantId);
-        
-        tenantItem.appendChild(tenantInfo);
-        tenantItem.appendChild(deleteBtn);
-        tenantsList.appendChild(tenantItem);
-    });
-}
-
-async function addTenant() {
-    const newTenantId = document.getElementById('newTenantId').value.trim();
-    const newClientName = document.getElementById('newClientName').value.trim();
-    
-    if (!newTenantId || !newClientName) {
-        alert('Please fill in both Tenant ID and Client Name');
-        return;
-    }
-    
-    try {
-        // Add timeout controller for longer operations
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
-        
-        const response = await fetch('/api/tenants', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                TenantId: newTenantId,
-                ClientName: newClientName
-            }),
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
-        }
-        
-        const result = await response.json();
-        console.log('Tenant added successfully:', result);
-        
-        // Clear form
-        document.getElementById('newTenantId').value = '';
-        document.getElementById('newClientName').value = '';
-        
-        // Refresh both the modal list and dropdown
-        loadTenantsForModal();
-        loadTenants();
-        
-        alert('Tenant added successfully!');
-        
-    } catch (error) {
-        if (error.name === 'AbortError') {
-            console.error('Add tenant request timed out');
-            alert('Adding tenant timed out. Please try again.');
-        } else {
-            console.error('Error adding tenant:', error);
-            alert('Error adding tenant: ' + error.message);
-        }
-    }
-}
-
-async function deleteTenant(tenantId) {
-    if (!confirm(`Are you sure you want to delete tenant: ${tenantId}?`)) {
-        return;
-    }
-    
-    try {
-        // Add timeout controller for longer operations
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
-        
-        const response = await fetch(`/api/tenants/${tenantId}`, {
-            method: 'DELETE',
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
-        }
-        
-        console.log('Tenant deleted successfully');
-        
-        // Refresh both the modal list and dropdown
-        loadTenantsForModal();
-        loadTenants();
-        
-        // Clear selection if the deleted tenant was selected
-        const tenantDropdown = document.getElementById('tenantDropdown');
-        if (tenantDropdown && tenantDropdown.value === tenantId) {
-            tenantDropdown.value = '';
-            sessionStorage.removeItem('TenantId');
-        }
-        
-        alert('Tenant deleted successfully!');
-        
-    } catch (error) {
-        if (error.name === 'AbortError') {
-            console.error('Delete tenant request timed out');
-            alert('Deleting tenant timed out. Please try again.');
-        } else {
-            console.error('Error deleting tenant:', error);
-            alert('Error deleting tenant: ' + error.message);
-        }
-    }
-}
