@@ -13,7 +13,7 @@ terraform {
 
 provider "azurerm" {
   features {}
-  subscription_id = "30d5f334-4e89-4fc9-9d0b-1f79280385bf" # Replace with your Azure subscription ID
+  subscription_id = "00000000-0000-0000-0000-000000000000" # Replace with your Azure subscription ID
 }
 
 data "azurerm_client_config" "current" {}
@@ -183,6 +183,11 @@ resource "azurerm_linux_function_app" "func" {
     }
   }
   depends_on = [ azurerm_service_plan.func_service_plan, azurerm_application_insights.app_insights ]
+  lifecycle {
+    ignore_changes = [
+      app_settings["SPNID"]
+    ]
+  }
 }
 
 resource "azurerm_service_plan" "webapp_service_plan" {
