@@ -1,6 +1,6 @@
 @{
     # Module Identity
-    ModuleVersion     = '1.5.8'
+    ModuleVersion     = '1.6.0'
     GUID              = '010c4ef2-f71c-4bce-84cc-de9752cf1577'
     RootModule        = 'MDEAutomator.psm1'
 
@@ -25,6 +25,10 @@
         # Core Operations
         'Get-Machines'
         'Get-Actions'
+        'Get-Incidents'
+        'Get-IncidentAlerts'
+        'Update-Incident'
+        'Update-IncidentComment'
         'Undo-Actions'
         'Get-IPInfo'
         'Get-FileInfo'

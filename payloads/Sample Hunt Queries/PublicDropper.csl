@@ -1,0 +1,3 @@
+DeviceEvents
+| where FolderPath contains "Users\\Public" and FileName !endswith ".lnk"
+| distinct DeviceName, ActionType, FileName, FolderPath 

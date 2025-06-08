@@ -1,5 +1,5 @@
 # MDETIManager Function App
-# 1.5.9
+# 1.6.0
 
 using namespace System.Net
 
@@ -12,6 +12,7 @@ try {
     $Sha256s = Get-RequestParam -Name "Sha256s" -Request $Request
     $IPs = Get-RequestParam -Name "IPs" -Request $Request
     $URLs = Get-RequestParam -Name "URLs" -Request $Request
+    $IndicatorName = Get-RequestParam -Name "IndicatorName" -Request $Request
 
     $missingParams = @()
     if ([string]::IsNullOrEmpty($TenantId)) { $missingParams += "TenantId" }
@@ -32,7 +33,7 @@ try {
     $Body = switch ($Function) {
         "InvokeTiFile" {
             if (-not $Sha1s -and -not $Sha256s) { throw "Sha1s or Sha256s parameter is required for Invoke-TiFile" }
-            Invoke-TiFile -token $token -Sha1s $Sha1s -Sha256s $Sha256s
+            Invoke-TiFile -token $token -Sha1s $Sha1s -Sha256s $Sha256s -IndicatorName $IndicatorName
         }
         "UndoTiFile" {
             if (-not $Sha1s -and -not $Sha256s) { throw "Sha1s or Sha256s parameter is required for Undo-TiFile" }
@@ -40,7 +41,7 @@ try {
         }
         "InvokeTiIP" {
             if (-not $IPs) { throw "IPs parameter is required for InvokeTiIP" }
-            Invoke-TiIP -token $token -IPs $IPs
+            Invoke-TiIP -token $token -IPs $IPs -IndicatorName $IndicatorName
         }
         "UndoTiIP" {
             if (-not $IPs) { throw "IPs parameter is required for UndoTiIP" }
@@ -48,7 +49,7 @@ try {
         }
         "InvokeTiURL" {
             if (-not $URLs) { throw "URLs parameter is required for InvokeTiURL" }
-            Invoke-TiURL -token $token -URLs $URLs
+            Invoke-TiURL -token $token -URLs $URLs -IndicatorName $IndicatorName
         }
         "UndoTiURL" {
             if (-not $URLs) { throw "URLs parameter is required for UndoTiURL" }
@@ -56,11 +57,11 @@ try {
         }
         "InvokeTiCert" {
             if (-not $Sha1s) { throw "Sha1s parameter is required for InvokeTiCert" }
-            Invoke-TiCert -token $token -Sha1s $Sha1s
+            Invoke-TiCert -token $token -Sha1s $Sha1s -IndicatorName $IndicatorName
         }
         "UndoTiCert" {
             if (-not $Sha1s) { throw "Sha1s parameter is required for UndoTiCert" }
-            Undo-TiCert -token $token -Sha1s $Sha1s
+            Undo-TiCert -token $token -Sha1s $Sha1s 
         }
         "GetIndicators" {
             Get-Indicators -token $token

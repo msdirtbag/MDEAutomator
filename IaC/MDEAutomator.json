@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.36.1.42791",
-      "templateHash": "2559819710382385703"
+      "templateHash": "2732018471599744785"
     }
   },
   "parameters": {
@@ -44,6 +44,19 @@
     {
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
+      "name": "[guid(variables('environmentid'), 'acdd72a7-3385-48ef-bd42-f606fba81ae7', subscription().id)]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]",
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid'))), '2024-11-30').principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
       "name": "[guid(variables('environmentid'), 'ba92f5b4-2d11-453d-a403-e96b0029c9fe', subscription().id)]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
@@ -60,6 +73,19 @@
       "name": "[guid(variables('environmentid'), '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3', subscription().id)]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3')]",
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid'))), '2024-11-30').principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(variables('environmentid'), '974c5e8b-45b9-4653-ba55-5f855dd0fb88', subscription().id)]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '974c5e8b-45b9-4653-ba55-5f855dd0fb88')]",
         "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid'))), '2024-11-30').principalId]",
         "principalType": "ServicePrincipal"
       },
@@ -220,7 +246,8 @@
       "kind": "web",
       "properties": {
         "Application_Type": "web",
-        "RetentionInDays": 60,
+        "RetentionInDays": 30,
+        "DisableLocalAuth": true,
         "WorkspaceResourceId": "[if(parameters('useExistingWorkspace'), parameters('existingWorkspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid'))))]"
       },
       "dependsOn": [
@@ -235,7 +262,7 @@
       "properties": {
         "reserved": false,
         "elasticScaleEnabled": true,
-        "maximumElasticWorkerCount": 2
+        "maximumElasticWorkerCount": 5
       },
       "sku": {
         "tier": "ElasticPremium",
@@ -259,6 +286,26 @@
         "publicNetworkAccess": "Enabled",
         "httpsOnly": true,
         "siteConfig": {
+          "ipSecurityRestrictions": [
+            {
+              "ipAddress": "Any",
+              "action": "Allow",
+              "priority": 2147483647,
+              "name": "Allow all",
+              "description": "Allow all access"
+            }
+          ],
+          "scmIpSecurityRestrictions": [
+            {
+              "ipAddress": "Any",
+              "action": "Deny",
+              "priority": 2147483647,
+              "name": "Block all",
+              "description": "Block all access"
+            }
+          ],
+          "scmIpSecurityRestrictionsDefaultAction": "Deny",
+          "scmIpSecurityRestrictionsUseMain": false,
           "autoHealEnabled": true,
           "detailedErrorLoggingEnabled": true,
           "httpLoggingEnabled": true,
@@ -270,12 +317,13 @@
             ],
             "supportCredentials": true
           },
-          "preWarmedInstanceCount": 10,
+          "preWarmedInstanceCount": 5,
           "remoteDebuggingEnabled": false,
           "requestTracingEnabled": true,
           "scmMinTlsVersion": "1.2",
+          "minTlsVersion": "1.2",
           "http20Enabled": true,
-          "functionAppScaleLimit": 100,
+          "functionAppScaleLimit": 10,
           "functionsRuntimeScaleMonitoringEnabled": true,
           "appSettings": [
             {
@@ -303,8 +351,8 @@
               "value": "powershell"
             },
             {
-              "name": "AzureWebJobsStorage",
-              "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1}', format('stmdeauto{0}', variables('environmentid')), listKeys(resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid'))), '2024-01-01').keys[0].value)]"
+              "name": "AzureWebJobsStorage__accountname",
+              "value": "[format('stmdeauto{0}', variables('environmentid'))]"
             },
             {
               "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",

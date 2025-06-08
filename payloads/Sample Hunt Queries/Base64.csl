@@ -1,0 +1,8 @@
+DeviceProcessEvents 
+| extend SplitLaunchString = split(ProcessCommandLine, " ")
+| mvexpand SplitLaunchString
+| where SplitLaunchString matches regex "^[A-Za-z0-9+/]{50,}[=]{0,2}$"
+| extend Base64 = tostring(SplitLaunchString)
+| extend DecodedString = base64_decodestring(Base64)
+| where isnotempty(DecodedString)
+| project TimeGenerated, DeviceName, ProcessCommandLine, Base64, DecodedString, InitiatingProcessFileName, AccountName

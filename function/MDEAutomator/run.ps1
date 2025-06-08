@@ -1,5 +1,5 @@
 # MDEAutomator Main Function App
-# 1.5.9
+# 1.6.0
 
 using namespace System.Net
 
@@ -46,9 +46,9 @@ try {
     Write-Host "Executing Function: $Function"
     
     $output = switch ($Function) {
-        'GetMachines'              { Get-Machines -token $token }
-        'GetActions'               { Get-Actions -token $token }
-        'UndoActions'              { Undo-Actions -token $token }
+        'GetMachines'               { Get-Machines -token $token }
+        'GetActions'                { Get-Actions -token $token }
+        'UndoActions'               { Undo-Actions -token $token }
         'GetIPInfo'                 { 
                                         Test-NullOrEmpty $Ip "Ip"
                                         Get-IPInfo -token $token -IPs @($Ip)

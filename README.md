@@ -40,18 +40,6 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
     - `InvokeTiIP` / `UndoTiIP`: Creates/removes IP address-based indicators
     - `InvokeTiURL` / `UndoTiURL`: Creates/removes URL and domain-based indicators
     - `InvokeTiCert` / `UndoTiCert`: Creates/removes certificate-based indicators (by thumbprint)
-  - **MDEAutoHunt**  
-    Automates bulk threat hunting and exports output to Azure Storage:
-    - Relays groups of KQL queries to the Graph API, exports responses as JSON, and saves to a blob container.
-  - **MDECDManager**  
-    Automates synchronization of Custom Detections from a blob container:
-    - Installs or updates Defender Custom Detections based on JSON files in the Detections blob container.
-    - Backs up existing Custom Detections as JSON files to a blob container
-
-  ![CustomDetections](./media/cds.png)
-
-
-  ![StorageEx](./media/storagex.png)
 
 ---
 
@@ -63,8 +51,8 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 - Designed for multi-tenant use cases
 - Secretless App Registration/UMI auth + manual `$SPNSECRET` flexibility
 - Ability to deliver key configuration settings via PowerShell that are not available in Endpoint Security Profiles. 
-- Bulk Threat Hunting via Microsoft Graph
-- Bulk Custom Detection syncronization with Azure Storage
+- Automated daily Threat Hunting for all onboarded tenants. 
+- Custom Detection syncronization & management with Azure Storage
 - Convenient upload of endpoint packages/files to Azure Storage
 
 ## Development Features
@@ -72,7 +60,8 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 - Python/Flask-based GUI hosted in a Azure App Service. 
 - Core functionality: Dispatcher, Orchestator, Profiles
 - Threat Intelligence Manager
-- Future functionality: Hunter Console
+- Action Manager
+- Hunt Manager
 
 ---
 
@@ -885,4 +874,101 @@ You must be connected to Microsoft Graph using `Connect-MDE` before running this
 **Example:**
 ```powershell
 Undo-DetectionRule -RuleId $ruleId
+```
+## 31. Get-Incidents
+
+**Description:**  
+`Get-Incidents` retrieves security incidents from Microsoft Defender for Endpoint via Microsoft Graph API. Returns up to 500 of the most recent incidents, filtering out informational severity incidents. Uses pagination with a 10-page limit for performance.
+
+**Requirements:**  
+You must be connected to Microsoft Graph using `Connect-MDE` before running this command.
+
+**Parameters:**  
+_None._
+
+**Example:**
+```powershell
+$incidents = Get-Incidents
+$incidents | Format-Table Id, DisplayName, Status, Severity, CreatedDateTime
+```
+
+## 32. Get-Incident
+
+**Description:**  
+`Get-Incident` retrieves detailed information about a specific security incident from Microsoft Defender for Endpoint via Microsoft Graph API. Returns comprehensive incident details including all associated alerts and their evidence objects (device, file, process, registry, IP, URL, user, mailbox, and cloud application evidence).
+
+**Requirements:**  
+You must be connected to Microsoft Graph using `Connect-MDE` before running this command.
+
+**Parameters:**
+
+- `-IncidentId` (string, required): The ID of the incident to retrieve detailed information for.
+
+**Example:**
+```powershell
+$incident = Get-Incident -IncidentId "881109"
+$incident | ConvertTo-Json -Depth 10
+```
+
+## 33. Get-IncidentAlerts
+
+**Description:**  
+`Get-IncidentAlerts` retrieves all alerts associated with a specific security incident from Microsoft Defender for Endpoint via Microsoft Graph API. Returns detailed alert information including evidence and related entities.
+
+**Requirements:**  
+You must be connected to Microsoft Graph using `Connect-MDE` before running this command.
+
+**Parameters:**
+
+- `-IncidentId` (string, required): The ID of the incident to retrieve alerts for.
+
+**Example:**
+```powershell
+$alerts = Get-IncidentAlerts -IncidentId "881109"
+$alerts | Format-Table Id, Title, Severity, Status, CreatedDateTime
+```
+
+## 34. Update-Incident
+
+**Description:**  
+`Update-Incident` updates the properties of a security incident in Microsoft Defender for Endpoint via Microsoft Graph API. Allows modification of incident status, assignment, classification, determination, custom tags, description, display name, severity, summary, and resolving comments.
+
+**Requirements:**  
+You must be connected to Microsoft Graph using `Connect-MDE` before running this command.
+
+**Parameters:**
+
+- `-IncidentId` (string, required): The ID of the incident to update.
+- `-Status` (string, optional): The status of the incident. Valid values: `active`, `resolved`, `redirected`.
+- `-AssignedTo` (string, optional): Owner of the incident (free editable text).
+- `-Classification` (string, optional): The classification of the incident. Valid values: `unknown`, `falsePositive`, `truePositive`, `informationalExpectedActivity`.
+- `-Determination` (string, optional): The determination of the incident. Valid values: `unknown`, `apt`, `malware`, `securityPersonnel`, `securityTesting`, `unwantedSoftware`, `other`, `multiStagedAttack`, `compromisedAccount`, `phishing`, `maliciousUserActivity`, `notMalicious`, `notEnoughDataToValidate`, `confirmedUserActivity`, `lineOfBusinessApplication`.
+- `-CustomTags` (string[], optional): Array of custom tags associated with the incident.
+- `-Description` (string, optional): Description of the incident.
+- `-DisplayName` (string, optional): The incident name.
+- `-Severity` (string, optional): The severity of the incident. Valid values: `unknown`, `informational`, `low`, `medium`, `high`.
+- `-ResolvingComment` (string, optional): User input that explains the resolution of the incident and the classification choice.
+- `-Summary` (string, optional): The overview of an attack with details of what occurred, impacted assets, and the type of attack.
+
+**Example:**
+```powershell
+Update-Incident -IncidentId "881109" -Status "resolved" -Classification "truePositive" -Determination "malware" -ResolvingComment "Malware detected and quarantined successfully"
+```
+
+## 35. Update-IncidentComment
+
+**Description:**  
+`Update-IncidentComment` adds a comment to a security incident in Microsoft Defender for Endpoint via Microsoft Graph API. Useful for documenting investigation progress and findings.
+
+**Requirements:**  
+You must be connected to Microsoft Graph using `Connect-MDE` before running this command.
+
+**Parameters:**
+
+- `-IncidentId` (string, required): The ID of the incident to add a comment to.
+- `-Comment` (string, required): The comment text to add to the incident.
+
+**Example:**
+```powershell
+Update-IncidentComment -IncidentId "881109" -Comment "Investigation completed. No further action required."
 ```

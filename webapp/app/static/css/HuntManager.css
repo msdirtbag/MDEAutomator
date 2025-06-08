@@ -1,4 +1,4 @@
-/* ActionManager Styles */
+/* HuntManager Styles */
 .index-container {
     margin: 2rem;
     background: var(--background-color);
@@ -58,7 +58,7 @@
     height: 2em;
     text-decoration: none;
     border-radius: 5px;
-    transition: background-color 0.3s ease, box-shadow 0.3s, transform 0.12s cubic-bezier(0.4,0,0.2,1);
+    transition: background-color 0.3s, box-shadow 0.3s, transform 0.12s cubic-bezier(0.4,0,0.2,1);
     box-shadow: 0 2px 8px rgba(0,255,65,0.08);
     border: 1px solid #00ff41;
     font-family: 'Consolas', 'Courier New', monospace;
@@ -111,7 +111,7 @@
     font-family: 'Consolas', monospace;
 }
 
-/* GridJS theme customization for ActionManager */
+/* GridJS theme customization for HuntManager */
 .gridjs-wrapper {
     background: var(--background-color);
 }
@@ -154,24 +154,40 @@
     background: #0f1b10 !important;
 }
 
-.gridjs-tr {
-    transition: background 0.18s, box-shadow 0.18s;
-}
-
 .gridjs-tr:hover .gridjs-td {
     background: #1a2e1d !important;
     box-shadow: 0 0 8px #00ff4133;
     cursor: pointer;
 }
 
-@keyframes row-flash {
-    0% { background: #00ff4133; }
-    100% { background: inherit; }
-}
-.gridjs-tr.flash {
-    animation: row-flash 0.7s;
+/* Status-specific styling */
+.status-pending {
+    color: #ffaa00 !important;
+    font-weight: bold !important;
 }
 
+.status-succeeded {
+    color: #00ff41 !important;
+    font-weight: bold !important;
+}
+
+.status-failed {
+    color: #ff4400 !important;
+    font-weight: bold !important;
+}
+
+.status-cancelled {
+    color: #888 !important;
+    font-weight: bold !important;
+}
+
+/* Action type styling */
+.action-type {
+    text-transform: uppercase;
+    font-weight: bold;
+}
+
+/* Pagination styling - Complete styling to match TIManager */
 .gridjs-pagination {
     justify-content: space-between !important;
     align-items: center !important;
@@ -268,8 +284,8 @@ div[class*="summary"] {
     box-shadow: 0 0 5px rgba(0, 255, 65, 0.3) !important;
 }
 
-/* --- 3. Modernize Modals (for future modals) --- */
-#actionModal, .action-modal {
+/* --- 3. Modernize Modals --- */
+#addQueryModal {
     display: none;
     position: fixed;
     top: 0;
@@ -280,6 +296,7 @@ div[class*="summary"] {
     z-index: 10000;
     align-items: center;
     justify-content: center;
+    /* Add blur and fade-in animation */
     backdrop-filter: blur(4px);
     animation: modal-fade-in 0.35s cubic-bezier(0.4,0,0.2,1);
 }
@@ -289,7 +306,7 @@ div[class*="summary"] {
     to { opacity: 1; }
 }
 
-#actionModal > div, .action-modal > div {
+#addQueryModal > div {
     background: #142a17;
     padding: 2rem;
     border-radius: 18px;
@@ -365,6 +382,7 @@ div[class*="summary"] {
     cursor: pointer;
 }
 
+/* Action feedback for table row (flash effect) */
 @keyframes row-flash {
     0% { background: #00ff4133; }
     100% { background: inherit; }

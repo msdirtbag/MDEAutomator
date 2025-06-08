@@ -384,11 +384,10 @@ def get_tenants():
                 'Timestamp': '2025-05-31T00:00:00.000Z'
             }
             return jsonify(mock_response)
-        
-        # Call the MDEAutoDB function to get tenant IDs
+          # Call the MDEAutoDB function to get tenant IDs
         response = call_azure_function('MDEAutoDB', {
             'Function': 'GetTenantIds'
-        }, read_timeout=30)  # Use longer timeout for tenant operations
+        }, read_timeout=60)  # Increased timeout for tenant operations to handle cold starts
         
         current_app.logger.info(f"Azure Function response: {response}")
         
@@ -441,13 +440,12 @@ def save_tenant():
                 'Timestamp': '2025-05-31T00:00:00.000Z'
             }
             return jsonify(mock_response)
-        
-        # Call the MDEAutoDB function to save tenant ID
+          # Call the MDEAutoDB function to save tenant ID
         response = call_azure_function('MDEAutoDB', {
             'Function': 'SaveTenantId',
             'TenantId': tenant_id,
             'ClientName': client_name
-        }, read_timeout=30)  # Use longer timeout for tenant operations
+        }, read_timeout=60)  # Increased timeout for tenant operations to handle cold starts
         
         if 'error' in response:
             current_app.logger.error(f"Error saving tenant: {response['error']}")
@@ -483,12 +481,11 @@ def delete_tenant(tenant_id):
                 'Timestamp': '2025-05-31T00:00:00.000Z'
             }
             return jsonify(mock_response)
-        
-        # Call the MDEAutoDB function to remove tenant ID
+          # Call the MDEAutoDB function to remove tenant ID
         response = call_azure_function('MDEAutoDB', {
             'Function': 'RemoveTenantId',
             'TenantId': tenant_id.strip()
-        }, read_timeout=30)  # Use longer timeout for tenant operations
+        }, read_timeout=60)  # Increased timeout for tenant operations to handle cold starts
         
         if 'error' in response:
             current_app.logger.error(f"Error deleting tenant: {response['error']}")
@@ -661,6 +658,14 @@ def clear_threat_intelligence():
     except Exception as e:
         current_app.logger.error(f"Exception in clear_threat_intelligence: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+@main_bp.route('/huntmanager', methods=['GET'])
+def huntmanager():
+    return render_template(
+        'HuntManager.html',
+        FUNCURL=current_app.config.get('FUNCURL'),
+        FUNCKEY=current_app.config.get('FUNCKEY')
+    )
 
 @main_bp.route('/test-actions')
 def test_actions():
@@ -1010,3 +1015,173 @@ def debug_actions():
 def debug_tenants():
     """Debug page for tenant management functionality"""
     return render_template_string(open('debug_tenants.html', 'r').read())
+
+# Incident Management endpoints for IncidentManager
+
+@main_bp.route('/api/incidents', methods=['POST'])
+def get_incidents():
+    """Get incidents from Microsoft Defender"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request must be JSON and not empty.'}), 400
+        
+        tenant_id = data.get('tenantId')
+        if not tenant_id:
+            return jsonify({'error': 'tenantId is required'}), 400
+            
+        current_app.logger.info(f"Getting incidents for tenant: {tenant_id}")        # Call Azure Function for getting incidents
+        response = call_azure_function('MDEIncidentManager', {
+            'TenantId': tenant_id,
+            'Function': 'GetIncidents'
+        }, read_timeout=60)  # Extended timeout for loading large incident datasets
+        
+        # Handle errors from new MDEIncidentManager function format
+        if 'error' in response:
+            current_app.logger.error(f"Error getting incidents: {response['error']}")
+            return jsonify({'error': response['error']}), 500
+        elif isinstance(response, dict) and response.get('Status') == 'Error':
+            error_msg = response.get('Message', 'Unknown error from Azure Function')
+            current_app.logger.error(f"Error getting incidents: {error_msg}")
+            return jsonify({'error': error_msg}), 500
+              # Handle response format from new MDEIncidentManager function
+        if isinstance(response, list):
+            incidents = response
+        elif isinstance(response, dict):
+            # New format: {"Status": "Success", "Result": [...]}
+            if response.get('Status') == 'Success' and 'Result' in response:
+                incidents = response.get('Result', [])
+            else:
+                # Fallback to old format
+                incidents = response.get('incidents', response.get('Incidents', []))
+        else:
+            current_app.logger.error(f"Unexpected response format: {type(response)}")
+            return jsonify({'error': 'Unexpected response format from Azure Function'}), 500
+            
+        return jsonify({
+            'success': True,
+            'incidents': incidents
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Exception in get_incidents: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@main_bp.route('/api/incidents/update', methods=['POST'])
+def update_incident():
+    """Update multiple incidents"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request must be JSON and not empty.'}), 400
+        
+        tenant_id = data.get('tenantId')
+        incident_ids = data.get('incidentIds')
+        
+        if not tenant_id:
+            return jsonify({'error': 'tenantId is required'}), 400
+            
+        if not incident_ids or not isinstance(incident_ids, list) or len(incident_ids) == 0:
+            return jsonify({'error': 'incidentIds array is required and must not be empty'}), 400
+            
+        current_app.logger.info(f"Updating {len(incident_ids)} incidents for tenant: {tenant_id}")
+        
+        # Build update parameters, filtering out null values
+        update_params = {
+            'TenantId': tenant_id,
+            'Function': 'UpdateIncident',
+            'IncidentIds': incident_ids
+        }
+          # Add optional parameters only if they are provided
+        if data.get('status'):
+            update_params['Status'] = data.get('status')
+        if data.get('assignedTo'):
+            update_params['AssignedTo'] = data.get('assignedTo')
+        if data.get('classification'):
+            update_params['Classification'] = data.get('classification')
+        if data.get('determination'):
+            update_params['Determination'] = data.get('determination')
+        if data.get('severity'):
+            update_params['Severity'] = data.get('severity')
+        if data.get('displayName'):
+            update_params['DisplayName'] = data.get('displayName')
+        if data.get('description'):
+            update_params['Description'] = data.get('description')
+          # Call Azure Function for updating incidents
+        response = call_azure_function('MDEIncidentManager', update_params)
+        
+        # Handle errors from new MDEIncidentManager function format
+        if 'error' in response:
+            current_app.logger.error(f"Error updating incident: {response['error']}")
+            return jsonify({'error': response['error']}), 500
+        elif isinstance(response, dict) and response.get('Status') == 'Error':
+            error_msg = response.get('Message', 'Unknown error from Azure Function')
+            current_app.logger.error(f"Error updating incident: {error_msg}")
+            return jsonify({'error': error_msg}), 500
+            
+        return jsonify({
+            'success': True,
+            'message': f'Successfully updated {len(incident_ids)} incident(s)',
+            'result': response
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Exception in update_incident: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@main_bp.route('/api/incidents/comment', methods=['POST'])
+def add_incident_comment():
+    """Add a comment to multiple incidents"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request must be JSON and not empty.'}), 400
+        
+        tenant_id = data.get('tenantId')
+        incident_ids = data.get('incidentIds')
+        comment = data.get('comment')
+        
+        if not tenant_id:
+            return jsonify({'error': 'tenantId is required'}), 400
+            
+        if not incident_ids or not isinstance(incident_ids, list) or len(incident_ids) == 0:
+            return jsonify({'error': 'incidentIds array is required and must not be empty'}), 400
+            
+        if not comment:
+            return jsonify({'error': 'comment is required'}), 400
+            
+        current_app.logger.info(f"Adding comment to {len(incident_ids)} incidents for tenant: {tenant_id}")
+          # Call Azure Function for adding comment to multiple incidents
+        response = call_azure_function('MDEIncidentManager', {
+            'TenantId': tenant_id,
+            'Function': 'UpdateIncidentComment',
+            'IncidentIds': incident_ids,
+            'Comment': comment
+        })
+        
+        # Handle errors from new MDEIncidentManager function format
+        if 'error' in response:
+            current_app.logger.error(f"Error adding comment: {response['error']}")
+            return jsonify({'error': response['error']}), 500
+        elif isinstance(response, dict) and response.get('Status') == 'Error':
+            error_msg = response.get('Message', 'Unknown error from Azure Function')
+            current_app.logger.error(f"Error adding comment: {error_msg}")
+            return jsonify({'error': error_msg}), 500
+            
+        return jsonify({
+            'success': True,
+            'message': f'Comment added to {len(incident_ids)} incident(s) successfully',
+            'result': response
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Exception in add_incident_comment: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@main_bp.route('/incidentmanager', methods=['GET'])
+def incidentmanager():
+    return render_template(
+        'IncidentManager.html',
+        FUNCURL=current_app.config.get('FUNCURL'),
+        FUNCKEY=current_app.config.get('FUNCKEY')
+    )

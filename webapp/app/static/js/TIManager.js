@@ -1,35 +1,17 @@
-
 window.addEventListener('DOMContentLoaded', () => {
     console.log('TIManager page JavaScript loaded');
-    
     // Load tenants dropdown on page load
     loadTenants();
-    
+
     // Set up event listeners after a short delay to ensure DOM is fully loaded
     setTimeout(() => {
         console.log('Setting up event listeners...');
         setupEventListeners();
     }, 100);
-    
-    // Load saved tenant ID from session storage
-    const savedTenant = sessionStorage.getItem('TenantId');
-    if (savedTenant) {
-        // Select the saved tenant in dropdown if available
-        setTimeout(() => {
-            const tenantDropdown = document.getElementById('tenantDropdown');
-            if (tenantDropdown) {
-                for (let option of tenantDropdown.options) {
-                    if (option.value === savedTenant) {
-                        tenantDropdown.value = savedTenant;
-                        // Auto-load data if tenant is saved
-                        loadThreatIntelligence();
-                        break;
-                    }
-                }
-            }
-        }, 500); // Wait for tenants to load
-    }
-    
+
+    // Wait for tenant dropdown to be populated, then auto-load data
+    waitForTenantDropdownAndLoadData();
+
     // Set up other event listeners
     const refreshIndicatorsBtn = document.getElementById('refreshIndicatorsBtn');
     const tiManualForm = document.getElementById('tiManualForm');
@@ -38,7 +20,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const refreshDetectionsBtn = document.getElementById('refreshDetectionsBtn');
     const syncDetectionsBtn = document.getElementById('syncDetectionsBtn');
     const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
-    
+
     refreshIndicatorsBtn.addEventListener('click', loadThreatIntelligence);
     tiManualForm.addEventListener('submit', tiManualFormSubmit);
     tiCsvImportBtn.addEventListener('click', tiCsvImportBtnClick);
@@ -46,12 +28,25 @@ window.addEventListener('DOMContentLoaded', () => {
     refreshDetectionsBtn.addEventListener('click', loadThreatIntelligence);
     syncDetectionsBtn.addEventListener('click', syncDetections);
     deleteSelectedBtn.addEventListener('click', deleteSelectedIOCs);
-    
-    // Load data on page load if no saved tenant
-    if (!savedTenant) {
+});
+
+// Helper: Wait for tenant dropdown to be populated, then auto-load data
+function waitForTenantDropdownAndLoadData() {
+    const dropdown = document.getElementById('tenantDropdown');
+    if (!dropdown) {
+        setTimeout(waitForTenantDropdownAndLoadData, 100);
+        return;
+    }
+    // Wait until dropdown has at least one option (not just the placeholder)
+    if (dropdown.options.length === 0) {
+        setTimeout(waitForTenantDropdownAndLoadData, 100);
+        return;
+    }
+    // If a tenant is selected, load data for it
+    if (dropdown.value && dropdown.value.trim() !== '') {
         loadThreatIntelligence();
     }
-});
+}
 
 function getTenantId() {
     const tenantDropdown = document.getElementById('tenantDropdown');
@@ -60,7 +55,6 @@ function getTenantId() {
 
 // Loading indicator functions
 function showLoadingIndicator(message = 'Loading...') {
-    // Create or update loading overlay
     let overlay = document.getElementById('loadingOverlay');
     if (!overlay) {
         overlay = document.createElement('div');
@@ -83,16 +77,15 @@ function showLoadingIndicator(message = 'Loading...') {
         document.body.appendChild(overlay);
     }
     overlay.innerHTML = `<div style="text-align: center;">
-        <div style="border: 2px solid #00ff41; border-radius: 50%; width: 40px; height: 40px; border-top: 2px solid transparent; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
-        ${message}
+        <div>${message}</div>
+        <div class="progress-bar"><div class="progress-bar-inner"></div></div>
     </div>`;
     overlay.style.display = 'flex';
-    
     // Add CSS animation if not already present
     if (!document.getElementById('loadingStyles')) {
         const style = document.createElement('style');
         style.id = 'loadingStyles';
-        style.textContent = '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
+        style.textContent = `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
         document.head.appendChild(style);
     }
 }
@@ -135,11 +128,19 @@ async function loadIndicatorsInternal() {
 
     const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
     const payload = { TenantId: tenantId, Function: 'GetIndicators' };
+    
+    // Add timeout to handle Azure Function cold starts
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+    
     const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
     const result = await res.json();
     let indicators = result.value || result.machines || result || [];
     if (!Array.isArray(indicators) && indicators.value) indicators = indicators.value;
@@ -159,11 +160,19 @@ async function loadDetectionsInternal() {
 
     const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
     const payload = { TenantId: tenantId, Function: 'GetDetectionRules' };
+    
+    // Add timeout to handle Azure Function cold starts
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+    
     const res = await fetch(url, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify(payload) 
+        body: JSON.stringify(payload),
+        signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
     const result = await res.json();
     let detections = result.value || result.machines || result || [];
     if (!Array.isArray(detections) && detections.value) detections = detections.value;
@@ -227,6 +236,7 @@ async function tiManualFormSubmit(e) {
     const typeSelect = document.getElementById('tiType');
     const typeText = typeSelect.options[typeSelect.selectedIndex].text;
     const value = document.getElementById('tiValue').value.trim();
+    const indicatorName = document.getElementById('tiIndicatorName').value.trim();
     const tenantId = getTenantId();
     
     if (!tenantId) { alert('Tenant ID is required.'); return; }
@@ -240,7 +250,20 @@ async function tiManualFormSubmit(e) {
     const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
     const payload = { TenantId: tenantId, Function: mapping.func };
     payload[mapping.param] = [value];
-    await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    if (indicatorName) {
+        payload.IndicatorName = indicatorName; // Send as string, not array
+    }
+    // Add timeout to handle Azure Function cold starts
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    await fetch(url, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify(payload),
+        signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
     loadThreatIntelligence();
 }
 
@@ -381,44 +404,52 @@ async function tiCsvImportBtnClick() {
         // Support both Microsoft format and our legacy format
         let typeIdx = header.indexOf('indicator type');
         let valueIdx = header.indexOf('indicator value');
+        let nameIdx = header.indexOf('indicator name'); // new: support optional indicator name
         
         // Fallback to legacy format
         if (typeIdx === -1) typeIdx = header.indexOf('type');
         if (valueIdx === -1) valueIdx = header.indexOf('value');
+        if (nameIdx === -1) nameIdx = header.indexOf('name'); // legacy/optional
         
         if (typeIdx === -1 || valueIdx === -1) { 
             console.error('CSV Import: CSV must have columns: "Indicator Type,Indicator Value" or "Type,Value"'); 
             return; 
         }
+        // Group by type, but also keep indicator names if present
         const tiData = { CertSha1s: [], Sha1s: [], Sha256s: [], IPs: [], URLs: [] };
+        const tiNames = { CertSha1s: [], Sha1s: [], Sha256s: [], IPs: [], URLs: [] };
         for (let i = 1; i < lines.length; i++) {
             const row = lines[i].split(',');
             const type = (row[typeIdx] || '').trim();
             const value = (row[valueIdx] || '').trim();
+            const name = nameIdx !== -1 ? (row[nameIdx] || '').trim() : '';
             if (!type || !value) continue;
             
             const lowerType = type.toLowerCase();
             if (lowerType === 'certificatethumbprint' || lowerType === 'certsha1' || lowerType === 'cert-sha1') {
                 tiData.CertSha1s.push(value);
+                tiNames.CertSha1s.push(name);
             } else if (lowerType === 'filesha1' || lowerType === 'sha1') {
                 tiData.Sha1s.push(value);
+                tiNames.Sha1s.push(name);
             } else if (lowerType === 'filesha256' || lowerType === 'sha256') {
                 tiData.Sha256s.push(value);
+                tiNames.Sha256s.push(name);
             } else if (lowerType === 'ipaddress' || lowerType === 'ip') {
                 tiData.IPs.push(value);
+                tiNames.IPs.push(name);
             } else if (lowerType === 'domainname' || lowerType === 'url') {
                 tiData.URLs.push(value);
+                tiNames.URLs.push(name);
             }
         }
         let anySent = false;
         const processingSummary = [];
-        
         for (const [type, arr] of Object.entries(tiData)) {
             if (arr.length > 0) {
                 anySent = true;
                 let functionName = 'InvokeTi' + type.replace(/s$/, '');
                 let paramName = type;
-                
                 // Special handling for certificate SHA1
                 if (type === 'CertSha1s') {
                     functionName = 'InvokeTiCert';
@@ -429,28 +460,31 @@ async function tiCsvImportBtnClick() {
                     functionName = 'InvokeTiFile';
                     // paramName stays as 'Sha1s' or 'Sha256s'
                 }
-                
                 processingSummary.push(`${type}: ${arr.length} items`);
-                
-                const payload = { TenantId: tenantId, Function: functionName };
-                payload[paramName] = arr;
-                
-                try {
-                    const response = await fetch(url, { 
-                        method: 'POST', 
-                        headers: { 'Content-Type': 'application/json' }, 
-                        body: JSON.stringify(payload) 
-                    });
-                    
-                    if (!response.ok) {
-                        console.error(`Failed to process ${type}:`, response.statusText);
+                for (let i = 0; i < arr.length; i++) {
+                    const payload = { TenantId: tenantId, Function: functionName };
+                    payload[paramName] = [arr[i]];
+                    const indicatorName = tiNames[type][i];
+                    if (indicatorName) {
+                        payload.IndicatorName = indicatorName; // Send as string, not array
                     }
-                } catch (error) {
-                    console.error(`Error processing ${type}:`, error);
+                    try {
+                        // Add timeout to handle Azure Function cold starts
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+                        await fetch(url, { 
+                            method: 'POST', 
+                            headers: { 'Content-Type': 'application/json' }, 
+                            body: JSON.stringify(payload),
+                            signal: controller.signal
+                        });
+                        clearTimeout(timeoutId);
+                    } catch (error) {
+                        console.error(`Error processing ${type}:`, error);
+                    }
                 }
             }
         }
-        
         if (!anySent) {
             console.log('CSV Import: No valid entries found in CSV.');
         } else {
@@ -475,11 +509,19 @@ async function tiCsvExportBtnClick() {
         // Get the current indicators data
         const apiUrl = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
         const payload = { TenantId: tenantId, Function: 'GetIndicators' };
+        
+        // Add timeout to handle Azure Function cold starts
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+        
         const res = await fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
         const result = await res.json();
         let indicators = result.value || result.machines || result || [];
         if (!Array.isArray(indicators) && indicators.value) indicators = indicators.value;
@@ -581,7 +623,19 @@ async function syncDetections() {
     if (!tenantId) return;
     const url = `https://${window.FUNCURL}/api/MDECDManager?code=${window.FUNCKEY}`;
     const payload = { TenantId: tenantId, Function: 'Sync' };
-    await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    
+    // Add timeout to handle Azure Function cold starts
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+    
+    await fetch(url, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify(payload),
+        signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
     loadThreatIntelligence();
 };
 
@@ -615,7 +669,16 @@ function setupEventListeners() {
 async function loadTenants() {
     try {
         console.log('Loading tenants from backend...');
-        const response = await fetch('/api/tenants');
+        
+        // Add timeout to handle Azure Function cold starts
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+        
+        const response = await fetch('/api/tenants', {
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
         
         if (!response.ok) {
             console.error('HTTP error response:', response.status, response.statusText);

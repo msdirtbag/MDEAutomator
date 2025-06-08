@@ -48,47 +48,57 @@ window.testActionAPI = async function() {
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('ActionManager page JavaScript loaded');
-    
+
     // Load tenants dropdown on page load
     loadTenants();
-    
+
     // Set up event listeners after a short delay to ensure DOM is fully loaded
     setTimeout(() => {
         console.log('Setting up event listeners...');
         setupEventListeners();
     }, 100);
-    
-    // Load saved tenant ID from session storage
-    const savedTenant = sessionStorage.getItem('TenantId');
-    if (savedTenant) {
-        // Select the saved tenant in dropdown if available
-        setTimeout(() => {
-            const tenantDropdown = document.getElementById('tenantDropdown');
-            if (tenantDropdown) {
-                for (let option of tenantDropdown.options) {
-                    if (option.value === savedTenant) {
-                        tenantDropdown.value = savedTenant;
-                        // Auto-load actions if tenant is saved
-                        loadActions();
-                        break;
-                    }
-                }
-            }
-        }, 500); // Wait for tenants to load
-    }
-    
+
+    // Wait for tenant dropdown to be populated, then auto-load actions
+    waitForTenantDropdownAndLoadActions();
+
     // Attach event handlers to action buttons
     const refreshActionsBtn = document.getElementById('refreshActionsBtn');
-    const undoActionsBtn = document.getElementById('undoActionsBtn');
-    
+    const addActionBtn = document.getElementById('addActionBtn');
     if (refreshActionsBtn) refreshActionsBtn.onclick = loadActions;
-    if (undoActionsBtn) undoActionsBtn.onclick = undoAllPendingActions;
-    
-    // Always attempt to load actions on page load (like TIManager)
-    if (!savedTenant) {
-        loadActions();
-    }
+    if (addActionBtn) addActionBtn.onclick = showAddActionModal;
+
+    // Modal buttons
+    const saveActionBtn = document.getElementById('saveActionBtn');
+    const cancelActionBtn = document.getElementById('cancelActionBtn');
+    if (saveActionBtn) saveActionBtn.onclick = saveNewAction;
+    if (cancelActionBtn) cancelActionBtn.onclick = hideAddActionModal;
 });
+
+// Helper: Wait for tenant dropdown to be populated, then auto-load actions
+function waitForTenantDropdownAndLoadActions() {
+    const savedTenant = sessionStorage.getItem('TenantId');
+    const dropdown = document.getElementById('tenantDropdown');
+    if (!dropdown) {
+        setTimeout(waitForTenantDropdownAndLoadActions, 100);
+        return;
+    }
+    // Wait until dropdown has at least one option
+    if (dropdown.options.length === 0) {
+        setTimeout(waitForTenantDropdownAndLoadActions, 100);
+        return;
+    }
+    // If saved tenant, select it
+    if (savedTenant) {
+        for (let option of dropdown.options) {
+            if (option.value === savedTenant) {
+                dropdown.value = savedTenant;
+                break;
+            }
+        }
+    }
+    // Auto-load actions for selected tenant
+    loadActions();
+}
 
 function getTenantId() {
     const tenantDropdown = document.getElementById('tenantDropdown');
@@ -97,7 +107,6 @@ function getTenantId() {
 
 // Loading indicator functions
 function showLoadingIndicator(message = 'Loading...') {
-    // Create or update loading overlay
     let overlay = document.getElementById('loadingOverlay');
     if (!overlay) {
         overlay = document.createElement('div');
@@ -120,16 +129,15 @@ function showLoadingIndicator(message = 'Loading...') {
         document.body.appendChild(overlay);
     }
     overlay.innerHTML = `<div style="text-align: center;">
-        <div style="border: 2px solid #00ff41; border-radius: 50%; width: 40px; height: 40px; border-top: 2px solid transparent; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
-        ${message}
+        <div>${message}</div>
+        <div class="progress-bar"><div class="progress-bar-inner"></div></div>
     </div>`;
     overlay.style.display = 'flex';
-    
     // Add CSS animation if not already present
     if (!document.getElementById('loadingStyles')) {
         const style = document.createElement('style');
         style.id = 'loadingStyles';
-        style.textContent = '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
+        style.textContent = `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
         document.head.appendChild(style);
     }
 }
@@ -148,15 +156,22 @@ async function loadActions() {
     console.log('Loading actions for tenant:', tenantId);
     showLoadingIndicator('Loading Actions...');
     
-    try {
-        // Call Azure Function directly like TIManager does
+    try {        // Call Azure Function directly like TIManager does
         const url = `https://${window.FUNCURL}/api/MDEAutomator?code=${window.FUNCKEY}`;
         const payload = { TenantId: tenantId, Function: 'GetActions' };
+        
+        // Add timeout to handle Azure Function cold starts
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+        
         const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
         const result = await res.json();
         let actions = result.value || result.actions || result || [];
         if (!Array.isArray(actions) && actions.value) {
@@ -379,15 +394,22 @@ async function undoAllPendingActions() {
     }
       console.log('Undoing all pending actions for tenant:', tenantId);
     
-    try {
-        // Call Azure Function directly like TIManager does
+    try {        // Call Azure Function directly like TIManager does
         const url = `https://${window.FUNCURL}/api/MDEAutomator?code=${window.FUNCKEY}`;
         const payload = { TenantId: tenantId, Function: 'UndoActions' };
+        
+        // Add timeout to handle Azure Function cold starts
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+        
         const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
         const result = await res.json();
         
         alert(`Undo Actions completed successfully!\n\nResult: ${JSON.stringify(result, null, 2)}`);
@@ -431,7 +453,16 @@ function setupEventListeners() {
 async function loadTenants() {
     try {
         console.log('Loading tenants from backend...');
-        const response = await fetch('/api/tenants');
+        
+        // Add timeout to handle Azure Function cold starts
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+        
+        const response = await fetch('/api/tenants', {
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
         
         if (!response.ok) {
             console.error('HTTP error response:', response.status, response.statusText);

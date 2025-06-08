@@ -1,0 +1,5 @@
+{
+    "Query": "DeviceTvmSoftwareVulnerabilities\n| join DeviceTvmSoftwareVulnerabilitiesKB on CveId //join gives us isexploitavailable column\n| where VulnerabilitySeverityLevel == \"High\" and IsExploitAvailable == \"1\" //we want to know where there is a high vulnerability CVE with an exploit available\n| summarize make_set(CveId) by DeviceName //create set of cves by device",
+    "QueryName": "ExploitCVE.csl",
+    "Function": "AddQuery"
+}

@@ -1,5 +1,5 @@
 //MDEAutomator
-//Version: 1.5.9
+//Version: 1.6.0
 //Author: msdirtbag
 
 //Scope
@@ -29,6 +29,16 @@ resource managedidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2024-
   location: location
 }
 
+// Reader Role Assignment
+resource readerroleassign 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(environmentid, 'acdd72a7-3385-48ef-bd42-f606fba81ae7', subscription().id)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')
+    principalId: managedidentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // Storage Blob Data Contributor Role Assignment
 resource blobroleassign 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(environmentid, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe', subscription().id)
@@ -44,6 +54,16 @@ resource tableroleassign 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
   name: guid(environmentid, '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3', subscription().id)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3')
+    principalId: managedidentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Storage Queue Data Contributor Role Assignment
+resource queueroleassign 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(environmentid, '974c5e8b-45b9-4653-ba55-5f855dd0fb88', subscription().id)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '974c5e8b-45b9-4653-ba55-5f855dd0fb88')
     principalId: managedidentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
@@ -180,7 +200,8 @@ resource appinsights01 'Microsoft.Insights/components@2020-02-02' = {
   kind: 'web'
   properties: {
     Application_Type: 'web'
-    RetentionInDays: 60
+    RetentionInDays: 30
+    DisableLocalAuth: true
     WorkspaceResourceId: useExistingWorkspace ? existingWorkspaceResourceId : logAnalyticsWorkspace.id
   }
 }
@@ -192,7 +213,7 @@ resource appservicefunc 'Microsoft.Web/serverfarms@2024-04-01' = {
   properties: {
     reserved: false
     elasticScaleEnabled: true
-    maximumElasticWorkerCount: 2
+    maximumElasticWorkerCount: 5
   }
   sku: {
     tier: 'ElasticPremium'
@@ -216,6 +237,26 @@ resource function01 'Microsoft.Web/sites@2023-12-01' = {
     publicNetworkAccess: 'Enabled'
     httpsOnly: true
     siteConfig: {
+      ipSecurityRestrictions: [
+        {
+          ipAddress: 'Any'
+          action: 'Allow'
+          priority: 2147483647
+          name: 'Allow all'
+          description: 'Allow all access'
+        }
+      ]
+      scmIpSecurityRestrictions: [
+        {
+          ipAddress: 'Any'
+          action: 'Deny'
+          priority: 2147483647
+          name: 'Block all'
+          description: 'Block all access'
+        }
+      ]
+      scmIpSecurityRestrictionsDefaultAction: 'Deny'
+      scmIpSecurityRestrictionsUseMain: false
       autoHealEnabled: true
       detailedErrorLoggingEnabled: true
       httpLoggingEnabled: true
@@ -227,12 +268,13 @@ resource function01 'Microsoft.Web/sites@2023-12-01' = {
         ]
         supportCredentials: true
       }
-      preWarmedInstanceCount: 10
+      preWarmedInstanceCount: 5
       remoteDebuggingEnabled: false
       requestTracingEnabled: true
       scmMinTlsVersion: '1.2'
+      minTlsVersion: '1.2'
       http20Enabled: true
-      functionAppScaleLimit: 100
+      functionAppScaleLimit: 10
       functionsRuntimeScaleMonitoringEnabled: true
       appSettings: [
         {
@@ -260,8 +302,8 @@ resource function01 'Microsoft.Web/sites@2023-12-01' = {
             value: 'powershell'
         }
         {
-            name: 'AzureWebJobsStorage'
-            value: 'DefaultEndpointsProtocol=https;AccountName=${storage01.name};AccountKey=${storage01.listKeys().keys[0].value}'
+            name: 'AzureWebJobsStorage__accountname'
+            value: storage01.name
         }
         {
             name: 'WEBSITE_CONTENTAZUREFILECONNECTIONSTRING'

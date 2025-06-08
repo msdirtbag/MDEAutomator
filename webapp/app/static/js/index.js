@@ -44,6 +44,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }, 500); // Wait for tenants to load
     }
+    
+    // Wait for tenant dropdown to populate, then auto-load
+    waitForTenantDropdownAndAutoLoad();
 });
 
 function getTenantId() {
@@ -53,7 +56,6 @@ function getTenantId() {
 
 // Optimized loading function with immediate feedback
 function showLoadingIndicator(message = 'Loading...') {
-    // Create or update loading overlay
     let overlay = document.getElementById('loadingOverlay');
     if (!overlay) {
         overlay = document.createElement('div');
@@ -76,16 +78,15 @@ function showLoadingIndicator(message = 'Loading...') {
         document.body.appendChild(overlay);
     }
     overlay.innerHTML = `<div style="text-align: center;">
-        <div style="border: 2px solid #00ff41; border-radius: 50%; width: 40px; height: 40px; border-top: 2px solid transparent; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
-        ${message}
+        <div>${message}</div>
+        <div class="progress-bar"><div class="progress-bar-inner"></div></div>
     </div>`;
     overlay.style.display = 'flex';
-    
     // Add CSS animation if not already present
     if (!document.getElementById('loadingStyles')) {
         const style = document.createElement('style');
         style.id = 'loadingStyles';
-        style.textContent = '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
+        style.textContent = `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
         document.head.appendChild(style);
     }
 }
@@ -119,9 +120,9 @@ async function loadMachines() {
             Function: 'GetMachines'
         };
         
-        // Reduced timeout for better UX
+        // Increased timeout to handle Azure Function cold starts
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
         
         const res = await fetch(url, {
             method: 'POST',
@@ -164,7 +165,7 @@ async function loadMachines() {
 
 function renderMachinesTable(machinesRaw) {
     const columns = [
-        { id: 'checkbox', name: '', width: '3%', minWidth: '30px', sort: false, formatter: (_, row) => gridjs.html(`<input type='checkbox' class='device-checkbox' data-deviceid='${row.cells[1].data}' />`) },
+        { id: 'checkbox', name: '', sort: false, formatter: (_, row) => gridjs.html(`<input type='checkbox' class='device-checkbox' data-deviceid='${row.cells[1].data}' />`) },
         { id: 'id', name: 'DeviceId', width: '15%', sort: true },
         { id: 'computerDnsName', name: 'DeviceName', width: '18%', sort: true },
         { id: 'osPlatform', name: 'OSPlatform', width: '8%', sort: true },
@@ -174,28 +175,25 @@ function renderMachinesTable(machinesRaw) {
         { id: 'lastSeen', name: 'LastSeen', width: '10%', sort: true },
         { id: 'firstSeen', name: 'FirstSeen', width: '10%', sort: true },
         { id: 'lastIpAddress', name: 'IP', width: '9%', sort: true },
+        { id: 'lastExternalIpAddress', name: 'External IP', width: '11%', sort: true },
         { id: 'machineTags', name: 'DeviceTags', width: '14%', sort: true }
     ];
 
-    const machines = machinesRaw.map(row => {
-        const machineId = row['Id'] || row['id'] || ''; 
-        const machineTags = row['MachineTags'] || row['machineTags'] || [];
-        const tagsDisplay = Array.isArray(machineTags) ? machineTags.join(', ') : (machineTags || '');
-        
-        return [
-            '', // Checkbox placeholder
-            machineId, 
-            row['ComputerDnsName'] || row['computerDnsName'] || '',
-            row['OsPlatform'] || row['osPlatform'] || '',
-            row['DeviceValue'] || row['deviceValue'] || '',
-            row['RiskScore'] || row['riskScore'] || '',
-            row['RbacGroupName'] || row['rbacGroupName'] || '',
-            row['LastSeen'] || row['lastSeen'] || '',
-            row['FirstSeen'] || row['firstSeen'] || '',
-            row['LastIpAddress'] || row['lastIpAddress'] || '',
-            tagsDisplay
-        ];
-    });
+    // Map LastExternalIpAddress to the new column
+    const machines = machinesRaw.map(row => [
+        '',
+        row.Id || row.id || '',
+        row.ComputerDnsName || row.computerDnsName || '',
+        row.OsPlatform || row.osPlatform || '',
+        row.DeviceValue || row.deviceValue || '',
+        row.RiskScore || row.riskScore || '',
+        row.RbacGroupName || row.rbacGroupName || '',
+        row.LastSeen || row.lastSeen || '',
+        row.FirstSeen || row.firstSeen || '',
+        row.LastIpAddress || row.lastIpAddress || '',
+        row.LastExternalIpAddress || row.lastExternalIpAddress || '',
+        row.MachineTags || row.machineTags || ''
+    ]);
 
     if (machinesGrid) machinesGrid.destroy();
     
@@ -535,9 +533,9 @@ async function loadTenants(force = false) {
         isLoadingTenants = true;
         console.log('Loading tenants from backend...');
         
-        // Reduced timeout for better UX
+        // Increased timeout to handle Azure Function cold starts
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
         
         const response = await fetch('/api/tenants', {
             signal: controller.signal
@@ -651,9 +649,9 @@ async function loadTenantsForModal() {
             tenantsList.innerHTML = '<p style="color: #00ff41; text-align: center;">Loading tenants...</p>';
         }
         
-        // Reduced timeout for modal loading
+        // Increased timeout for modal loading to handle cold starts
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
         
         const response = await fetch('/api/tenants', {
             signal: controller.signal
@@ -749,9 +747,9 @@ async function addTenant() {
     try {
         console.log('Adding tenant:', tenantId, clientName);
         
-        // Reduced timeout for better UX
+        // Increased timeout to handle Azure Function cold starts
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
         
         const response = await fetch('/api/tenants', {
             method: 'POST',
@@ -851,9 +849,9 @@ async function deleteTenant(tenantId) {
     try {
         console.log('Deleting tenant:', tenantId);
         
-        // Reduced timeout for better UX
+        // Increased timeout to handle Azure Function cold starts
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout (reduced from 45s)
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout (reduced from 45s)
         
         const response = await fetch(`/api/tenants/${encodeURIComponent(tenantId)}`, {
             method: 'DELETE',
@@ -972,4 +970,36 @@ function checkElementsReady() {
     console.log('=== End check ===');
     
     return manageTenantBtn && tenantModal && tenantDropdown;
+}
+
+// Helper: Wait for tenant dropdown to be populated, then auto-load page data
+function waitForTenantDropdownAndAutoLoad(maxWaitMs = 15000) {
+    const tenantDropdown = document.getElementById('tenantDropdown');
+    const savedTenant = sessionStorage.getItem('TenantId');
+    let waited = 0;
+    const pollInterval = 200;
+    function tryAutoLoad() {
+        if (tenantDropdown && tenantDropdown.options.length > 0) {
+            // If a saved tenant exists, select it
+            if (savedTenant) {
+                for (let option of tenantDropdown.options) {
+                    if (option.value === savedTenant) {
+                        tenantDropdown.value = savedTenant;
+                        break;
+                    }
+                }
+            }
+            // Trigger the main page load (machines table)
+            loadMachines();
+            return;
+        }
+        waited += pollInterval;
+        if (waited < maxWaitMs) {
+            setTimeout(tryAutoLoad, pollInterval);
+        } else {
+            // Fallback: try to load anyway
+            loadMachines();
+        }
+    }
+    tryAutoLoad();
 }

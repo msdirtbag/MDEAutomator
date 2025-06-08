@@ -2009,8 +2009,11 @@ function Invoke-TiFile {
         [Parameter(Mandatory = $false)]
         [string[]]$Sha1s,
         [Parameter(Mandatory = $false)]
-        [string[]]$Sha256s
+        [string[]]$Sha256s,
+        [Parameter(Mandatory = $false)]
+        [string]$IndicatorName
     )
+    
     $uri = "https://api.securitycenter.microsoft.com/api/indicators"
     $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
         [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
@@ -2022,16 +2025,18 @@ function Invoke-TiFile {
 
     if ($Sha1s) {
         foreach ($Sha1 in $Sha1s) {
+            $title = if ($IndicatorName) { $IndicatorName } else { "MDEAutomator $Sha1" }
             $body = @{
                 "indicatorValue" = $Sha1
                 "indicatorType" = "FileSha1"
-                "title" = "MDEAutomator $Sha1"
+                "title" = $title
                 "action" = "BlockAndRemediate"
                 "generateAlert" = $true
                 "severity" = "High"
                 "description" = "MDEAutomator has created this Custom Threat Indicator."
                 "recommendedActions" = "Investigate & take appropriate action."
             }
+            
             try {
                 $response = Invoke-WithRetry -ScriptBlock {
                     Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body ($body | ConvertTo-Json) -ContentType "application/json" -ErrorAction Stop
@@ -2053,16 +2058,18 @@ function Invoke-TiFile {
 
     if ($Sha256s) {
         foreach ($Sha256 in $Sha256s) {
+            $title = if ($IndicatorName) { $IndicatorName } else { "MDEAutomator $Sha256" }
             $body = @{
                 "indicatorValue" = $Sha256
                 "indicatorType" = "FileSha256"
-                "title" = "MDEAutomator $Sha256"
+                "title" = $title
                 "action" = "BlockAndRemediate"
                 "generateAlert" = $true
                 "severity" = "High"
                 "description" = "MDEAutomator has created this Custom Threat Indicator."
                 "recommendedActions" = "Investigate & take appropriate action."
             }
+            
             try {
                 $response = Invoke-WithRetry -ScriptBlock {
                     Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body ($body | ConvertTo-Json) -ContentType "application/json" -ErrorAction Stop
@@ -2081,6 +2088,7 @@ function Invoke-TiFile {
             }
         }
     }
+    
     return $responses
 }
 
@@ -2178,7 +2186,9 @@ function Invoke-TiIP {
         [Parameter(Mandatory = $true)]
         [securestring]$token,
         [Parameter(Mandatory = $true)]
-        [string[]]$IPs
+        [string[]]$IPs,
+        [Parameter(Mandatory = $false)]
+        [string]$IndicatorName
     )
     $uri = "https://api.securitycenter.microsoft.com/api/indicators"
     $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
@@ -2191,26 +2201,26 @@ function Invoke-TiIP {
     $rfc1918
 
     foreach ($IP in $IPs) {
-        
-            if ($ip -match '^10\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$' -or
-                $ip -match '^172\.(1[6-9]|2[0-9]|3[0-1])\.(\d{1,3})\.(\d{1,3})$' -or
-                $ip -match '^192\.168\.(\d{1,3})\.(\d{1,3})$') {
-                Write-Host "$ip is RFC1918 (private). Cannot add Private IP address as an MDE Indicator" -ForegroundColor Red
-                $rfc1918 = $true
-            } else {
-                Write-Output "$ip is public. Proceeding to add Indicator to MDE"
-                $rfc1918 = $false
-            }
-        
-        
+
+        if ($ip -match '^10\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$' -or
+            $ip -match '^172\.(1[6-9]|2[0-9]|3[0-1])\.(\d{1,3})\.(\d{1,3})$' -or
+            $ip -match '^192\.168\.(\d{1,3})\.(\d{1,3})$') {
+            Write-Host "$ip is RFC1918 (private). Cannot add Private IP address as an MDE Indicator" -ForegroundColor Red
+            $rfc1918 = $true
+        } else {
+            Write-Output "$ip is public. Proceeding to add Indicator to MDE"
+            $rfc1918 = $false
+        }
+
         if(-not ($rfc1918)){
+            $title = if ($IndicatorName) { $IndicatorName } else { "MDEAutomator $IP" }
             $body = @{
                 "indicatorValue" = $IP
                 "indicatorType" = "IpAddress"
                 "action" = "Block"
                 "generateAlert" = $true
                 "severity" = "High"
-                "title" = "MDEAutomator $IP"
+                "title" = $title
                 "description" = "MDEAutomator has created this Custom Threat Indicator."
                 "recommendedActions" = "Investigate & take appropriate action."
             }
@@ -2298,7 +2308,9 @@ function Invoke-TiURL {
         [Parameter(Mandatory = $true)]
         [securestring]$token,
         [Parameter(Mandatory = $true)]
-        [string[]]$URLs
+        [string[]]$URLs,
+        [Parameter(Mandatory = $false)]
+        [string]$IndicatorName
     )
     $uri = "https://api.securitycenter.microsoft.com/api/indicators"
     $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
@@ -2310,13 +2322,14 @@ function Invoke-TiURL {
     $responses = @()
 
     foreach ($URL in $URLs) {
+        $title = if ($IndicatorName) { $IndicatorName } else { "MDEAutomator $URL" }
         $body = @{
             "indicatorValue" = "$URL"
             "indicatorType" = "DomainName"
             "action" = "Block"
             "generateAlert" = $true
             "severity" = "High"
-            "title" = "MDEAutomator $URL"
+            "title" = $title
             "description" = "MDEAutomator has created this Custom Threat Indicator."
             "recommendedActions" = "Investigate & take appropriate action."
         }
@@ -2389,12 +2402,15 @@ function Undo-TiIP {
     }
     return $responses
 }
+
 function Invoke-TiCert {
     param (
         [Parameter(Mandatory = $true)]
         [securestring]$token,
         [Parameter(Mandatory = $false)]
-        [string[]]$Sha1s
+        [string[]]$Sha1s,
+        [Parameter(Mandatory = $false)]
+        [string]$IndicatorName
     )
     $uri = "https://api.securitycenter.microsoft.com/api/indicators"
     $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
@@ -2407,10 +2423,11 @@ function Invoke-TiCert {
 
     if ($Sha1s) {
         foreach ($Sha1 in $Sha1s) {
+            $title = if ($IndicatorName) { $IndicatorName } else { "MDEAutomator $Sha1" }
             $body = @{
                 "indicatorValue" = $Sha1
                 "indicatorType" = "CertificateThumbprint"
-                "title" = "MDEAutomator $Sha1"
+                "title" = $title
                 "action" = "Block"
                 "generateAlert" = $true
                 "severity" = "High"
@@ -2659,9 +2676,351 @@ function Undo-DetectionRule {
     }
 }
 
+function Get-Incidents {
+
+    try {
+
+        $uri = "https://graph.microsoft.com/v1.0/security/incidents?`$orderby=createdDateTime desc&`$filter=severity ne 'informational'"
+        $allResults = @()
+        $pageCount = 0
+        $maxPages = 10
+        
+        do {
+            $pageCount++            
+            $response = Invoke-MgGraphRequest -Uri $uri -Method GET -ErrorAction Stop
+            
+            if ($response.value -and $response.value.Count -gt 0) {
+                foreach ($incident in $response.value) {
+                    $formattedIncident = [PSCustomObject]@{
+                        Id = $incident.Id
+                        IncidentWebUrl = $incident.IncidentWebUrl
+                        RedirectIncidentId = $incident.RedirectIncidentId
+                        TenantId = $incident.TenantId
+                        DisplayName = $incident.DisplayName
+                        Description = $incident.Description
+                        Severity = $incident.Severity
+                        Status = $incident.Status
+                        Classification = $incident.Classification
+                        Determination = $incident.Determination
+                        AssignedTo = $incident.AssignedTo
+                        CreatedDateTime = $incident.CreatedDateTime
+                        LastUpdateDateTime = $incident.LastUpdateDateTime
+                        Tags = $incident.Tags
+                        Comments = $incident.Comments
+                        SystemTags = $incident.SystemTags
+                        Summary = $incident.Summary
+                    }
+                    $allResults += $formattedIncident
+                }
+            }
+            
+            $uri = $response.'@odata.nextLink'
+            if ($pageCount -ge $maxPages) {
+                Write-Host "Reached maximum page limit of $maxPages"
+                break
+            }
+            
+        } while ($uri)
+        
+        Write-Host "Total incidents retrieved: $($allResults.Count)"
+        return $allResults
+        
+    } catch {
+        Write-Error "Failed to retrieve incidents: $_"
+        Write-Host "Error details: $($_.Exception.Message)"
+        return @()
+    }
+}
+
+function Get-IncidentAlerts {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$IncidentId
+    )
+    
+    try {
+        
+        $uri = "https://graph.microsoft.com/v1.0/security/incidents/$IncidentId?`$expand=alerts"
+        $incident = Invoke-MgGraphRequest -Uri $uri -Method GET -ErrorAction Stop
+        
+        if ($incident) {
+            Write-Host "Successfully retrieved incident: $IncidentId"
+            
+            $processedAlerts = @()
+            if ($incident.Alerts -and $incident.Alerts.Count -gt 0) {
+                Write-Host "Processing $($incident.Alerts.Count) alerts and their evidence..."
+                
+                foreach ($alert in $incident.Alerts) {
+                    $processedEvidence = @()
+                    
+                    if ($alert.Evidence -and $alert.Evidence.Count -gt 0) {
+                        Write-Host "Processing $($alert.Evidence.Count) evidence items for alert $($alert.Id)"
+                        
+                        foreach ($evidence in $alert.Evidence) {
+                            $evidenceType = $evidence.'@odata.type'
+                            $processedEvidenceItem = [PSCustomObject]@{
+                                Type = $evidenceType
+                                CreatedDateTime = $evidence.CreatedDateTime
+                                DetectionStatus = $evidence.DetectionStatus
+                                RemediationStatus = $evidence.RemediationStatus
+                                RemediationStatusDetails = $evidence.RemediationStatusDetails
+                                Verdict = $evidence.Verdict
+                                Tags = $evidence.Tags
+                            }
+                            
+                            switch ($evidenceType) {
+                                '#microsoft.graph.security.deviceEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'DeviceId' -NotePropertyValue $evidence.DeviceId
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'DeviceName' -NotePropertyValue $evidence.DeviceName
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'FirstSeenDateTime' -NotePropertyValue $evidence.FirstSeenDateTime
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'HealthStatus' -NotePropertyValue $evidence.HealthStatus
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'OnboardingStatus' -NotePropertyValue $evidence.OnboardingStatus
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'OsPlatform' -NotePropertyValue $evidence.OsPlatform
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'RbacGroupId' -NotePropertyValue $evidence.RbacGroupId
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'RbacGroupName' -NotePropertyValue $evidence.RbacGroupName
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'RiskScore' -NotePropertyValue $evidence.RiskScore
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Version' -NotePropertyValue $evidence.Version
+                                }
+                                '#microsoft.graph.security.fileEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'FileName' -NotePropertyValue $evidence.FileName
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'FilePath' -NotePropertyValue $evidence.FilePath
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'FilePublisher' -NotePropertyValue $evidence.FilePublisher
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'FileSize' -NotePropertyValue $evidence.FileSize
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Issuer' -NotePropertyValue $evidence.Issuer
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Sha1' -NotePropertyValue $evidence.Sha1
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Sha256' -NotePropertyValue $evidence.Sha256
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Signer' -NotePropertyValue $evidence.Signer
+                                }
+                                '#microsoft.graph.security.processEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'ProcessId' -NotePropertyValue $evidence.ProcessId
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'ProcessCommandLine' -NotePropertyValue $evidence.ProcessCommandLine
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'ProcessCreationDateTime' -NotePropertyValue $evidence.ProcessCreationDateTime
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'ParentProcessId' -NotePropertyValue $evidence.ParentProcessId
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'ParentProcessCreationDateTime' -NotePropertyValue $evidence.ParentProcessCreationDateTime
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'ParentProcessImageFile' -NotePropertyValue $evidence.ParentProcessImageFile
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'ImageFile' -NotePropertyValue $evidence.ImageFile
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'UserAccount' -NotePropertyValue $evidence.UserAccount
+                                }
+                                '#microsoft.graph.security.registryKeyEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'RegistryKey' -NotePropertyValue $evidence.RegistryKey
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'RegistryHive' -NotePropertyValue $evidence.RegistryHive
+                                }
+                                '#microsoft.graph.security.registryValueEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'RegistryKey' -NotePropertyValue $evidence.RegistryKey
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'RegistryValue' -NotePropertyValue $evidence.RegistryValue
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'RegistryValueType' -NotePropertyValue $evidence.RegistryValueType
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'RegistryValueData' -NotePropertyValue $evidence.RegistryValueData
+                                }
+                                '#microsoft.graph.security.ipEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'IpAddress' -NotePropertyValue $evidence.IpAddress
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'CountryLetterCode' -NotePropertyValue $evidence.CountryLetterCode
+                                }
+                                '#microsoft.graph.security.urlEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Url' -NotePropertyValue $evidence.Url
+                                }
+                                '#microsoft.graph.security.userEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'UserAccount' -NotePropertyValue $evidence.UserAccount
+                                }
+                                '#microsoft.graph.security.mailboxEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'UserAccount' -NotePropertyValue $evidence.UserAccount
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'PrimaryAddress' -NotePropertyValue $evidence.PrimaryAddress
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'DisplayName' -NotePropertyValue $evidence.DisplayName
+                                }
+                                '#microsoft.graph.security.cloudApplicationEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'AppId' -NotePropertyValue $evidence.AppId
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'DisplayName' -NotePropertyValue $evidence.DisplayName
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'InstanceId' -NotePropertyValue $evidence.InstanceId
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'InstanceName' -NotePropertyValue $evidence.InstanceName
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'SaasAppId' -NotePropertyValue $evidence.SaasAppId
+                                }
+                                default {
+                                    Write-Host "Unknown evidence type: $evidenceType"
+                                }
+                            }
+                            
+                            $processedEvidence += $processedEvidenceItem
+                        }
+                    }
+                    
+                    $processedAlert = [PSCustomObject]@{
+                        Id = $alert.Id
+                        ProviderAlertId = $alert.ProviderAlertId
+                        IncidentId = $alert.IncidentId
+                        Status = $alert.Status
+                        Severity = $alert.Severity
+                        Classification = $alert.Classification
+                        Determination = $alert.Determination
+                        ServiceSource = $alert.ServiceSource
+                        DetectionSource = $alert.DetectionSource
+                        DetectorId = $alert.DetectorId
+                        TenantId = $alert.TenantId
+                        Title = $alert.Title
+                        Description = $alert.Description
+                        RecommendedActions = $alert.RecommendedActions
+                        Category = $alert.Category
+                        AlertWebUrl = $alert.AlertWebUrl
+                        IncidentWebUrl = $alert.IncidentWebUrl
+                        ActorDisplayName = $alert.ActorDisplayName
+                        ThreatDisplayName = $alert.ThreatDisplayName
+                        ThreatFamilyName = $alert.ThreatFamilyName
+                        MitreTechniques = $alert.MitreTechniques
+                        CreatedDateTime = $alert.CreatedDateTime
+                        LastUpdateDateTime = $alert.LastUpdateDateTime
+                        ResolvedDateTime = $alert.ResolvedDateTime
+                        FirstActivityDateTime = $alert.FirstActivityDateTime
+                        LastActivityDateTime = $alert.LastActivityDateTime
+                        Comments = $alert.Comments
+                        SystemTags = $alert.SystemTags
+                        Evidence = $processedEvidence
+                    }
+                    
+                    $processedAlerts += $processedAlert
+                }
+            }
+            
+            $formattedIncident = [PSCustomObject]@{
+                Id = $incident.Id
+                IncidentWebUrl = $incident.IncidentWebUrl
+                RedirectIncidentId = $incident.RedirectIncidentId
+                TenantId = $incident.TenantId
+                DisplayName = $incident.DisplayName
+                Description = $incident.Description
+                Severity = $incident.Severity
+                Status = $incident.Status
+                Classification = $incident.Classification
+                Determination = $incident.Determination
+                AssignedTo = $incident.AssignedTo
+                CreatedDateTime = $incident.CreatedDateTime
+                LastUpdateDateTime = $incident.LastUpdateDateTime
+                Tags = $incident.Tags
+                Comments = $incident.Comments
+                SystemTags = $incident.SystemTags
+                Summary = $incident.Summary
+                Alerts = $processedAlerts 
+            }
+            
+            Write-Host "Retrieved $($processedAlerts.Count) from Incident: $IncidentId."
+            return $formattedIncident
+        } else {
+            Write-Host "Incident not found with ID: $IncidentId"
+            return $null
+        }
+    } catch {
+        Write-Error "Failed to retrieve incident: $_"
+        Write-Host "Error details: $($_.Exception.Message)"
+        Write-Host "Stack trace: $($_.ScriptStackTrace)"
+        return $null
+    }
+}
+
+function Update-Incident {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$IncidentId,
+        [Parameter(Mandatory = $false)]
+        [string]$Status,
+        [Parameter(Mandatory = $false)]
+        [string]$AssignedTo,
+        [Parameter(Mandatory = $false)]
+        [string]$Classification,
+        [Parameter(Mandatory = $false)]
+        [string]$Determination,
+        [Parameter(Mandatory = $false)]
+        [string[]]$CustomTags,
+        [Parameter(Mandatory = $false)]
+        [string]$Description,
+        [Parameter(Mandatory = $false)]
+        [string]$DisplayName,
+        [Parameter(Mandatory = $false)]
+        [string]$Severity,
+        [Parameter(Mandatory = $false)]
+        [string]$ResolvingComment,
+        [Parameter(Mandatory = $false)]
+        [string]$Summary
+    )
+    
+    if (-not ($Status -or $AssignedTo -or $Classification -or $Determination -or $CustomTags -or $Description -or $DisplayName -or $Severity -or $Summary -or $ResolvingComment)) {
+        Write-Error "At least one parameter must be provided for update"
+        return [PSCustomObject]@{
+            IncidentId = $IncidentId
+            Status = "Skipped"
+            Message = "No parameters provided for update"
+        }
+    }
+    
+    $uri = "https://graph.microsoft.com/v1.0/security/incidents/$IncidentId"
+    $body = @{}
+    
+    if ($Status) { $body.status = $Status }
+    if ($AssignedTo) { $body.assignedTo = $AssignedTo }
+    if ($Classification) { $body.classification = $Classification }
+    if ($Determination) { $body.determination = $Determination }
+    if ($CustomTags) { $body.customTags = $CustomTags }
+    if ($Description) { $body.description = $Description }
+    if ($DisplayName) { $body.displayName = $DisplayName }
+    if ($Severity) { $body.severity = $Severity }
+    if ($Summary) { $body.summary = $Summary }
+    if ($ResolvingComment) { $body.resolvingComment = $ResolvingComment }
+    
+    try {
+        $response = Invoke-MgGraphRequest -Uri $uri -Method PATCH -Body ($body | ConvertTo-Json -Depth 3) -ContentType "application/json" -ErrorAction Stop
+        Write-Host "Successfully updated incident: $IncidentId"
+        return [PSCustomObject]@{
+            IncidentId = $IncidentId
+            Status = "Success"
+            Response = $response
+        }
+    } catch {
+        Write-Error "Failed to update incident: $IncidentId - $_"
+        Write-Host "Error details: $($_.Exception.Message)"
+        return [PSCustomObject]@{
+            IncidentId = $IncidentId
+            Status = "Failed"
+            Error = $_.Exception.Message
+        }
+    }
+}
+
+function Update-IncidentComment {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$IncidentId,
+        [Parameter(Mandatory = $true)]
+        [string]$Comment
+    )
+    
+    $uri = "https://graph.microsoft.com/v1.0/security/incidents/$IncidentId/comments"
+    
+    $body = @{
+        "@odata.type" = "microsoft.graph.security.alertComment"
+        "comment" = $Comment
+    }
+    
+    try {
+        $response = Invoke-MgGraphRequest -Uri $uri -Method Post -Body ($body | ConvertTo-Json -Depth 10) -ErrorAction Stop
+        
+        Write-Host "Successfully added comment to incident: $IncidentId"
+
+        return [PSCustomObject]@{
+            IncidentId = $IncidentId
+            Status = "Success"
+            Comment = $Comment
+            Response = $response
+        }
+    } catch {
+        Write-Error "Failed to add comment to incident: $IncidentId - $_"
+        Write-Host "Error details: $($_.Exception.Message)"
+        return [PSCustomObject]@{
+            IncidentId = $IncidentId
+            Status = "Failed"
+            Error = $_.Exception.Message
+        }
+    }
+}
+
 Export-ModuleMember -Function Connect-MDE, Get-RequestParam, Invoke-WithRetry,
     Get-Machines, Get-Actions, Undo-Actions, Get-IPInfo, Get-FileInfo, Get-URLInfo, Get-LoggedInUsers, Get-MachineActionStatus, Invoke-AdvancedHunting,
-    Invoke-UploadLR, Invoke-PutFile, Invoke-GetFile, Invoke-LRScript, Get-LiveResponseOutput,
+    Invoke-UploadLR, Invoke-PutFile, Invoke-GetFile, Invoke-LRScript, Get-LiveResponseOutput, Get-Incidents, Get-Incident, Get-IncidentAlerts, Update-Incident, Update-IncidentComment,
     Invoke-MachineIsolation, Undo-MachineIsolation, Invoke-ContainDevice, Undo-ContainDevice, Invoke-MachineOffboard, Get-DetectionRules, Install-DetectionRule, Update-DetectionRule, Undo-DetectionRule,
     Invoke-RestrictAppExecution, Undo-RestrictAppExecution, Invoke-FullDiskScan, Invoke-StopAndQuarantineFile, Invoke-CollectInvestigationPackage,
     Get-Indicators, Invoke-TiFile, Undo-TiFile, Invoke-TiCert, Undo-TiCert, Invoke-TiIP, Undo-TiIP, Invoke-TiURL, Undo-TiURL

@@ -1,0 +1,832 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/HuntManager.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+    <div class="toolbar-left">
+        <div class="dropdown-group" style="display: flex; align-items: center;">
+            <select id="tenantDropdown" class="toolbar-dropdown" style="width: 280px; margin-right: 0.5rem;"></select>
+            <span class="page-title-bar">Hunt Manager</span>
+        </div>
+    </div>
+</div>
+<div class="toolbar" style="border-top: none; border-bottom: 2px solid #00ff41; background: #101c11; margin-bottom: 0.5rem;">
+    <div class="toolbar-left">
+        <button id="refreshQueriesBtn" class="cta-button">Refresh Queries</button>
+        <button id="addQueryBtn" class="cta-button">Add Query</button>
+    </div>
+</div>
+<div class="index-container">
+    <!-- Query Results Table Container -->
+    <div id="results-container" style="display: none; margin-top: 1rem; margin-bottom: 2rem;">
+        <div style="background: #142a17; border: 1px solid #00ff41; border-radius: 8px; padding: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3 style="color: #7fff7f; margin: 0;">Query Results</h3>
+                <div>
+                    <span id="results-info" style="color: #7fff7f; margin-right: 1rem; font-size: 0.9em;"></span>
+                    <button id="closeResultsBtn" class="cta-button undo-button" style="padding: 0.3rem 0.8rem; font-size: 0.9em;">Close</button>
+                </div>
+            </div>
+            <div id="results-table-container" style="max-height: 400px; overflow: auto; border: 1px solid #00ff41; border-radius: 4px; background: #101c11;">
+                <div id="results-table"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="queries-table" style="margin-top:2rem;"></div>
+</div>
+
+<!-- Add Query Modal -->
+<div id="addQueryModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.7); z-index:10000; align-items:center; justify-content:center;">
+  <div style="background:#142a17; padding:2rem; border-radius:8px; min-width:800px; max-width:95vw; max-height:90vh; overflow-y:auto; display: flex; flex-direction: column;">
+    <h3 style="color:#7fff7f; margin-top: 0; margin-bottom: 1rem;">Add New Query</h3>
+    
+    <div style="margin-bottom: 1rem;">
+      <label style="color:#7fff7f; display: block; margin-bottom: 0.5rem;">Query Name:</label>
+      <input id="newQueryName" type="text" style="width:100%; padding: 0.5rem; background: #101c11; color: #7fff7f; border: 1px solid #00ff41; border-radius: 4px;" />
+    </div>
+    
+    <div style="margin-bottom: 1rem; flex: 1; display: flex; flex-direction: column;">
+      <label style="color:#7fff7f; display: block; margin-bottom: 0.5rem;">Query (KQL):</label>
+      <div id="kqlEditor" style="width:100%; height:300px; border:1px solid #00ff41; border-radius:4px; overflow: hidden;"></div>
+    </div>
+    
+    <div style="text-align:right; margin-top: 1rem; flex-shrink: 0;">
+      <button id="saveQueryBtn" class="cta-button">
+        <span id="saveQueryBtnText">Save</span>
+        <span id="saveQuerySpinner" style="display:none;margin-left:8px;width:18px;height:18px;vertical-align:middle;"></span>
+      </button>
+      <button id="cancelQueryBtn" class="cta-button undo-button" style="margin-left:0.5rem;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/gridjs/dist/gridjs.umd.js"></script>
+<!-- CodeMirror CSS and JS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/material-darker.css">
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/sql/sql.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/edit/matchbrackets.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/edit/closebrackets.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/hint/show-hint.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/hint/sql-hint.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/lint/lint.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/hint/show-hint.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/lint/lint.css">
+{% if FUNCURL and FUNCKEY %}
+<script>
+window.FUNCURL = "{{ FUNCURL }}";
+window.FUNCKEY = "{{ FUNCKEY }}";
+</script>
+{% endif %}
+<script src="{{ url_for('static', filename='js/HuntManager.js') }}"></script>
+<script>
+// CodeMirror Editor integration for KQL
+window.codeMirrorKqlEditor = null;
+
+// KQL Keywords for syntax highlighting and linting
+const KQL_KEYWORDS = [
+  'where', 'project', 'extend', 'summarize', 'sort', 'order', 'by', 'take', 'limit',
+  'top', 'count', 'distinct', 'join', 'union', 'let', 'datatable', 'range',
+  'evaluate', 'invoke', 'search', 'find', 'parse', 'serialize', 'mv-expand',
+  'mv-apply', 'fork', 'partition', 'sample', 'sample-distinct', 'getschema',
+  'print', 'render', 'as', 'on', 'kind', 'withsource', 'with', 'has', 'contains',
+  'startswith', 'endswith', 'matches', 'regex', 'and', 'or', 'not', 'in', 'between',
+  'ago', 'now', 'datetime', 'timespan', 'bin', 'floor', 'ceiling', 'round',
+  'case', 'iff', 'iif', 'coalesce', 'isempty', 'isnotempty', 'isnull', 'isnotnull',
+  'toscalar', 'tostring', 'todouble', 'toint', 'tolong', 'tobool', 'todatetime',
+  'totimespan', 'pack', 'pack_array', 'bag_pack', 'parse_json', 'parse_xml',
+  'split', 'strcat', 'strlen', 'substring', 'tolower', 'toupper', 'trim',
+  'sum', 'avg', 'min', 'max', 'count', 'countif', 'dcount', 'dcountif',
+  'stdev', 'variance', 'percentile', 'percentiles', 'arg_max', 'arg_min',
+  'any', 'anyif', 'make_list', 'make_set', 'buildschema', 'bag_merge'
+];
+
+// KQL Functions for autocomplete
+const KQL_FUNCTIONS = [
+  'abs', 'acos', 'asin', 'atan', 'atan2', 'ceiling', 'cos', 'cot', 'degrees',
+  'exp', 'floor', 'log', 'log10', 'log2', 'pi', 'pow', 'radians', 'rand',
+  'round', 'sign', 'sin', 'sqrt', 'tan', 'bin', 'bin_at', 'case', 'coalesce',
+  'column_ifexists', 'current_cluster_endpoint', 'current_database',
+  'current_principal', 'cursor_after', 'cursor_before_or_at', 'cursor_current',
+  'database', 'dcount_hll', 'estimate_data_size', 'extent_id', 'extent_tags',
+  'hash', 'hash_combine', 'hash_many', 'hash_md5', 'hash_sha1', 'hash_sha256',
+  'hourofday', 'iff', 'indexof', 'ingestion_time', 'isascii', 'isempty',
+  'isfinite', 'isinf', 'isnan', 'isnotempty', 'isnotnull', 'isnull', 'isutf8'
+];
+
+// KQL Linting function
+function lintKQL(text) {
+  const errors = [];
+  const lines = text.split('\n');
+  
+  lines.forEach((line, lineNum) => {
+    const trimmedLine = line.trim();
+    if (!trimmedLine || trimmedLine.startsWith('//')) return;
+    
+    // Check for common KQL syntax errors
+    if (trimmedLine.includes('=') && !trimmedLine.includes('==') && !trimmedLine.includes('!=') && !trimmedLine.includes('>=') && !trimmedLine.includes('<=')) {
+      // Check if it's not a valid assignment in let statement
+      if (!trimmedLine.startsWith('let ') && trimmedLine.includes('=') && !trimmedLine.includes(' = ')) {
+        errors.push({
+          from: { line: lineNum, ch: line.indexOf('=') },
+          to: { line: lineNum, ch: line.indexOf('=') + 1 },
+          message: "Use '==' for comparison or ' = ' for assignment in let statements",
+          severity: "warning"
+        });
+      }
+    }
+    
+    // Check for missing operators
+    if (trimmedLine.match(/\b\w+\s+\w+\b/) && !trimmedLine.match(/\b(where|project|extend|summarize|sort|order|by|take|limit|top|count|distinct|join|union|let|and|or|not|in|between|has|contains|startswith|endswith|matches|regex|ago|now|datetime|timespan|bin|floor|ceiling|round|case|iff|iif)\b/)) {
+      errors.push({
+        from: { line: lineNum, ch: 0 },
+        to: { line: lineNum, ch: line.length },
+        message: "Missing operator between expressions",
+        severity: "warning"
+      });
+    }
+    
+    // Check for unclosed quotes
+    const singleQuotes = (line.match(/'/g) || []).length;
+    const doubleQuotes = (line.match(/"/g) || []).length;
+    if (singleQuotes % 2 !== 0) {
+      errors.push({
+        from: { line: lineNum, ch: 0 },
+        to: { line: lineNum, ch: line.length },
+        message: "Unclosed single quote",
+        severity: "error"
+      });
+    }
+    if (doubleQuotes % 2 !== 0) {
+      errors.push({
+        from: { line: lineNum, ch: 0 },
+        to: { line: lineNum, ch: line.length },
+        message: "Unclosed double quote",
+        severity: "error"
+      });
+    }
+  });
+  
+  return errors;
+}
+
+// Initialize CodeMirror Editor
+function initCodeMirrorKqlEditor() {
+  console.log('initCodeMirrorKqlEditor called');
+  
+  const editorContainer = document.getElementById('kqlEditor');
+  if (!editorContainer) {
+    console.error('KQL Editor container not found!');
+    return null;
+  }
+  
+  console.log('Editor container found:', editorContainer);
+  
+  // Clear existing content
+  editorContainer.innerHTML = '';
+  try {
+    console.log('Creating CodeMirror instance...');
+    window.codeMirrorKqlEditor = CodeMirror(editorContainer, {
+      value: '',
+      mode: 'text/x-sql', // Use SQL mode as base for KQL
+      theme: 'material-darker',
+      lineNumbers: true,
+      matchBrackets: true,
+      autoCloseBrackets: true,
+      indentWithTabs: false,
+      indentUnit: 2,
+      lineWrapping: true,
+      foldGutter: true,
+      gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter", "CodeMirror-lint-markers"],
+      extraKeys: {
+        "Ctrl-Space": "autocomplete",
+        "Tab": function(cm) {
+          if (cm.somethingSelected()) {
+            cm.indentSelection("add");
+          } else {
+            cm.replaceSelection("  ");
+          }
+        }
+      },
+      lint: {
+        getAnnotations: function(text) {
+          return lintKQL(text);
+        },
+        async: false
+      },
+      hintOptions: {
+        tables: {},
+        defaultTable: '',
+        keywords: KQL_KEYWORDS.concat(KQL_FUNCTIONS),
+        functions: KQL_FUNCTIONS
+      }    });
+    
+    // Force CodeMirror to refresh after creation to ensure proper sizing
+    setTimeout(() => {
+      if (window.codeMirrorKqlEditor) {
+        window.codeMirrorKqlEditor.refresh();
+      }
+    }, 50);
+    
+    console.log('CodeMirror created successfully');
+  } catch (error) {
+    console.error('Error creating CodeMirror:', error);
+    return null;
+  }
+  
+  // Custom KQL autocomplete
+  CodeMirror.registerHelper("hint", "kql", function(editor) {
+    const cursor = editor.getCursor();
+    const line = editor.getLine(cursor.line);
+    const start = cursor.ch;
+    let end = start;
+    
+    while (end < line.length && /\w/.test(line.charAt(end))) {
+      ++end;
+    }
+    
+    let word = line.slice(start - 1, end);
+    while (start && /\w/.test(line.charAt(start - 1))) {
+      --start;
+      word = line.slice(start, end);
+    }
+    
+    const suggestions = KQL_KEYWORDS.concat(KQL_FUNCTIONS)
+      .filter(item => item.toLowerCase().startsWith(word.toLowerCase()))
+      .map(item => ({
+        text: item,
+        displayText: item,
+        className: KQL_KEYWORDS.includes(item) ? "kql-keyword" : "kql-function"
+      }));
+    
+    return {
+      list: suggestions,
+      from: CodeMirror.Pos(cursor.line, start),
+      to: CodeMirror.Pos(cursor.line, end)
+    };
+  });
+    // Add custom styles for KQL
+  const style = document.createElement('style');
+  style.innerHTML = `
+    .CodeMirror {
+      height: 100% !important;
+      border: 1px solid #00ff41;
+      border-radius: 4px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 14px;
+    }
+    .CodeMirror-hints {
+      background: #263238;
+      border: 1px solid #00ff41;
+    }
+    .CodeMirror-hint {
+      color: #7fff7f;
+    }
+    .CodeMirror-hint-active {
+      background: #00ff41;
+      color: #000;
+    }
+    .kql-keyword {
+      font-weight: bold;
+      color: #c792ea;
+    }
+    .kql-function {
+      color: #82aaff;
+    }
+    .CodeMirror-lint-mark-error {
+      background: rgba(255, 0, 0, 0.3);
+    }
+    .CodeMirror-lint-mark-warning {
+      background: rgba(255, 255, 0, 0.3);
+    }
+    .CodeMirror-lint-message-error {
+      background: #ff5370;
+      color: white;
+    }
+    .CodeMirror-lint-message-warning {
+      background: #ffcb6b;
+      color: black;
+    }
+  `;
+  document.head.appendChild(style);
+  
+  return window.codeMirrorKqlEditor;
+}
+
+// Helper function to check if CodeMirror is ready
+window.isCodeMirrorReady = function() {
+  return window.codeMirrorKqlEditor && typeof window.codeMirrorKqlEditor.getValue === 'function';
+};
+
+// Override showAddQueryModal to initialize CodeMirror
+window.showAddQueryModal = function() {
+  console.log('showAddQueryModal called');
+  
+  // Show the modal first
+  const modal = document.getElementById('addQueryModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    console.log('Modal displayed');
+  } else {
+    console.error('Modal element not found');
+  }
+  
+  const saveBtn = document.getElementById('saveQueryBtn');
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    const saveText = document.getElementById('saveQueryBtnText');
+    if (saveText) saveText.textContent = 'Loading Editor...';
+  }
+  
+  // Wait for modal to be visible before initializing CodeMirror
+  setTimeout(() => {
+    console.log('Initializing CodeMirror...');
+    const editor = initCodeMirrorKqlEditor();
+    if (editor) {
+      console.log('CodeMirror initialized successfully');
+      // Clear editor and focus
+      editor.setValue('');
+      editor.focus();
+      
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        const saveText = document.getElementById('saveQueryBtnText');
+        if (saveText) saveText.textContent = 'Save';
+      }
+    } else {
+      console.error('Failed to initialize CodeMirror');
+    }
+  }, 100);
+};
+
+// Override hideAddQueryModal to clear CodeMirror
+window.hideAddQueryModal = function() {
+  // Hide the modal
+  const modal = document.getElementById('addQueryModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+  
+  // Reset form fields
+  const queryNameInput = document.getElementById('newQueryName');
+  if (queryNameInput) queryNameInput.value = '';
+  
+  // Clear CodeMirror editor
+  if (window.codeMirrorKqlEditor && typeof window.codeMirrorKqlEditor.setValue === 'function') {
+    try {
+      window.codeMirrorKqlEditor.setValue('');
+    } catch (error) {
+      console.warn('Error clearing CodeMirror editor:', error);
+    }
+  }
+};
+
+// Spinner CSS for Save button
+const style = document.createElement('style');
+style.innerHTML = `
+#saveQuerySpinner {
+  border: 2.5px solid #00ff41;
+  border-top: 2.5px solid #1aff5c;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: inline-block;
+  animation: spin 0.7s linear infinite;
+  box-shadow: 0 0 8px #00ff41;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Results Table Styles */
+#results-table .gridjs-wrapper {
+  border: none;
+}
+#results-table .gridjs-container {
+  background: transparent;
+}
+#results-table .gridjs-head {
+  background: #142a17;
+  border-bottom: 2px solid #00ff41;
+}
+#results-table .gridjs-th {
+  background: #142a17;
+  color: #7fff7f;
+  border-right: 1px solid #00ff41;
+  padding: 12px 8px;
+  font-weight: bold;
+}
+#results-table .gridjs-td {
+  background: #101c11;
+  color: #7fff7f;
+  border-right: 1px solid #333;
+  border-bottom: 1px solid #333;
+  padding: 8px;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#results-table .gridjs-tr:nth-child(even) .gridjs-td {
+  background: #0f1a10;
+}
+#results-table .gridjs-tr:hover .gridjs-td {
+  background: #1a2a1d;
+}
+#results-table .gridjs-pagination {
+  background: #142a17;
+  border-top: 1px solid #00ff41;
+  color: #7fff7f;
+}
+#results-table .gridjs-pagination button {
+  background: #101c11;
+  color: #7fff7f;
+  border: 1px solid #00ff41;
+  margin: 0 2px;
+}
+#results-table .gridjs-pagination button:hover {
+  background: #00ff41;
+  color: #000;
+}
+#results-table .gridjs-pagination button[disabled] {
+  background: #333;
+  color: #666;
+  border-color: #666;
+}
+#results-table .gridjs-search {
+  background: #142a17;
+  border-bottom: 1px solid #00ff41;
+  padding: 10px;
+}
+#results-table .gridjs-search input {
+  background: #101c11;
+  color: #7fff7f;
+  border: 1px solid #00ff41;
+  border-radius: 4px;
+  padding: 6px 10px;
+}
+#results-table .gridjs-search input:focus {
+  outline: none;
+  box-shadow: 0 0 5px #00ff41;
+}
+`;
+document.head.appendChild(style);
+
+// Initialize close results button
+document.addEventListener('DOMContentLoaded', function() {
+  const closeResultsBtn = document.getElementById('closeResultsBtn');
+  if (closeResultsBtn) {
+    closeResultsBtn.addEventListener('click', function() {
+      hideQueryResults();
+    });
+  }
+});
+
+// Results table management functions
+window.hideQueryResults = function() {
+  const resultsContainer = document.getElementById('results-container');
+  if (resultsContainer) {
+    resultsContainer.style.display = 'none';
+  }
+  
+  // Destroy existing results grid with better error handling
+  if (window.resultsGrid) {
+    try {
+      window.resultsGrid.destroy();
+    } catch (e) {
+      console.warn('Error destroying results grid:', e);
+    }
+    window.resultsGrid = null;
+  }
+  
+  // Clear the container completely
+  const resultsTableContainer = document.getElementById('results-table');
+  if (resultsTableContainer) {
+    resultsTableContainer.innerHTML = '';
+  }
+  
+  // Clear info
+  const resultsInfo = document.getElementById('results-info');
+  if (resultsInfo) {
+    resultsInfo.textContent = '';
+  }
+};
+
+window.showQueryResults = function(data, queryName) {
+  const resultsContainer = document.getElementById('results-container');
+  const resultsInfo = document.getElementById('results-info');
+  
+  if (!resultsContainer || !resultsInfo) {
+    console.error('Results container elements not found');
+    return;
+  }
+  
+  // Always destroy existing grid first and clear container
+  if (window.resultsGrid) {
+    try {
+      window.resultsGrid.destroy();
+    } catch (e) {
+      console.warn('Error destroying existing grid:', e);
+    }
+    window.resultsGrid = null;
+  }
+  
+  // Clear the container completely
+  const resultsTableContainer = document.getElementById('results-table');
+  if (resultsTableContainer) {
+    resultsTableContainer.innerHTML = '';
+  }
+  
+  // Extract results data from the response with better error handling
+  let resultsData = [];
+  let totalCount = 0;
+  
+  try {
+    if (data && data.results && Array.isArray(data.results)) {
+      resultsData = data.results;
+      totalCount = resultsData.length;
+    } else if (data && data.Results && Array.isArray(data.Results)) {
+      resultsData = data.Results;
+      totalCount = resultsData.length;
+    } else if (Array.isArray(data)) {
+      resultsData = data;
+      totalCount = resultsData.length;
+    } else {
+      // Log the actual data structure for debugging
+      console.log('Unexpected data format:', data);
+      resultsInfo.textContent = 'No results or unexpected data format';
+      resultsContainer.style.display = 'block';
+      resultsTableContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #7fff7f;">No valid results data found</div>';
+      return;
+    }
+  } catch (error) {
+    console.error('Error extracting results data:', error);
+    resultsInfo.textContent = 'Error processing results data';
+    resultsContainer.style.display = 'block';
+    resultsTableContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #ff6b6b;">Error processing results data</div>';
+    return;
+  }
+  
+  // Update info display
+  resultsInfo.textContent = `Query: ${queryName} | Results: ${totalCount} rows`;
+  
+  if (totalCount === 0) {
+    // Show empty results message
+    if (resultsTableContainer) {
+      resultsTableContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #7fff7f;">No results found</div>';
+    }
+    resultsContainer.style.display = 'block';
+    return;
+  }
+  
+  try {
+    // Safely determine columns from the first few rows of data
+    const columns = [];
+    const columnSet = new Set();
+    
+    // Sample up to first 5 rows to determine all possible columns (reduced for safety)
+    const sampleSize = Math.min(5, resultsData.length);
+    for (let i = 0; i < sampleSize; i++) {
+      const row = resultsData[i];
+      if (row && typeof row === 'object' && row !== null) {        try {
+          Object.keys(row).forEach(key => {
+            if (typeof key === 'string' && key.length > 0 && !key.includes('odata.type')) {
+              columnSet.add(key);
+            }
+          });
+        } catch (e) {
+          console.warn('Error processing row keys:', e, row);
+        }
+      }
+    }
+    
+    // Convert to array and create column definitions with safer formatter
+    const columnNames = Array.from(columnSet);
+    if (columnNames.length === 0) {
+      resultsTableContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #ff6b6b;">No valid columns found in data</div>';
+      resultsContainer.style.display = 'block';
+      return;
+    }
+    
+    columnNames.forEach(colName => {
+      columns.push({
+        id: colName,
+        name: colName,
+        width: '200px',
+        sort: true,        formatter: (cell, row) => {
+          try {
+            // Debug logging for special values
+            if (typeof cell === 'string' && (cell.startsWith('#') || cell.includes('Collection('))) {
+              console.log('Processing type indicator cell:', cell, typeof cell);
+            }
+            
+            // Handle null/undefined safely
+            if (cell === null || cell === undefined) {
+              return gridjs.html('<span style="color: #666; font-style: italic;">null</span>');
+            }
+            
+            // Handle string values that might be type indicators FIRST (before object processing)
+            if (typeof cell === 'string') {
+              // Check if it's a type indicator string - be more comprehensive
+              if (cell.startsWith('#') || 
+                  cell.includes('Collection(') || 
+                  cell.includes('Type') ||
+                  cell.match(/^#(SByte|Int16|Int32|Int64|UInt16|UInt32|UInt64|Single|Double|Decimal|Boolean|DateTime|String|Guid|Binary)$/i) ||
+                  cell.match(/^#Collection\(/i)) {
+                const escaped = cell.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                console.log('Styling type indicator:', cell, 'as blue italic');
+                return gridjs.html(`<span style="color: #82aaff; font-style: italic; font-weight: 500;">${escaped}</span>`);
+              }
+              
+              // Regular string processing
+              if (cell.length > 100) {
+                const truncated = cell.substring(0, 97) + '...';
+                const escaped = truncated.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const titleEscaped = cell.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                return gridjs.html(`<span title="${titleEscaped}">${escaped}</span>`);
+              }
+              
+              const escaped = cell.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              return escaped;
+            }
+            
+            // Handle objects and arrays by stringifying them safely
+            if (typeof cell === 'object') {
+              try {
+                // Special handling for empty objects or objects that stringify to "{}"
+                const cellStr = JSON.stringify(cell);
+                
+                // Check if it's an empty object or just "{}"
+                if (cellStr === '{}' || cellStr === '[]') {
+                  // Check if the object has any special properties that indicate type information
+                  if (cell && typeof cell === 'object') {
+                    // Look for common type indicator properties
+                    const typeIndicators = ['$type', 'type', 'dataType', '__type', 'odata.type'];
+                    for (const indicator of typeIndicators) {
+                      if (cell[indicator]) {
+                        const typeStr = String(cell[indicator]);
+                        const escaped = typeStr.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        console.log('Found type indicator in object property:', typeStr);
+                        return gridjs.html(`<span style="color: #82aaff; font-style: italic; font-weight: 500;">${escaped}</span>`);
+                      }
+                    }
+                    
+                    // Check if it looks like it contains type information in any property
+                    const keys = Object.keys(cell);
+                    if (keys.length > 0) {
+                      const firstKey = keys[0];
+                      const firstValue = cell[firstKey];
+                      if (typeof firstValue === 'string' && (
+                          firstValue.startsWith('#') || 
+                          firstValue.includes('Type') || 
+                          firstValue.includes('Collection')
+                        )) {
+                        const escaped = firstValue.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        console.log('Found type indicator in object value:', firstValue);
+                        return gridjs.html(`<span style="color: #82aaff; font-style: italic; font-weight: 500;">${escaped}</span>`);
+                      }
+                    }
+                  }
+                  
+                  // If it's truly empty, show as empty
+                  return gridjs.html('<span style="color: #666; font-style: italic;">[empty]</span>');
+                }
+                
+                // For non-empty objects, show the JSON
+                if (cellStr.length > 100) {
+                  const truncated = cellStr.substring(0, 97) + '...';
+                  const escaped = truncated.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                  const titleEscaped = cellStr.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                  return gridjs.html(`<span title="${titleEscaped}">${escaped}</span>`);
+                }
+                const escaped = cellStr.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                return gridjs.html(`<span title="${escaped}">${escaped}</span>`);
+              } catch (e) {
+                // If JSON.stringify fails, try to extract meaningful information
+                console.warn('JSON stringify failed for cell:', cell, e);
+                
+                if (cell && typeof cell === 'object') {
+                  // Try to find any meaningful string representation
+                  const keys = Object.keys(cell);
+                  if (keys.length > 0) {
+                    const sampleValues = keys.slice(0, 3).map(key => `${key}: ${String(cell[key])}`).join(', ');
+                    const escaped = sampleValues.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const keysStr = keys.join(', ').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    return gridjs.html(`<span style="color: #ff9800;" title="Object with keys: ${keysStr}">{${escaped}${keys.length > 3 ? '...' : '}'}}</span>`);
+                  }
+                }
+                
+                return gridjs.html('<span style="color: #ff6b6b;">[Object - stringify error]</span>');
+              }
+            }
+            
+            // Handle all other types as strings
+            const cellStr = String(cell);
+            if (cellStr.length > 100) {
+              const truncated = cellStr.substring(0, 97) + '...';
+              const escaped = truncated.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              const titleEscaped = cellStr.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              return gridjs.html(`<span title="${titleEscaped}">${escaped}</span>`);
+            }
+            
+            const escaped = cellStr.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return escaped;
+          } catch (error) {
+            console.warn('Formatter error for cell:', cell, error);
+            return gridjs.html('<span style="color: #ff6b6b;">[Format error]</span>');
+          }
+        }
+      });
+    });
+    
+    // Convert data rows to match column structure with error handling
+    const tableData = [];
+    for (let i = 0; i < resultsData.length; i++) {
+      try {
+        const row = resultsData[i];
+        if (row && typeof row === 'object' && row !== null) {
+          const rowData = columnNames.map(colName => {
+            try {
+              return row[colName];
+            } catch (e) {
+              console.warn('Error accessing column', colName, 'in row', i);
+              return '[Error]';
+            }
+          });
+          tableData.push(rowData);
+        }
+      } catch (e) {
+        console.warn('Error processing row', i, e);
+      }
+    }
+    
+    if (tableData.length === 0) {
+      resultsTableContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #ff6b6b;">No valid data rows found</div>';
+      resultsContainer.style.display = 'block';
+      return;
+    }
+    
+    // Create new grid with additional error handling
+    if (resultsTableContainer) {
+      try {
+        window.resultsGrid = new gridjs.Grid({
+          columns: columns,
+          data: tableData,
+          search: true,
+          sort: true,
+          resizable: true,
+          pagination: { 
+            enabled: true, 
+            limit: 25, 
+            summary: true 
+          },
+          autoWidth: false,
+          width: '100%',
+          style: {
+            table: { width: '100%' }
+          }
+        });
+        
+        // Render with timeout to ensure container is ready
+        setTimeout(() => {
+          try {
+            window.resultsGrid.render(resultsTableContainer);
+          } catch (renderError) {
+            console.error('Grid render error:', renderError);
+            resultsTableContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #ff6b6b;">Error rendering results table</div>';
+          }
+        }, 100);
+        
+      } catch (gridError) {
+        console.error('Grid creation error:', gridError);
+        resultsTableContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #ff6b6b;">Error creating results table</div>';
+      }
+    }
+    
+  } catch (error) {
+    console.error('Error in showQueryResults:', error);
+    resultsTableContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #ff6b6b;">Error displaying results</div>';
+  }
+  
+  // Show the results container
+  resultsContainer.style.display = 'block';
+  
+  // Scroll to results
+  try {
+    resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    // Fallback scroll without smooth behavior
+    resultsContainer.scrollIntoView();
+  }
+};
+</script>
+{% endblock %}

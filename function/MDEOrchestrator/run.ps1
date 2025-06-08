@@ -1,5 +1,5 @@
 # MDEOrchestrator Function App
-# 1.5.9
+# 1.6.0
 
 using namespace System.Net
 

@@ -1,5 +1,5 @@
 # MDEHuntScheduler Function App
-# 1.5.9
+# 1.6.0
 
 using namespace System.Net
 
@@ -20,7 +20,7 @@ function Get-TenantIdsFromTable {
             Write-Host "Creating AzBobbyTables context for storage account: $storageAccountName"
             
             # Prioritize connection string from AzureWebJobsStorage
-            $connectionString = [System.Environment]::GetEnvironmentVariable('AzureWebJobsStorage', 'Process')
+            $connectionString = [System.Environment]::GetEnvironmentVariable('WEBSITE_CONTENTAZUREFILECONNECTIONSTRING', 'Process')
             $context = New-AzDataTableContext -TableName "TenantIds" -ConnectionString $connectionString
             Write-Host "Context created successfully"
         } catch {
