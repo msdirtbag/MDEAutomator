@@ -9,37 +9,22 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 ## Core Components
 
 - **MDEAutomator PowerShell Module**  
-  Provides cmdlets for authentication, profile management, live response, response actions, custom detections, advanced hunting and threat indicator management in MDE.
+  A comprehensive PowerShell module delivering cmdlets for Microsoft Defender for Endpoint operations, including advanced authentication mechanisms, profile orchestration, live response automation, response action management, custom detection rule deployment, advanced hunting query execution, and threat indicator lifecycle management.
 
-- **Azure Function Apps**
-  - **MDEDispatcher**  
-    Automates bulk management of response actions delivered to endpoints:
-    - `InvokeMachineIsolation`: Performs selective network isolation. (respects exclusion rules)
-    - `UndoMachineIsolation`: Removes network isolation.
-    - `InvokeContainDevice`: Instructs endpoints to deny all connections from this device.
-    - `UndoContainDevice`: Restores communication with endpoints.
-    - `InvokeRestrictAppExecution`: Enables Microsoft-only code integrity policy. (Microsoft-signed code only permitted to run)
-    - `UndoRestrictAppExecution`- Removes Microsoft-only code integrity policy.
-    - `InvokeCollectInvestigationPackage` - Collects Investigation Packages and uploads them to the `packages` blob container.
-    - `InvokeStopAndQuarantineFile` - Searches for file on disk, encrypts the file and saves the file in the local WDAV quarantine folder.
-    - `InvokeFullDiskScan` - Starts full-disk WDAV scan jobs.
-    - `InvokeMachineOffboard` - Attempts to offboard the endpoint from MDE monitoring.   
-  - **MDEOrchestrator**  
-    Automates bulk management of Live Response commands:
-    - `InvokeUploadLR`- Uploads local file to Live Response Library using byte array.
-    - `InvokePutFile`- Pushes file from Live Response Library to the `C:\ProgramData\Microsoft\Windows Defender Advanced Threat Protection\Downloads` folder on the endpoints.
-    - `InvokeGetFile`- Retrieves file from endpoint and uploads to the `files` blob container.
-    - `InvokeLRScript`- Runs live response script from Live Response Library on the endpoint.
-  - **MDEProfiles**  
-    Automates bulk delivery of custom PowerShell scripts to configure policy on MDE endpoints:
-    - `Active`- This configures specific Set-MpPreference settings, registry settings, Attack Surface Reduction rules, Exploit Protection, and Windows Defender Application Control settings on endpoints. 
-    - `Passive`- This configures specific Set-MpPreference settings and Attack Surface Reduction rules on endpoints.
-  - **MDETIManager**  
-    Automates management of Threat Indicators (IOCs) in Microsoft Defender for Endpoint:
-    - `InvokeTiFile` / `UndoTiFile`: Creates/removes file hash-based indicators (SHA1/SHA256)
-    - `InvokeTiIP` / `UndoTiIP`: Creates/removes IP address-based indicators
-    - `InvokeTiURL` / `UndoTiURL`: Creates/removes URL and domain-based indicators
-    - `InvokeTiCert` / `UndoTiCert`: Creates/removes certificate-based indicators (by thumbprint)
+- **MDEAutomator**  
+  A serverless orchestration platform designed for large-scale response action automation, distributed Live Response command execution across endpoint fleets, and programmatic deployment of PowerShell configuration scripts to Microsoft Defender for Endpoint managed devices.
+
+- **Threat Intelligence Manager**  
+  An threat indicator orchestration system providing automated lifecycle management for diverse indicator types including hashes, network infrastructure indicators (IPs, URLs, domains), and code signing certificates within Microsoft Defender for Endpoint. Features automated synchronization of Custom Detection rules from Azure Blob Storage with version control and deployment validation.
+
+- **Action Manager**  
+  Provides reporting on MDE machines actions and a safety switch to cancel all pending actions in the tenant.
+
+- **Hunt Manager**  
+  An advanced threat hunting automation engine supporting both on-demand and scheduled hunting operations, featuring sophisticated query management, automated result processing, and seamless Azure Blob Storage integration.
+
+- **Incident Manager**  
+  A streamlined incident response platform providing centralized management of Microsoft Defender XDR incidents and integrated comment tracking.
 
 ---
 
@@ -50,10 +35,11 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 - Bulk management of MDE threat indicators (IOCs)
 - Designed for multi-tenant use cases
 - Secretless App Registration/UMI auth + manual `$SPNSECRET` flexibility
-- Ability to deliver key configuration settings via PowerShell that are not available in Endpoint Security Profiles. 
-- Automated daily Threat Hunting for all onboarded tenants. 
+- Ability to deliver key configuration settings via PowerShell that are not available in Endpoint Security Profiles
+- Automated daily Threat Hunting for all onboarded tenants
 - Custom Detection syncronization & management with Azure Storage
 - Convenient upload of endpoint packages/files to Azure Storage
+- Simplified management of Defender incidents
 
 ## Development Features
 
@@ -128,6 +114,7 @@ MDEAutomator Estimated Monthly Azure Cost: ~$210 USD
    - CustomDetection.ReadWrite.All
    - ThreatHunting.Read.All
    - ThreatIndicators.ReadWrite.OwnedBy
+   - SecurityIncident.ReadWrite.All
 
     ![Perms](./media/spnperms.png)
 
