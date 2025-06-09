@@ -2757,15 +2757,15 @@ function Get-IncidentAlerts {
                     if ($alert.Evidence -and $alert.Evidence.Count -gt 0) {
                         Write-Host "Processing $($alert.Evidence.Count) evidence items for alert $($alert.Id)"
                         
-                        foreach ($evidence in $alert.Evidence) {
-                            $evidenceType = $evidence.'@odata.type'
+                        foreach ($evidence in $alert.Evidence) {                            $evidenceType = $evidence.'@odata.type'
                             $processedEvidenceItem = [PSCustomObject]@{
                                 Type = $evidenceType
                                 CreatedDateTime = $evidence.CreatedDateTime
-                                DetectionStatus = $evidence.DetectionStatus
                                 RemediationStatus = $evidence.RemediationStatus
                                 RemediationStatusDetails = $evidence.RemediationStatusDetails
                                 Verdict = $evidence.Verdict
+                                Roles = $evidence.Roles  
+                                DetailedRoles = $evidence.DetailedRoles 
                                 Tags = $evidence.Tags
                             }
                             
@@ -2826,13 +2826,94 @@ function Get-IncidentAlerts {
                                     $processedEvidenceItem | Add-Member -NotePropertyName 'UserAccount' -NotePropertyValue $evidence.UserAccount
                                     $processedEvidenceItem | Add-Member -NotePropertyName 'PrimaryAddress' -NotePropertyValue $evidence.PrimaryAddress
                                     $processedEvidenceItem | Add-Member -NotePropertyName 'DisplayName' -NotePropertyValue $evidence.DisplayName
-                                }
-                                '#microsoft.graph.security.cloudApplicationEvidence' {
+                                }                                '#microsoft.graph.security.cloudApplicationEvidence' {
                                     $processedEvidenceItem | Add-Member -NotePropertyName 'AppId' -NotePropertyValue $evidence.AppId
                                     $processedEvidenceItem | Add-Member -NotePropertyName 'DisplayName' -NotePropertyValue $evidence.DisplayName
                                     $processedEvidenceItem | Add-Member -NotePropertyName 'InstanceId' -NotePropertyValue $evidence.InstanceId
                                     $processedEvidenceItem | Add-Member -NotePropertyName 'InstanceName' -NotePropertyValue $evidence.InstanceName
                                     $processedEvidenceItem | Add-Member -NotePropertyName 'SaasAppId' -NotePropertyValue $evidence.SaasAppId
+                                }
+                                '#microsoft.graph.security.nicEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'IpAddress' -NotePropertyValue $evidence.IpAddress
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'MacAddress' -NotePropertyValue $evidence.MacAddress
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'VlanId' -NotePropertyValue $evidence.VlanId
+                                }
+                                '#microsoft.graph.security.oauthApplicationEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'AppId' -NotePropertyValue $evidence.AppId
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'DisplayName' -NotePropertyValue $evidence.DisplayName
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'ObjectId' -NotePropertyValue $evidence.ObjectId
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Publisher' -NotePropertyValue $evidence.Publisher
+                                }
+                                '#microsoft.graph.security.securityGroupEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'DisplayName' -NotePropertyValue $evidence.DisplayName
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'SecurityGroupId' -NotePropertyValue $evidence.SecurityGroupId
+                                }
+                                '#microsoft.graph.security.analyzedMessageEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'InternetMessageId' -NotePropertyValue $evidence.InternetMessageId
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Subject' -NotePropertyValue $evidence.Subject
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'SenderIp' -NotePropertyValue $evidence.SenderIp
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'RecipientEmailAddress' -NotePropertyValue $evidence.RecipientEmailAddress
+                                }
+                                '#microsoft.graph.security.containerEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'ContainerId' -NotePropertyValue $evidence.ContainerId
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Name' -NotePropertyValue $evidence.Name
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Image' -NotePropertyValue $evidence.Image
+                                }                                '#microsoft.graph.security.containerImageEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'ImageId' -NotePropertyValue $evidence.ImageId
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Name' -NotePropertyValue $evidence.Name
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Namespace' -NotePropertyValue $evidence.Namespace
+                                }
+                                '#microsoft.graph.security.azureResourceEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'ResourceId' -NotePropertyValue $evidence.ResourceId
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'ResourceName' -NotePropertyValue $evidence.ResourceName
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'ResourceType' -NotePropertyValue $evidence.ResourceType
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'SubscriptionId' -NotePropertyValue $evidence.SubscriptionId
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'ResourceGroup' -NotePropertyValue $evidence.ResourceGroup
+                                }
+                                '#microsoft.graph.security.blobEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'BlobContainer' -NotePropertyValue $evidence.BlobContainer
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Name' -NotePropertyValue $evidence.Name
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Url' -NotePropertyValue $evidence.Url
+                                }
+                                '#microsoft.graph.security.blobContainerEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Name' -NotePropertyValue $evidence.Name
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'StorageResource' -NotePropertyValue $evidence.StorageResource
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Url' -NotePropertyValue $evidence.Url
+                                }
+                                '#microsoft.graph.security.iotDeviceEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'DeviceId' -NotePropertyValue $evidence.DeviceId
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'DeviceName' -NotePropertyValue $evidence.DeviceName
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Source' -NotePropertyValue $evidence.Source
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'IoTHubId' -NotePropertyValue $evidence.IoTHubId
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'IoTSecurityAgentId' -NotePropertyValue $evidence.IoTSecurityAgentId
+                                }
+                                '#microsoft.graph.security.kubernetesClusterEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Name' -NotePropertyValue $evidence.Name
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Platform' -NotePropertyValue $evidence.Platform
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'CloudResource' -NotePropertyValue $evidence.CloudResource
+                                }
+                                '#microsoft.graph.security.cloudLogonRequestEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'RequestId' -NotePropertyValue $evidence.RequestId
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Protocol' -NotePropertyValue $evidence.Protocol
+                                }
+                                '#microsoft.graph.security.cloudLogonSessionEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Account' -NotePropertyValue $evidence.Account
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Browser' -NotePropertyValue $evidence.Browser
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'DeviceInformation' -NotePropertyValue $evidence.DeviceInformation
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Protocol' -NotePropertyValue $evidence.Protocol
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'SessionId' -NotePropertyValue $evidence.SessionId
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'StartUtcDateTime' -NotePropertyValue $evidence.StartUtcDateTime
+                                }
+                                '#microsoft.graph.security.mailClusterEvidence' {
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'NetworkMessageIds' -NotePropertyValue $evidence.NetworkMessageIds
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'CountByDeliveryStatus' -NotePropertyValue $evidence.CountByDeliveryStatus
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'CountByThreatType' -NotePropertyValue $evidence.CountByThreatType
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'CountByProtectionStatus' -NotePropertyValue $evidence.CountByProtectionStatus
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Threats' -NotePropertyValue $evidence.Threats
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Query' -NotePropertyValue $evidence.Query
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'QueryDateTime' -NotePropertyValue $evidence.QueryDateTime
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'MailCount' -NotePropertyValue $evidence.MailCount
+                                    $processedEvidenceItem | Add-Member -NotePropertyName 'IsValidQuery' -NotePropertyValue $evidence.IsValidQuery
                                 }
                                 default {
                                     Write-Host "Unknown evidence type: $evidenceType"
