@@ -27,7 +27,7 @@ try {
     $ManagedIdentityId = [System.Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID', 'Process')
 
     # Connect to MDE
-    $token = Connect-MDE -TenantId $TenantId -SpnId $spnId -ManagedIdentityId $ManagedIdentityId
+    Connect-MDE -TenantId $TenantId -SpnId $spnId -ManagedIdentityId $ManagedIdentityId
 
     # Reconnect to Azure after MDE connection
     Disable-AzContextAutosave -Scope Process | Out-Null

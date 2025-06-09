@@ -1,5 +1,7 @@
 {
     "TenantId": "",
     "Function": "GetIncidentAlerts",
-    "IncidentId": ""
+    "IncidentIds": [
+        ""
+    ]
 }

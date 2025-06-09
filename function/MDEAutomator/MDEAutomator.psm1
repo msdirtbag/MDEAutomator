@@ -2737,8 +2737,7 @@ function Get-IncidentAlerts {
         [Parameter(Mandatory = $true)]
         [string]$IncidentId
     )
-    
-    try {
+      try {
         
         $uri = "https://graph.microsoft.com/v1.0/security/incidents/$IncidentId?`$expand=alerts"
         $incident = Invoke-MgGraphRequest -Uri $uri -Method GET -ErrorAction Stop
