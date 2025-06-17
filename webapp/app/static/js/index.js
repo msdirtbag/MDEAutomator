@@ -1,12 +1,18 @@
 // Global variables for device management
 let selectedDeviceIds = [];
 let machinesGrid = null;
+let originalMachinesData = []; // New variable to store the complete unfiltered dataset
 
 // Tenant management state
 let isLoadingTenants = false;
 let tenantCache = null;
 let lastTenantRefresh = 0;
 const TENANT_CACHE_DURATION = 30000; // 30 seconds
+
+// Device Group state (available for all tenants)
+let deviceGroupsCache = null;
+let lastDeviceGroupRefresh = 0;
+const DEVICE_GROUP_CACHE_DURATION = 60000; // 60 seconds
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('Index page JavaScript loaded');
@@ -36,6 +42,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 for (let option of tenantDropdown.options) {
                     if (option.value === savedTenant) {
                         tenantDropdown.value = savedTenant;
+                        
+                        // Get device groups for filtering (available for all tenants)
+                        getDeviceGroups(savedTenant);
+                        
                         // Auto-load machines table if tenant is saved
                         loadMachines();
                         break;
@@ -54,49 +64,61 @@ function getTenantId() {
     return tenantDropdown ? tenantDropdown.value.trim() : '';
 }
 
-// Optimized loading function with immediate feedback
-function showLoadingIndicator(message = 'Loading...') {
-    let overlay = document.getElementById('loadingOverlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'loadingOverlay';
-        overlay.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 10000;
-            color: #00ff41;
-            font-family: Consolas, monospace;
-            font-size: 18px;
-        `;
-        document.body.appendChild(overlay);
+// Helper: Wait for tenant dropdown to be populated, then auto-load machines
+function waitForTenantDropdownAndAutoLoad() {
+    const savedTenant = sessionStorage.getItem('TenantId');
+    const dropdown = document.getElementById('tenantDropdown');
+    if (!dropdown) {
+        setTimeout(waitForTenantDropdownAndAutoLoad, 100);
+        return;
     }
-    overlay.innerHTML = `<div style="text-align: center;">
-        <div>${message}</div>
-        <div class="progress-bar"><div class="progress-bar-inner"></div></div>
-    </div>`;
-    overlay.style.display = 'flex';
-    // Add CSS animation if not already present
-    if (!document.getElementById('loadingStyles')) {
-        const style = document.createElement('style');
-        style.id = 'loadingStyles';
-        style.textContent = `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
-        document.head.appendChild(style);
+    
+    // Wait until dropdown has at least one option
+    if (dropdown.options.length === 0) {
+        setTimeout(waitForTenantDropdownAndAutoLoad, 100);
+        return;
+    }
+    
+    // If saved tenant, select it
+    if (savedTenant) {
+        for (let option of dropdown.options) {
+            if (option.value === savedTenant) {
+                dropdown.value = savedTenant;
+                break;
+            }
+        }
+    }
+    
+    // Only auto-load if a tenant is selected
+    if (dropdown.value && dropdown.value.trim() !== '') {
+        console.log('Auto-loading machines for tenant:', dropdown.value);
+        
+        // Get device groups for filtering (available for all tenants)
+        getDeviceGroups(dropdown.value);
+        
+        // Auto-load machines for selected tenant
+        loadMachines().then(() => {
+            // Mark auto-load as completed for platform loading system
+            if (typeof window.markAutoLoadCompleted === 'function') {
+                window.markAutoLoadCompleted();
+            }
+        }).catch((error) => {
+            console.error('Error in auto-load:', error);
+            // Mark auto-load as completed even on error to prevent infinite loading
+            if (typeof window.markAutoLoadCompleted === 'function') {
+                window.markAutoLoadCompleted();
+            }
+        });
+    } else {
+        // No tenant selected, mark auto-load as completed immediately
+        console.log('No tenant selected, skipping auto-load');
+        if (typeof window.markAutoLoadCompleted === 'function') {
+            window.markAutoLoadCompleted();
+        }
     }
 }
 
-function hideLoadingIndicator() {
-    const overlay = document.getElementById('loadingOverlay');
-    if (overlay) {
-        overlay.style.display = 'none';
-    }
-}
+// Use centralized loading system from base.js
 
 async function loadMachines() {
     if (!window.FUNCURL || !window.FUNCKEY) {
@@ -111,7 +133,7 @@ async function loadMachines() {
     }
     
     console.log('Loading machines for tenant:', tenantId);
-    showLoadingIndicator('Loading machines...');
+    window.showContentLoading('Loading machines...');
     
     try {
         const url = `https://${window.FUNCURL}/api/MDEAutomator?code=${window.FUNCKEY}`;
@@ -132,7 +154,7 @@ async function loadMachines() {
         });
         
         clearTimeout(timeoutId);
-        hideLoadingIndicator();
+        window.hideContentLoading();
         
         const data = await res.json();
         let machinesRaw = data.machines || data.value;
@@ -152,7 +174,7 @@ async function loadMachines() {
         renderMachinesTable(machinesRaw);
         
     } catch (error) {
-        hideLoadingIndicator();
+        window.hideContentLoading();
         if (error.name === 'AbortError') {
             console.error('Load machines request timed out');
             alert('Loading machines timed out. The operation may still be processing. Please try again.');
@@ -164,6 +186,13 @@ async function loadMachines() {
 }
 
 function renderMachinesTable(machinesRaw) {
+    // Store machines data globally for filtering and export
+    window.currentMachinesData = machinesRaw;
+    originalMachinesData = machinesRaw; // Store the original complete dataset
+    
+    // Populate DeviceGroup dropdown
+    populateDeviceGroupDropdownFromMachines(machinesRaw);
+
     const columns = [
         { id: 'checkbox', name: '', sort: false, formatter: (_, row) => gridjs.html(`<input type='checkbox' class='device-checkbox' data-deviceid='${row.cells[1].data}' />`) },
         { id: 'id', name: 'DeviceId', width: '15%', sort: true },
@@ -202,6 +231,17 @@ function renderMachinesTable(machinesRaw) {
     deviceCountDiv.id = 'device-count';
     deviceCountDiv.style.cssText = 'padding: 0.5rem 2rem; background: #142a17; color: #7fff7f; border-bottom: 1px solid #00ff41; font-family: Consolas, monospace; display: flex; justify-content: space-between; align-items: center;';
     
+    // Update device count based on current filter
+    function updateDeviceCount() {
+        const filteredData = getFilteredDevicesData();
+        const selectedGroup = getSelectedDeviceGroup();
+        let countText = `Total Devices: ${filteredData.length}`;
+        if (selectedGroup) {
+            countText += ` (filtered by: ${selectedGroup})`;
+        }
+        deviceCountDiv.querySelector('span').textContent = countText;
+    }
+    
     deviceCountDiv.innerHTML = `
         <span>Total Devices: ${machines.length}</span>
         <button id="exportDevicesBtn" class="cta-button" style="margin: 0; height: 1.8em; font-size: 0.8em;">Export CSV</button>
@@ -215,7 +255,158 @@ function renderMachinesTable(machinesRaw) {
     // Add export functionality
     const exportBtn = document.getElementById('exportDevicesBtn');
     if (exportBtn) {
-        exportBtn.onclick = () => exportDevicesCSV(machinesRaw);
+        exportBtn.onclick = () => {
+            const filteredData = getFilteredDevicesData();
+            exportDevicesCSV(filteredData);
+        };
+    }
+    
+    machinesGrid = new gridjs.Grid({
+        columns: columns,
+        data: machines,
+        search: true,
+        sort: true,
+        resizable: true,
+        pagination: {
+            enabled: true,
+            limit: 100, // Show 100 devices per page
+            summary: true
+        },
+        autoWidth: true,
+        width: '100%',
+        style: {
+            table: {
+                'table-layout': 'auto',
+                'width': '100%',
+                'max-width': '100%'
+            },
+            th: {
+                'text-align': 'center',
+                'white-space': 'nowrap',
+                'overflow': 'hidden',
+                'text-overflow': 'ellipsis',
+                'padding': '8px 4px'
+            },
+            td: {
+                'text-align': 'center',
+                'white-space': 'nowrap',
+                'overflow': 'hidden',
+                'text-overflow': 'ellipsis',
+                'padding': '6px 4px'
+            }
+        }
+    }).render(machinesTableContainer);
+    
+    // Use event delegation for checkbox handling to work with pagination
+    const machinesTable = document.getElementById('machines-table');
+    
+    // Remove any existing event listeners
+    machinesTable.removeEventListener('change', window.checkboxHandler);
+    
+    // Create new event handler
+    window.checkboxHandler = function(event) {
+        if (event.target.classList.contains('device-checkbox')) {
+            const id = event.target.getAttribute('data-deviceid');
+            if (event.target.checked) {
+                if (!selectedDeviceIds.includes(id)) selectedDeviceIds.push(id);
+            } else {
+                selectedDeviceIds = selectedDeviceIds.filter(did => did !== id);
+            }
+            updateSelectedCount();
+        }
+    };
+    
+    // Add event listener with delegation
+    machinesTable.addEventListener('change', window.checkboxHandler);
+    
+    // Update selected checkboxes on page change
+    setTimeout(() => {
+        updateCheckboxStates();
+    }, 100);
+
+    // Add pagination event listener to update checkboxes when page changes
+    setTimeout(() => {
+        const paginationButtons = document.querySelectorAll('.gridjs-pagination button');
+        paginationButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                setTimeout(() => {
+                    updateCheckboxStates();
+                }, 200);
+            });
+        });
+    }, 1000);
+}
+
+function renderMachinesTableWithoutDropdownUpdate(machinesRaw) {
+    // Store machines data globally for filtering and export, but don't overwrite original data
+    window.currentMachinesData = machinesRaw;
+    
+    // Skip populating DeviceGroup dropdown - this is the key difference from renderMachinesTable
+    
+    const columns = [
+        { id: 'checkbox', name: '', sort: false, formatter: (_, row) => gridjs.html(`<input type='checkbox' class='device-checkbox' data-deviceid='${row.cells[1].data}' />`) },
+        { id: 'id', name: 'DeviceId', width: '15%', sort: true },
+        { id: 'computerDnsName', name: 'DeviceName', width: '18%', sort: true },
+        { id: 'osPlatform', name: 'OSPlatform', width: '8%', sort: true },
+        { id: 'deviceValue', name: 'Value', width: '8%', sort: true },
+        { id: 'riskScore', name: 'Risk', width: '7%', sort: true },
+        { id: 'rbacGroupName', name: 'DeviceGroup', width: '16%', sort: true },
+        { id: 'lastSeen', name: 'LastSeen', width: '10%', sort: true },
+        { id: 'firstSeen', name: 'FirstSeen', width: '10%', sort: true },
+        { id: 'lastIpAddress', name: 'IP', width: '9%', sort: true },
+        { id: 'lastExternalIpAddress', name: 'External IP', width: '11%', sort: true },
+        { id: 'machineTags', name: 'DeviceTags', width: '14%', sort: true }
+    ];
+
+    // Map LastExternalIpAddress to the new column
+    const machines = machinesRaw.map(row => [
+        '',
+        row.Id || row.id || '',
+        row.ComputerDnsName || row.computerDnsName || '',
+        row.OsPlatform || row.osPlatform || '',
+        row.DeviceValue || row.deviceValue || '',
+        row.RiskScore || row.riskScore || '',
+        row.RbacGroupName || row.rbacGroupName || '',
+        row.LastSeen || row.lastSeen || '',
+        row.FirstSeen || row.firstSeen || '',
+        row.LastIpAddress || row.lastIpAddress || '',
+        row.LastExternalIpAddress || row.lastExternalIpAddress || '',
+        row.MachineTags || row.machineTags || ''
+    ]);
+
+    if (machinesGrid) machinesGrid.destroy();
+    
+    // Add device count display with export button
+    const deviceCountDiv = document.getElementById('device-count') || document.createElement('div');
+    deviceCountDiv.id = 'device-count';
+    deviceCountDiv.style.cssText = 'padding: 0.5rem 2rem; background: #142a17; color: #7fff7f; border-bottom: 1px solid #00ff41; font-family: Consolas, monospace; display: flex; justify-content: space-between; align-items: center;';
+    
+    // Update device count display with current filter info
+    const selectedGroup = getSelectedDeviceGroup();
+    let countText = `Total Devices: ${machines.length}`;
+    if (selectedGroup) {
+        countText += ` (filtered by: ${selectedGroup})`;
+    }
+    
+    deviceCountDiv.innerHTML = `
+        <span>${countText}</span>
+        <button id="exportDevicesBtn" class="cta-button" style="margin: 0; height: 1.8em; font-size: 0.8em;">Export CSV</button>
+    `;
+    
+    const machinesTableContainer = document.getElementById('machines-table');
+    if (!document.getElementById('device-count')) {
+        machinesTableContainer.parentNode.insertBefore(deviceCountDiv, machinesTableContainer);
+    } else {
+        document.querySelector('#device-count span').textContent = countText;
+    }
+    
+    // Add export functionality
+    const exportBtn = document.getElementById('exportDevicesBtn');
+    if (exportBtn) {
+        exportBtn.onclick = () => {
+            const filteredData = getFilteredDevicesData();
+            exportDevicesCSV(filteredData);
+        };
     }
     
     machinesGrid = new gridjs.Grid({
@@ -444,14 +635,37 @@ function setupEventListeners() {
             if (selectedTenant) {
                 sessionStorage.setItem('TenantId', selectedTenant);
                 console.log('Selected tenant:', selectedTenant);
+                
+                // Get device groups for filtering (available for all tenants)
+                getDeviceGroups(selectedTenant);
+                
                 // Auto-load machines when tenant is selected
                 loadMachines();
             } else {
                 sessionStorage.removeItem('TenantId');
+                clearDeviceGroups();
             }
         });
     } else {
         console.log('Tenant dropdown not found');
+    }
+    
+    // Device group dropdown change event
+    const deviceGroupDropdown = document.getElementById('deviceGroupDropdown');
+    if (deviceGroupDropdown) {
+        deviceGroupDropdown.addEventListener('change', function() {
+            const selectedGroup = this.value;
+            console.log('DeviceGroup filter changed to:', selectedGroup || 'All Device Groups');
+
+            // Clear previous selections
+            selectedDeviceIds = [];
+            updateSelectedCount();
+
+            // Filter machines by selected DeviceGroup
+            filterMachinesByDeviceGroup(selectedGroup);
+        });
+    } else {
+        console.error('DeviceGroup dropdown not found');
     }
     
     // Manage tenants button
@@ -515,12 +729,172 @@ function setupEventListeners() {
     }
 }
 
+// Device Group Functions
+
+function clearDeviceGroups() {
+    const dropdown = document.getElementById('deviceGroupDropdown');
+    if (dropdown) {
+        dropdown.innerHTML = '<option value="">All Device Groups</option>';
+    }
+    deviceGroupsCache = null;
+}
+
+async function getDeviceGroups(tenantId, force = false) {
+    if (!tenantId) {
+        console.log('No tenant selected, clearing device groups');
+        clearDeviceGroups();
+        return;
+    }
+    
+    // Check cache first
+    const now = Date.now();
+    if (!force && deviceGroupsCache && (now - lastDeviceGroupRefresh) < DEVICE_GROUP_CACHE_DURATION) {
+        console.log('Using cached device groups data');
+        populateDeviceGroupDropdown(deviceGroupsCache);
+        return;
+    }
+    
+    console.log('Loading device groups for tenant:', tenantId);
+    
+    try {
+        const response = await fetch(`/api/device-groups/${encodeURIComponent(tenantId)}`);
+        
+        if (!response.ok) {
+            console.error('HTTP error response:', response.status, response.statusText);
+            updateDeviceGroupInfo(`Error loading device groups: ${response.status}`);
+            return;
+        }
+        
+        const data = await response.json();
+        
+        if (data.Status === 'Success') {
+            deviceGroupsCache = data.DeviceGroups || [];
+            lastDeviceGroupRefresh = now;
+            populateDeviceGroupDropdown(deviceGroupsCache);
+            console.log(`Loaded ${deviceGroupsCache.length} device groups for filtering`);
+        } else {
+            const errorMessage = data.Message || data.error || 'Unknown error occurred';
+            console.error('Error loading device groups:', errorMessage);
+        }
+    } catch (error) {
+        console.error('Error fetching device groups:', error);
+    }
+}
+
+function populateDeviceGroupDropdown(deviceGroups) {
+    const dropdown = document.getElementById('deviceGroupDropdown');
+    if (!dropdown) return;
+    
+    // Clear existing options except "All Device Groups"
+    dropdown.innerHTML = '<option value="">All Device Groups</option>';
+    
+    // Add device group options with device counts
+    deviceGroups.forEach(group => {
+        const option = document.createElement('option');
+        option.value = group.Name;
+        option.textContent = `${group.Name} (${group.DeviceCount} devices)`;
+        dropdown.appendChild(option);
+    });
+}
+
+function populateDeviceGroupDropdownFromMachines(machines) {
+    const deviceGroupDropdown = document.getElementById('deviceGroupDropdown');
+    if (!deviceGroupDropdown) {
+        console.error('DeviceGroup dropdown not found');
+        return;
+    }
+
+    // Extract unique DeviceGroup values from machines
+    const uniqueDeviceGroups = [...new Set(machines.map(machine => machine.RbacGroupName || machine.rbacGroupName || ''))].filter(group => group);
+
+    // Clear existing options
+    deviceGroupDropdown.innerHTML = '';
+
+    // Add default option
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'All Device Groups';
+    deviceGroupDropdown.appendChild(defaultOption);
+
+    // Add unique DeviceGroup options
+    uniqueDeviceGroups.forEach(group => {
+        const option = document.createElement('option');
+        option.value = group;
+        option.textContent = group;
+        deviceGroupDropdown.appendChild(option);
+    });
+
+    console.log('DeviceGroup dropdown populated with:', uniqueDeviceGroups);
+}
+
+function filterMachinesByDeviceGroup(selectedGroup) {
+    console.log('Filtering by group:', selectedGroup);
+    console.log('Original data count:', originalMachinesData.length);
+    
+    // Always filter from the original dataset, not the already filtered data
+    const filteredMachines = selectedGroup
+        ? originalMachinesData.filter(machine => {
+            const groupName = machine.RbacGroupName || machine.rbacGroupName || '';
+            return groupName === selectedGroup;
+        })
+        : originalMachinesData; // Show all machines when "All Device Groups" is selected
+    
+    console.log('Filtered machines count:', filteredMachines.length);
+
+    // Clear all checkboxes when switching groups
+    selectedDeviceIds = [];
+    updateSelectedCount();
+
+    // Store current selection to restore after table is rendered
+    const currentSelection = selectedGroup || '';
+
+    // Update the current machines data with the filtered results
+    window.currentMachinesData = filteredMachines;
+
+    // Render the filtered machines without updating the dropdown
+    renderMachinesTableWithoutDropdownUpdate(filteredMachines);
+    
+    // Restore dropdown selection
+    const deviceGroupDropdown = document.getElementById('deviceGroupDropdown');
+    if (deviceGroupDropdown) {
+        deviceGroupDropdown.value = currentSelection;
+    }
+
+    // Log the current state for debugging
+    console.log(`Filtered view showing ${filteredMachines.length} machines`);
+    console.log(`Selected group: ${selectedGroup || 'All Device Groups'}`);
+}
+
+function getSelectedDeviceGroup() {
+    const dropdown = document.getElementById('deviceGroupDropdown');
+    return dropdown ? dropdown.value : '';
+}
+
+function getFilteredDevicesData() {
+    // This function returns data that's already filtered in the UI
+    // If no group is selected or no data is available, return all data
+    const selectedGroup = getSelectedDeviceGroup();
+    if (!selectedGroup || !window.currentMachinesData) {
+        return window.currentMachinesData || [];
+    }
+    
+    // Filter devices by selected device group
+    return window.currentMachinesData.filter(device => {
+        const deviceGroup = device.RbacGroupName || device.rbacGroupName || '';
+        return deviceGroup === selectedGroup;
+    });
+}
+
 async function loadTenants(force = false) {
     // Check cache first
     const now = Date.now();
     if (!force && tenantCache && (now - lastTenantRefresh) < TENANT_CACHE_DURATION) {
         console.log('Using cached tenant data');
         populateTenantDropdown(tenantCache);
+        // Mark tenants as loaded for platform loading system
+        if (typeof window.markTenantsLoaded === 'function') {
+            window.markTenantsLoaded();
+        }
         return;
     }
     
@@ -532,6 +906,11 @@ async function loadTenants(force = false) {
     try {
         isLoadingTenants = true;
         console.log('Loading tenants from backend...');
+        
+        // Update platform loading progress
+        if (typeof window.updatePlatformLoadingProgress === 'function') {
+            window.updatePlatformLoadingProgress('Connecting to tenant service...', 30);
+        }
         
         // Increased timeout to handle Azure Function cold starts
         const controller = new AbortController();
@@ -545,7 +924,16 @@ async function loadTenants(force = false) {
         
         if (!response.ok) {
             console.error('HTTP error response:', response.status, response.statusText);
+            // Mark tenants as loaded even on error to prevent infinite loading
+            if (typeof window.markTenantsLoaded === 'function') {
+                window.markTenantsLoaded();
+            }
             return;
+        }
+        
+        // Update platform loading progress
+        if (typeof window.updatePlatformLoadingProgress === 'function') {
+            window.updatePlatformLoadingProgress('Processing tenant data...', 50);
         }
         
         const data = await response.json();
@@ -562,6 +950,10 @@ async function loadTenants(force = false) {
         } else {
             const errorMessage = data.Message || data.error || 'Unknown error occurred';
             console.error('Error loading tenants:', errorMessage);
+            // Mark tenants as loaded even on error to prevent infinite loading
+            if (typeof window.markTenantsLoaded === 'function') {
+                window.markTenantsLoaded();
+            }
             return;
         }
         
@@ -570,12 +962,22 @@ async function loadTenants(force = false) {
         lastTenantRefresh = now;
         
         populateTenantDropdown(tenants);
+        
+        // Mark tenants as loaded for platform loading system
+        if (typeof window.markTenantsLoaded === 'function') {
+            window.markTenantsLoaded();
+        }
+        
     } catch (error) {
         if (error.name === 'AbortError') {
             console.error('Load tenants request timed out');
-            // Don't show alert for background loading
         } else {
             console.error('Error fetching tenants:', error);
+        }
+        
+        // Mark tenants as loaded even on error to prevent infinite loading
+        if (typeof window.markTenantsLoaded === 'function') {
+            window.markTenantsLoaded();
         }
     } finally {
         isLoadingTenants = false;
@@ -800,31 +1202,17 @@ async function addTenant() {
             setTimeout(() => loadTenants(true), 100);
             
             alert('Tenant added successfully!');
-        } else if (data.Status === 'Warning') {
-            const warningMessage = data.Message || 'Warning occurred';
-            alert(`Warning: ${warningMessage}`);
-            // Still refresh in case it was added
-            loadTenantsForModal();
-            loadTenants(true);
-        } else {
-            // Handle different error response formats
+        } else if (data.Status === 'Error') {
             const errorMessage = data.Message || data.error || 'Unknown error occurred';
             console.error('Error adding tenant:', errorMessage);
-            alert(`Error adding tenant: ${errorMessage}`);
+            alert('Error adding tenant: ' + errorMessage);
+        } else {
+            console.error('Unexpected response format:', data);
+            alert('Unexpected error occurred. Please try again.');
         }
     } catch (error) {
-        if (error.name === 'AbortError') {
-            console.error('Add tenant request timed out');
-            alert('Adding tenant timed out. The operation may still be processing. Please check the tenant list.');
-            // Refresh to see if it was actually added
-            setTimeout(() => {
-                loadTenantsForModal();
-                loadTenants(true);
-            }, 1000);
-        } else {
-            console.error('Error adding tenant:', error);
-            alert('Error adding tenant. Please check console for details.');
-        }
+        console.error('Error adding tenant:', error);
+        alert('Error adding tenant: ' + error.message);
     } finally {
         // Re-enable button
         addTenantBtn.disabled = false;
@@ -834,27 +1222,21 @@ async function addTenant() {
 }
 
 async function deleteTenant(tenantId) {
-    if (!confirm(`Are you sure you want to delete tenant "${tenantId}"?`)) {
-        return;
-    }
+    if (!tenantId) return;
     
-    // Find and disable the delete button for immediate feedback
-    const deleteButtons = document.querySelectorAll(`button[onclick*="${tenantId}"]`);
-    deleteButtons.forEach(btn => {
-        btn.disabled = true;
-        btn.textContent = 'Deleting...';
-        btn.style.background = '#666';
-    });
+    const confirmed = confirm(`Are you sure you want to delete the tenant ${tenantId}? This action cannot be undone.`);
+    if (!confirmed) return;
     
     try {
-        console.log('Deleting tenant:', tenantId);
-        
         // Increased timeout to handle Azure Function cold starts
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout (reduced from 45s)
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
         
         const response = await fetch(`/api/tenants/${encodeURIComponent(tenantId)}`, {
             method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            },
             signal: controller.signal
         });
         
@@ -869,137 +1251,20 @@ async function deleteTenant(tenantId) {
         const data = await response.json();
         
         if (data.Status === 'Success') {
-            console.log('Tenant deleted successfully');
+            console.log('Tenant deleted successfully:', tenantId);
+            alert('Tenant deleted successfully');
             
-            // Immediately remove from cache for instant feedback
-            if (tenantCache) {
-                tenantCache = tenantCache.filter(tenant => tenant.TenantId !== tenantId);
-                populateTenantDropdown(tenantCache);
-            }
-            
-            // Clear selection if the deleted tenant was selected
-            const currentTenant = getTenantId();
-            if (currentTenant === tenantId) {
-                const tenantDropdown = document.getElementById('tenantDropdown');
-                if (tenantDropdown) {
-                    tenantDropdown.value = '';
-                    sessionStorage.removeItem('TenantId');
-                }
-            }
-            
-            // Update modal list with immediate feedback
+            // Update cache and UI
+            tenantCache = tenantCache.filter(tenant => tenant.TenantId !== tenantId);
+            populateTenantDropdown(tenantCache);
             loadTenantsForModal();
-            
-            // Background refresh of tenant cache
-            setTimeout(() => loadTenants(true), 100);
-            
-            alert('Tenant deleted successfully!');
         } else {
-            // Handle different error response formats
             const errorMessage = data.Message || data.error || 'Unknown error occurred';
             console.error('Error deleting tenant:', errorMessage);
-            alert(`Error deleting tenant: ${errorMessage}`);
+            alert('Error deleting tenant: ' + errorMessage);
         }
     } catch (error) {
-        if (error.name === 'AbortError') {
-            console.error('Delete tenant request timed out');
-            alert('Deleting tenant timed out. The operation may still be processing. Please refresh the tenant list.');
-            // Refresh to see if it was actually deleted
-            setTimeout(() => {
-                loadTenantsForModal();
-                loadTenants(true);
-            }, 1000);
-        } else {
-            console.error('Error deleting tenant:', error);
-            alert('Error deleting tenant. Please check console for details.');
-        }
-    } finally {
-        // Re-enable buttons (they might be removed from DOM by now if delete succeeded)
-        deleteButtons.forEach(btn => {
-            if (btn.parentNode) {
-                btn.disabled = false;
-                btn.textContent = 'Delete';
-                btn.style.background = '';
-            }
-        });
+        console.error('Error deleting tenant:', error);
+        alert('Error deleting tenant: ' + error.message);
     }
-}
-
-// Debug function - can be called from browser console
-function testTenantModal() {
-    console.log('=== Testing tenant modal functionality ===');
-    
-    const manageTenantBtn = document.getElementById('manageTenantBtn');
-    console.log('Manage tenant button:', manageTenantBtn);
-    console.log('Button exists:', !!manageTenantBtn);
-    
-    const tenantModal = document.getElementById('tenantModal');
-    console.log('Tenant modal element:', tenantModal);
-    console.log('Modal exists:', !!tenantModal);
-    
-    if (manageTenantBtn && tenantModal) {
-        console.log('Both elements found! Testing button click...');
-        manageTenantBtn.click();
-        console.log('Button click executed');
-    } else {
-        console.log('Missing elements - cannot test');
-    }
-    
-    // Try opening modal directly
-    console.log('Attempting to open modal directly');
-    try {
-        openTenantModal();
-        console.log('Direct modal open executed');
-    } catch (error) {
-        console.error('Error opening modal directly:', error);
-    }
-    
-    console.log('=== Test complete ===');
-}
-
-// Function to check if elements are ready
-function checkElementsReady() {
-    const manageTenantBtn = document.getElementById('manageTenantBtn');
-    const tenantModal = document.getElementById('tenantModal');
-    const tenantDropdown = document.getElementById('tenantDropdown');
-    
-    console.log('=== Element readiness check ===');
-    console.log('manageTenantBtn:', !!manageTenantBtn);
-    console.log('tenantModal:', !!tenantModal);
-    console.log('tenantDropdown:', !!tenantDropdown);
-    console.log('=== End check ===');
-    
-    return manageTenantBtn && tenantModal && tenantDropdown;
-}
-
-// Helper: Wait for tenant dropdown to be populated, then auto-load page data
-function waitForTenantDropdownAndAutoLoad(maxWaitMs = 15000) {
-    const tenantDropdown = document.getElementById('tenantDropdown');
-    const savedTenant = sessionStorage.getItem('TenantId');
-    let waited = 0;
-    const pollInterval = 200;
-    function tryAutoLoad() {
-        if (tenantDropdown && tenantDropdown.options.length > 0) {
-            // If a saved tenant exists, select it
-            if (savedTenant) {
-                for (let option of tenantDropdown.options) {
-                    if (option.value === savedTenant) {
-                        tenantDropdown.value = savedTenant;
-                        break;
-                    }
-                }
-            }
-            // Trigger the main page load (machines table)
-            loadMachines();
-            return;
-        }
-        waited += pollInterval;
-        if (waited < maxWaitMs) {
-            setTimeout(tryAutoLoad, pollInterval);
-        } else {
-            // Fallback: try to load anyway
-            loadMachines();
-        }
-    }
-    tryAutoLoad();
 }

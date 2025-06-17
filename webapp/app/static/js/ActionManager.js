@@ -59,13 +59,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 100);
 
     // Wait for tenant dropdown to be populated, then auto-load actions
-    waitForTenantDropdownAndLoadActions();
-
-    // Attach event handlers to action buttons
+    waitForTenantDropdownAndLoadActions();    // Attach event handlers to action buttons
     const refreshActionsBtn = document.getElementById('refreshActionsBtn');
     const addActionBtn = document.getElementById('addActionBtn');
+    const undoActionsBtn = document.getElementById('undoActionsBtn');
     if (refreshActionsBtn) refreshActionsBtn.onclick = loadActions;
     if (addActionBtn) addActionBtn.onclick = showAddActionModal;
+    if (undoActionsBtn) undoActionsBtn.onclick = undoAllPendingActions;
 
     // Modal buttons
     const saveActionBtn = document.getElementById('saveActionBtn');
@@ -97,7 +97,25 @@ function waitForTenantDropdownAndLoadActions() {
         }
     }
     // Auto-load actions for selected tenant
-    loadActions();
+    if (dropdown.value && dropdown.value.trim() !== '') {
+        loadActions().then(() => {
+            // Mark auto-load as completed
+            if (typeof window.markAutoLoadCompleted === 'function') {
+                window.markAutoLoadCompleted();
+            }
+        }).catch((error) => {
+            console.error('Error in actions auto-load:', error);
+            // Mark auto-load as completed even on error
+            if (typeof window.markAutoLoadCompleted === 'function') {
+                window.markAutoLoadCompleted();
+            }
+        });
+    } else {
+        // No tenant selected, mark auto-load as completed immediately
+        if (typeof window.markAutoLoadCompleted === 'function') {
+            window.markAutoLoadCompleted();
+        }
+    }
 }
 
 function getTenantId() {
@@ -105,58 +123,16 @@ function getTenantId() {
     return tenantDropdown ? tenantDropdown.value.trim() : '';
 }
 
-// Loading indicator functions
-function showLoadingIndicator(message = 'Loading...') {
-    let overlay = document.getElementById('loadingOverlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'loadingOverlay';
-        overlay.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            color: #00ff41;
-            font-family: Consolas, monospace;
-            font-size: 18px;
-        `;
-        document.body.appendChild(overlay);
-    }
-    overlay.innerHTML = `<div style="text-align: center;">
-        <div>${message}</div>
-        <div class="progress-bar"><div class="progress-bar-inner"></div></div>
-    </div>`;
-    overlay.style.display = 'flex';
-    // Add CSS animation if not already present
-    if (!document.getElementById('loadingStyles')) {
-        const style = document.createElement('style');
-        style.id = 'loadingStyles';
-        style.textContent = `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
-        document.head.appendChild(style);
-    }
-}
-
-function hideLoadingIndicator() {
-    const overlay = document.getElementById('loadingOverlay');
-    if (overlay) {
-        overlay.style.display = 'none';
-    }
-}
+// Use centralized loading system from base.js
 
 async function loadActions() {
     const tenantId = getTenantId();
     if (!tenantId) return;
     
     console.log('Loading actions for tenant:', tenantId);
-    showLoadingIndicator('Loading Actions...');
+    window.showContentLoading('Loading Actions');
     
-    try {        // Call Azure Function directly like TIManager does
+    try {// Call Azure Function directly like TIManager does
         const url = `https://${window.FUNCURL}/api/MDEAutomator?code=${window.FUNCKEY}`;
         const payload = { TenantId: tenantId, Function: 'GetActions' };
         
@@ -200,9 +176,8 @@ async function loadActions() {
         
         // Clear the table or show empty state
         allActions = [];
-        renderActionsTable(allActions);
-    } finally {
-        hideLoadingIndicator();
+        renderActionsTable(allActions);    } finally {
+        window.hideContentLoading();
     }
 }
 
@@ -225,10 +200,16 @@ function renderActionsTable(actionsRaw) {
             const statusClass = `status-${cell.toLowerCase()}`;
             return gridjs.html(`<span class="${statusClass}">${cell}</span>`);
           }
-        },
-        { id: 'computerDnsName', name: 'Device Name', width: '14%', sort: true },
+        },        { id: 'computerDnsName', name: 'Device Name', width: '14%', sort: true },
         { id: 'requestor', name: 'Requestor', width: '12%', sort: true },
-        { id: 'requestorComment', name: 'Comment', width: '14%', sort: true },
+        { id: 'requestorComment', name: 'Comment', width: '14%', sort: true,
+          formatter: (cell) => {
+            if (!cell || cell.length === 0) return '';
+            const fullText = String(cell);
+            const truncatedText = fullText.length > 50 ? fullText.substring(0, 50) + '...' : fullText;
+            return gridjs.html(`<span title="${fullText.replace(/"/g, '&quot;')}">${truncatedText}</span>`);
+          }
+        },
         { id: 'creationDateTimeUtc', name: 'Created', width: '13%', sort: true,
           formatter: (cell) => {
             if (!cell) return '';
@@ -454,6 +435,11 @@ async function loadTenants() {
     try {
         console.log('Loading tenants from backend...');
         
+        // Update platform loading progress
+        if (typeof window.updatePlatformLoadingProgress === 'function') {
+            window.updatePlatformLoadingProgress('Loading tenants for Action Manager...', 30);
+        }
+        
         // Add timeout to handle Azure Function cold starts
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
@@ -466,6 +452,10 @@ async function loadTenants() {
         
         if (!response.ok) {
             console.error('HTTP error response:', response.status, response.statusText);
+            // Mark tenants as loaded even on error
+            if (typeof window.markTenantsLoaded === 'function') {
+                window.markTenantsLoaded();
+            }
             return;
         }
         
@@ -483,12 +473,26 @@ async function loadTenants() {
         } else {
             const errorMessage = data.Message || data.error || 'Unknown error occurred';
             console.error('Error loading tenants:', errorMessage);
+            // Mark tenants as loaded even on error
+            if (typeof window.markTenantsLoaded === 'function') {
+                window.markTenantsLoaded();
+            }
             return;
         }
         
         populateTenantDropdown(tenants);
+        
+        // Mark tenants as loaded for platform loading system
+        if (typeof window.markTenantsLoaded === 'function') {
+            window.markTenantsLoaded();
+        }
+        
     } catch (error) {
         console.error('Error fetching tenants:', error);
+        // Mark tenants as loaded even on error
+        if (typeof window.markTenantsLoaded === 'function') {
+            window.markTenantsLoaded();
+        }
     }
 }
 

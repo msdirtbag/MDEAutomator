@@ -23,10 +23,12 @@
         </select>
         <select id="commandDropdown" class="toolbar-dropdown"></select>
         <button id="sendCommandBtn" class="cta-button">Send to Selected Devices</button>
-        <button id="sendAllDevicesBtn" class="cta-button" style="background-color: #ff4400; border-color: #ff4400;">Send to All Devices</button>
-        <button id="refreshMachines" class="cta-button">Refresh Machines</button>
+        <button id="sendAllDevicesBtn" class="cta-button" style="background-color: #ff4400; border-color: #ff4400;">Send to All Devices</button>        <button id="refreshMachines" class="cta-button">Refresh Machines</button>
         <button id="selectAllPage" class="cta-button">Select All on Page</button>
         <button id="clearSelection" class="cta-button">Clear All Selected</button>
+        <select id="deviceGroupDropdown" class="toolbar-dropdown" style="width: 200px; margin-left: 1rem; margin-right: 0.5rem;">
+            <option value="">All Device Groups</option>
+        </select>
         <span id="selectedCount" style="margin-left: 1rem; color: #7fff7f; font-family: Consolas, monospace;">Selected: 0</span>
     </div>
 </div>
@@ -48,9 +50,7 @@
             <h2 style="margin: 0; color: #00ff41;">Manage Tenants</h2>
             <span class="close" style="color: #00ff41; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
         </div>
-        
-        <!-- Add New Tenant Form -->
-        <div class="add-tenant-section" style="margin-bottom: 30px; padding: 15px; background: #0f1f0f; border: 1px solid #00ff41; border-radius: 4px;">
+          <!-- Add New Tenant Form -->        <div class="add-tenant-section" style="margin-bottom: 30px; padding: 15px; background: #0f1f0f; border: 1px solid #00ff41; border-radius: 4px;">
             <h3 style="margin-top: 0; color: #00ff41;">Add New Tenant</h3>
             <div style="display: flex; gap: 10px; margin-bottom: 10px;">
                 <input type="text" id="newTenantId" placeholder="Tenant ID" style="flex: 1; padding: 8px; background: #1a1a1a; border: 1px solid #00ff41; color: #7fff7f; font-family: Consolas, monospace;">
@@ -432,11 +432,17 @@ document.getElementById('sendCommandBtn').onclick = async function() {
     if (!tenantId && funcGroup !== 'SomeFunctionThatDoesNotNeedTenant') { 
         alert('Tenant ID is required.');
         return;
-    }
-    let payload = {
+    }    let payload = {
         DeviceIds: selectedDeviceIds,
         TenantId: tenantId
     };
+
+    // Add device group targeting (available for all tenants)
+    const selectedDeviceGroup = getSelectedDeviceGroup();
+    if (selectedDeviceGroup) {
+        payload.DeviceGroup = selectedDeviceGroup;
+        console.log('Adding device group targeting:', selectedDeviceGroup);
+    }
 
     if (funcGroup === 'MDEProfiles') {
         payload.function_name = funcGroup; 
@@ -479,15 +485,23 @@ document.getElementById('sendCommandBtn').onclick = async function() {
             }
             payload[extraAttr] = extraValue; 
         }
-    }
-    if (selectedDeviceIds.length === 0) {
+    }    if (selectedDeviceIds.length === 0) {
         alert('Please select at least one device from the table.');
         return;
-    }    const res = await fetch('/api/send_command', {
+    }
+    
+    // Add device group info for logging
+    if (selectedDeviceGroup) {
+        console.log(`Targeting ${selectedDeviceIds.length} selected devices in "${selectedDeviceGroup}" group`);
+    } else {
+        console.log(`Targeting ${selectedDeviceIds.length} selected devices across all device groups`);
+    }
+    
+    const res = await fetch('/api/send_command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
-    });    const result = await res.json();
+    });const result = await res.json();
     alert(result.message || JSON.stringify(result));
 };
 
@@ -498,18 +512,30 @@ document.getElementById('sendAllDevicesBtn').onclick = async function() {
     if (!tenantId) { 
         alert('Tenant ID is required.');
         return;
+    }    // Confirm the action since it affects all devices
+    let confirmMessage = `⚠️ WARNING: This will send the command to ALL DEVICES in the tenant!`;
+    
+    // Add device group info for confirmation message
+    const selectedDeviceGroup = getSelectedDeviceGroup();
+    if (selectedDeviceGroup) {
+        confirmMessage = `⚠️ WARNING: This will send the command to ALL DEVICES in the "${selectedDeviceGroup}" device group!`;
+    } else {
+        confirmMessage = `⚠️ WARNING: This will send the command to ALL DEVICES across ALL DEVICE GROUPS in the tenant!`;
     }
-
-    // Confirm the action since it affects all devices
-    const confirmMessage = `⚠️ WARNING: This will send the command to ALL DEVICES in the tenant!\n\nAre you absolutely sure you want to proceed?`;
+    
+    confirmMessage += `\n\nAre you absolutely sure you want to proceed?`;
     if (!confirm(confirmMessage)) {
         return;
-    }
-
-    let payload = {
+    }let payload = {
         allDevices: true,  // Use the backend override
         TenantId: tenantId
     };
+
+    // Add device group targeting (available for all tenants)
+    if (selectedDeviceGroup) {
+        payload.DeviceGroup = selectedDeviceGroup;
+        console.log('Adding device group targeting for all devices:', selectedDeviceGroup);
+    }
 
     if (funcGroup === 'MDEProfiles') {
         payload.function_name = funcGroup; 

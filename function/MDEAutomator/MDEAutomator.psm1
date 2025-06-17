@@ -289,7 +289,7 @@ function Invoke-WithRetry {
                 Write-Warning "Rate limit exceeded. Waiting $currentDelaySeconds seconds before retrying..."
             } elseif ($statusCode -ge 400 -and $statusCode -lt 500) {
                 if ($statusCode -ne 429) {
-                    Write-Warning "MDE says endpoint is unavailable"
+                    Write-Warning "API says endpoint is unavailable"
                     return [PSCustomObject]@{
                         Status = "Skipped"
                         StatusCode = $statusCode
@@ -351,7 +351,7 @@ function Invoke-FullDiskScan {
             if ($statusSucceeded) {
                 Write-Host "Started Scan on DeviceId: $DeviceId"
             } else {
-                Write-Error "Failed to start Full Scan DeviceId: $DeviceId"
+                Write-Error "Failed to start Scan DeviceId: $DeviceId"
             }
 
             $responses += [PSCustomObject]@{
@@ -493,7 +493,7 @@ function Invoke-UploadLR {
         }
 
         $boundary = [System.Guid]::NewGuid().ToString() 
-        $LF = "`r`n" # Carriage return and line feed
+        $LF = "`r`n" 
 
         $memoryStream = New-Object System.IO.MemoryStream
         
@@ -555,7 +555,6 @@ function Invoke-UploadLR {
         }
     }
 }
-
 
 function Invoke-PutFile {
     param (
@@ -1997,6 +1996,7 @@ function Get-Indicators {
             }
         }
         return $allResults
+        Write-Host "Successfully retrieved $(($allResults).Count) indicators."
     } catch {
         Write-Error "Failed to retrieve indicators: $_"
     }
@@ -2011,7 +2011,9 @@ function Invoke-TiFile {
         [Parameter(Mandatory = $false)]
         [string[]]$Sha256s,
         [Parameter(Mandatory = $false)]
-        [string]$IndicatorName
+        [string]$IndicatorName,
+        [Parameter(Mandatory = $false)]
+        [string[]]$DeviceGroups
     )
     
     $uri = "https://api.securitycenter.microsoft.com/api/indicators"
@@ -2036,7 +2038,9 @@ function Invoke-TiFile {
                 "description" = "MDEAutomator has created this Custom Threat Indicator."
                 "recommendedActions" = "Investigate & take appropriate action."
             }
-            
+            if ($DeviceGroups) {
+                $body["rbacGroupNames"] = $DeviceGroups
+            }
             try {
                 $response = Invoke-WithRetry -ScriptBlock {
                     Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body ($body | ConvertTo-Json) -ContentType "application/json" -ErrorAction Stop
@@ -2055,7 +2059,6 @@ function Invoke-TiFile {
             }
         }
     }
-
     if ($Sha256s) {
         foreach ($Sha256 in $Sha256s) {
             $title = if ($IndicatorName) { $IndicatorName } else { "MDEAutomator $Sha256" }
@@ -2069,7 +2072,9 @@ function Invoke-TiFile {
                 "description" = "MDEAutomator has created this Custom Threat Indicator."
                 "recommendedActions" = "Investigate & take appropriate action."
             }
-            
+            if ($DeviceGroups) {
+                $body["rbacGroupNames"] = $DeviceGroups
+            }
             try {
                 $response = Invoke-WithRetry -ScriptBlock {
                     Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body ($body | ConvertTo-Json) -ContentType "application/json" -ErrorAction Stop
@@ -2188,7 +2193,9 @@ function Invoke-TiIP {
         [Parameter(Mandatory = $true)]
         [string[]]$IPs,
         [Parameter(Mandatory = $false)]
-        [string]$IndicatorName
+        [string]$IndicatorName,
+        [Parameter(Mandatory = $false)]
+        [string[]]$DeviceGroups
     )
     $uri = "https://api.securitycenter.microsoft.com/api/indicators"
     $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
@@ -2223,6 +2230,9 @@ function Invoke-TiIP {
                 "title" = $title
                 "description" = "MDEAutomator has created this Custom Threat Indicator."
                 "recommendedActions" = "Investigate & take appropriate action."
+            }
+            if ($DeviceGroups) {
+                $body["rbacGroupNames"] = $DeviceGroups
             }
             try {
                 $response = Invoke-WithRetry -ScriptBlock {
@@ -2310,7 +2320,9 @@ function Invoke-TiURL {
         [Parameter(Mandatory = $true)]
         [string[]]$URLs,
         [Parameter(Mandatory = $false)]
-        [string]$IndicatorName
+        [string]$IndicatorName,
+        [Parameter(Mandatory = $false)]
+        [string[]]$DeviceGroups
     )
     $uri = "https://api.securitycenter.microsoft.com/api/indicators"
     $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
@@ -2332,6 +2344,9 @@ function Invoke-TiURL {
             "title" = $title
             "description" = "MDEAutomator has created this Custom Threat Indicator."
             "recommendedActions" = "Investigate & take appropriate action."
+        }
+        if ($DeviceGroups) {
+            $body["rbacGroupNames"] = $DeviceGroups
         }
         try {
             $response = Invoke-WithRetry -ScriptBlock {
@@ -2410,7 +2425,9 @@ function Invoke-TiCert {
         [Parameter(Mandatory = $false)]
         [string[]]$Sha1s,
         [Parameter(Mandatory = $false)]
-        [string]$IndicatorName
+        [string]$IndicatorName,
+        [Parameter(Mandatory = $false)]
+        [string[]]$DeviceGroups
     )
     $uri = "https://api.securitycenter.microsoft.com/api/indicators"
     $plainToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
@@ -2433,6 +2450,9 @@ function Invoke-TiCert {
                 "severity" = "High"
                 "description" = "MDEAutomator has created this Custom Threat Indicator."
                 "recommendedActions" = "Investigate & take appropriate action."
+            }
+            if ($DeviceGroups) {
+                $body["rbacGroupNames"] = $DeviceGroups
             }
             try {
                 $response = Invoke-WithRetry -ScriptBlock {
@@ -2560,9 +2580,30 @@ function Get-DetectionRules {
             $uri = $listResponseJson.'@odata.nextLink'
         } while ($uri)
         return $allRules
+        Write-Host "Retrieved $(($allRules).Count) detection rules."
     } catch {
         Write-Error "Failed to retrieve detection rules: $_"
         exit 1
+    }
+}
+
+function Get-DetectionRule {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$RuleId
+    )
+    try {
+        $uri = "https://graph.microsoft.com/beta/security/rules/detectionRules/$RuleId"
+        $response = Invoke-MgGraphRequest -Method GET -Uri $uri
+        if ($response) {
+            return $response
+        } else {
+            Write-Host "Detection rule not found: $RuleId"
+            return $null
+        }
+    } catch {
+        Write-Error "Failed to retrieve detection rule: $_"
+        return $null
     }
 }
 
@@ -2808,9 +2849,9 @@ function Get-IncidentAlerts {
                                 }
                                 '#microsoft.graph.security.registryValueEvidence' {
                                     $processedEvidenceItem | Add-Member -NotePropertyName 'RegistryKey' -NotePropertyValue $evidence.RegistryKey
-                                    $processedEvidenceItem | Add-Member -NotePropertyName 'RegistryValue' -NotePropertyValue $evidence.RegistryValue
-                                    $processedEvidenceItem | Add-Member -NotePropertyName 'RegistryValueType' -NotePropertyValue $evidence.RegistryValueType
-                                    $processedEvidenceItem | Add-Member -NotePropertyName 'RegistryValueData' -NotePropertyValue $evidence.RegistryValueData
+                                    $processedEvidenceItem | Add-Member -NotePropertyValue 'RegistryValue' -NotePropertyValue $evidence.RegistryValue
+                                    $processedEvidenceItem | Add-Member -NotePropertyValue 'RegistryValueType' -NotePropertyValue $evidence.RegistryValueType
+                                    $processedEvidenceItem | Add-Member -NotePropertyValue 'RegistryValueData' -NotePropertyValue $evidence.RegistryValueData
                                 }
                                 '#microsoft.graph.security.ipEvidence' {
                                     $processedEvidenceItem | Add-Member -NotePropertyName 'IpAddress' -NotePropertyValue $evidence.IpAddress
@@ -2850,9 +2891,9 @@ function Get-IncidentAlerts {
                                 }
                                 '#microsoft.graph.security.analyzedMessageEvidence' {
                                     $processedEvidenceItem | Add-Member -NotePropertyName 'InternetMessageId' -NotePropertyValue $evidence.InternetMessageId
-                                    $processedEvidenceItem | Add-Member -NotePropertyName 'Subject' -NotePropertyValue $evidence.Subject
-                                    $processedEvidenceItem | Add-Member -NotePropertyName 'SenderIp' -NotePropertyValue $evidence.SenderIp
-                                    $processedEvidenceItem | Add-Member -NotePropertyName 'RecipientEmailAddress' -NotePropertyValue $evidence.RecipientEmailAddress
+                                    $processedEvidenceItem | Add-Member -NotePropertyValue 'Subject' -NotePropertyValue $evidence.Subject
+                                    $processedEvidenceItem | Add-Member -NotePropertyValue 'SenderIp' -NotePropertyValue $evidence.SenderIp
+                                    $processedEvidenceItem | Add-Member -NotePropertyValue 'RecipientEmailAddress' -NotePropertyValue $evidence.RecipientEmailAddress
                                 }
                                 '#microsoft.graph.security.containerEvidence' {
                                     $processedEvidenceItem | Add-Member -NotePropertyName 'ContainerId' -NotePropertyValue $evidence.ContainerId
@@ -3103,6 +3144,6 @@ function Update-IncidentComment {
 Export-ModuleMember -Function Connect-MDE, Get-RequestParam, Invoke-WithRetry,
     Get-Machines, Get-Actions, Undo-Actions, Get-IPInfo, Get-FileInfo, Get-URLInfo, Get-LoggedInUsers, Get-MachineActionStatus, Invoke-AdvancedHunting,
     Invoke-UploadLR, Invoke-PutFile, Invoke-GetFile, Invoke-LRScript, Get-LiveResponseOutput, Get-Incidents, Get-Incident, Get-IncidentAlerts, Update-Incident, Update-IncidentComment,
-    Invoke-MachineIsolation, Undo-MachineIsolation, Invoke-ContainDevice, Undo-ContainDevice, Invoke-MachineOffboard, Get-DetectionRules, Install-DetectionRule, Update-DetectionRule, Undo-DetectionRule,
+    Invoke-MachineIsolation, Undo-MachineIsolation, Invoke-ContainDevice, Undo-ContainDevice, Invoke-MachineOffboard, Get-DetectionRules, Get-DetectionRule, Install-DetectionRule, Update-DetectionRule, Undo-DetectionRule,
     Invoke-RestrictAppExecution, Undo-RestrictAppExecution, Invoke-FullDiskScan, Invoke-StopAndQuarantineFile, Invoke-CollectInvestigationPackage,
     Get-Indicators, Invoke-TiFile, Undo-TiFile, Invoke-TiCert, Undo-TiCert, Invoke-TiIP, Undo-TiIP, Invoke-TiURL, Undo-TiURL

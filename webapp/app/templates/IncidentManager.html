@@ -2,19 +2,14 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
-<style>
-  #iocTableContainer, #detectionsTableContainer {
-    overflow-x: hidden;
-    width: 100%;
-    box-sizing: border-box;
-  }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/IncidentManager.css') }}">
 {% endblock %}
 
 {% block content %}
-<div class="toolbar" style="margin-bottom: 1.5rem;">
+<div class="toolbar">
     <div class="toolbar-left">
-        <div class="dropdown-group" style="display: flex; align-items: center;">            <select id="tenantDropdown" class="toolbar-dropdown" style="width: 280px; margin-right: 0.5rem;">
+        <div class="dropdown-group">
+            <select id="tenantDropdown" class="toolbar-dropdown">
             </select>
             <span class="page-title-bar">Incident Manager</span>
         </div>
@@ -22,27 +17,26 @@
 </div>
 
 <!-- Incident counts toolbar -->
-<div class="toolbar" style="border-top: none; border-bottom: 2px solid #00ff41; background: #101c11; margin-bottom: 1.5rem;">
+<div class="toolbar counts-toolbar">
     <div class="toolbar-left">
-        <span id="totalIncidentCount" style="margin-right: 2rem; color: #7fff7f; font-family: Consolas, monospace; font-weight: bold;">Total: 0</span>
-        <span id="highSeverityCount" style="margin-right: 2rem; color: #ff4444; font-family: Consolas, monospace; font-weight: bold;">High: 0</span>
-        <span id="mediumSeverityCount" style="margin-right: 2rem; color: #ffaa44; font-family: Consolas, monospace; font-weight: bold;">Medium: 0</span>
-        <span id="lowSeverityCount" style="margin-right: 2rem; color: #44ff44; font-family: Consolas, monospace; font-weight: bold;">Low: 0</span>
+        <span id="totalIncidentCount" class="count-display total">Total: 0</span>
+        <span id="highSeverityCount" class="count-display high">High: 0</span>
+        <span id="mediumSeverityCount" class="count-display medium">Medium: 0</span>
+        <span id="lowSeverityCount" class="count-display low">Low: 0</span>
     </div>
     <div class="toolbar-right">
-        <button id="exportIncidentsBtn" class="cta-button" style="margin: 0; height: 1.8em; font-size: 0.8em;">Export CSV</button>
+        <button id="exportIncidentsBtn" class="cta-button">Export CSV</button>
     </div>
 </div>
 
-<div class="incident-section" style="margin: 2rem 0 1.5rem 0; padding: 1.5rem; background: #142a17; border-radius: 8px; border: 1px solid #00ff41;">
-    <h2 style="color: var(--primary-color); margin-bottom: 1rem;">Incident Management</h2>
-    <div style="display: flex; gap: 1.5rem; align-items: flex-end; margin-bottom: 1.5rem; flex-wrap: wrap;">
+<div class="incident-section">
+    <div class="incident-controls">
         <button id="refreshIncidentsBtn" class="cta-button">Refresh</button>
         <button id="selectAllPageBtn" class="cta-button">Select All on Page</button>
         <button id="clearSelectionsBtn" class="cta-button">Clear Selection</button>
         <button id="updateIncidentBtn" class="cta-button" disabled>Update Incident</button>
         <button id="addCommentBtn" class="cta-button" disabled>Add Comment</button>
-        <div style="margin-left: auto; color: var(--text-color-light); font-family: Consolas, monospace;">
+        <div class="selection-info">
             <span id="selectedCount">0 incident(s) selected</span>
         </div>
     </div>
@@ -50,17 +44,17 @@
 </div>
 
 <!-- Update Incident Modal -->
-<div id="updateIncidentModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8);">
-    <div class="modal-content" style="background-color: #1a1a1a; border: 2px solid #00ff41; margin: 5% auto; padding: 20px; width: 60%; max-width: 600px; border-radius: 8px; color: #7fff7f; font-family: Consolas, monospace;">
-        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #00ff41; padding-bottom: 10px;">
-            <h2 style="margin: 0; color: #00ff41;">Update Incident</h2>
-            <span class="close-update" style="color: #00ff41; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
+<div id="updateIncidentModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Update Incident</h2>
+            <span class="close-update">&times;</span>
         </div>
         
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+        <div class="update-modal-grid">
             <div>
-                <label style="color: var(--text-color-light); display: block; margin-bottom: 5px;">Status</label>
-                <select id="incidentStatus" class="toolbar-dropdown" style="width: 100%;">
+                <label>Status</label>
+                <select id="incidentStatus" class="toolbar-dropdown">
                     <option value="">No Change</option>
                     <option value="active">Active</option>
                     <option value="resolved">Resolved</option>
@@ -69,18 +63,18 @@
                 </select>
             </div>
             <div>
-                <label style="color: var(--text-color-light); display: block; margin-bottom: 5px;">Severity</label>
-                <select id="incidentSeverity" class="toolbar-dropdown" style="width: 100%;">
+                <label>Severity</label>
+                <select id="incidentSeverity" class="toolbar-dropdown">
                     <option value="">No Change</option>
-                    <option value="informational">Informational</option>
+                    <option value="informational">Informational (will remove from scope)</option>
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
                     <option value="high">High</option>
                 </select>
             </div>
             <div>
-                <label style="color: var(--text-color-light); display: block; margin-bottom: 5px;">Classification</label>
-                <select id="incidentClassification" class="toolbar-dropdown" style="width: 100%;">
+                <label>Classification</label>
+                <select id="incidentClassification" class="toolbar-dropdown">
                     <option value="">No Change</option>
                     <option value="unknown">Unknown</option>
                     <option value="falsePositive">False Positive</option>
@@ -89,8 +83,8 @@
                 </select>
             </div>
             <div>
-                <label style="color: var(--text-color-light); display: block; margin-bottom: 5px;">Determination</label>
-                <select id="incidentDetermination" class="toolbar-dropdown" style="width: 100%;">
+                <label>Determination</label>
+                <select id="incidentDetermination" class="toolbar-dropdown">
                     <option value="">No Change</option>
                     <option value="unknown">Unknown</option>
                     <option value="apt">APT</option>
@@ -103,75 +97,98 @@
             </div>
         </div>
         
-        <div style="margin-top: 15px;">
-            <label style="color: var(--text-color-light); display: block; margin-bottom: 5px;">Assigned To</label>
-            <input type="text" id="incidentAssignedTo" class="toolbar-dropdown" style="width: 100%;" placeholder="user@domain.com">
+        <div class="modal-field">
+            <label>Assigned To</label>
+            <input type="text" id="incidentAssignedTo" class="toolbar-dropdown" placeholder="user@domain.com">
         </div>
         
-        <div style="margin-top: 15px;">
-            <label style="color: var(--text-color-light); display: block; margin-bottom: 5px;">Display Name</label>
-            <input type="text" id="incidentDisplayName" class="toolbar-dropdown" style="width: 100%;" placeholder="Updated incident name">
+        <div class="modal-field">
+            <label>Display Name</label>
+            <input type="text" id="incidentDisplayName" class="toolbar-dropdown" placeholder="Updated incident name">
         </div>
         
-        <div style="margin-top: 15px;">
-            <label style="color: var(--text-color-light); display: block; margin-bottom: 5px;">Description</label>
-            <textarea id="incidentDescription" class="toolbar-dropdown" style="width: 100%; height: 80px; resize: vertical;" placeholder="Updated incident description"></textarea>
+        <div class="modal-field">
+            <label>Description</label>
+            <textarea id="incidentDescription" class="toolbar-dropdown" style="height: 80px;" placeholder="Updated incident description"></textarea>
         </div>
         
-        <div style="text-align: right; margin-top: 20px; border-top: 1px solid #00ff41; padding-top: 15px;">
-            <button id="cancelUpdateBtn" class="cta-button" style="margin-right: 10px; background: #666;">Cancel</button>
+        <div class="modal-footer">
+            <button id="cancelUpdateBtn" class="cta-button cancel">Cancel</button>
             <button id="confirmUpdateBtn" class="cta-button">Update Incident</button>
         </div>
     </div>
 </div>
 
 <!-- Add Comment Modal -->
-<div id="addCommentModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8);">
-    <div class="modal-content" style="background-color: #1a1a1a; border: 2px solid #00ff41; margin: 5% auto; padding: 20px; width: 50%; max-width: 500px; border-radius: 8px; color: #7fff7f; font-family: Consolas, monospace;">
-        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #00ff41; padding-bottom: 10px;">
-            <h2 style="margin: 0; color: #00ff41;">Add Comment</h2>
-            <span class="close-comment" style="color: #00ff41; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
+<div id="addCommentModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Add Comment</h2>
+            <span class="close-comment">&times;</span>
         </div>
         
-        <div style="margin-bottom: 15px;">
-            <label style="color: var(--text-color-light); display: block; margin-bottom: 5px;">Comment</label>
-            <textarea id="incidentComment" class="toolbar-dropdown" style="width: 100%; height: 120px; resize: vertical;" placeholder="Enter your comment about this incident..."></textarea>
+        <div class="modal-field">
+            <label>Comment</label>
+            <textarea id="incidentComment" class="toolbar-dropdown" style="height: 120px;" placeholder="Enter your comment about this incident..."></textarea>
         </div>
         
-        <div style="text-align: right; margin-top: 20px; border-top: 1px solid #00ff41; padding-top: 15px;">
-            <button id="cancelCommentBtn" class="cta-button" style="margin-right: 10px; background: #666;">Cancel</button>
+        <div class="modal-footer">
+            <button id="cancelCommentBtn" class="cta-button cancel">Cancel</button>
             <button id="confirmCommentBtn" class="cta-button">Add Comment</button>
         </div>
     </div>
 </div>
 
+<!-- Related Alerts Modal -->
+<div id="relatedAlertsModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Related Alerts</h2>
+            <span class="close-alerts">&times;</span>
+        </div>
+        
+        <div id="alertsContent">
+            <div id="alertsLoading">
+                <div style="font-size: 1.2em; margin-bottom: 15px;">Loading alerts...</div>
+                <div class="spinner"></div>
+            </div>
+            <div id="alertsData"></div>
+            <div id="alertsError"></div>
+        </div>
+        
+        <div class="modal-footer flex-shrink">
+            <button id="closeAlertsBtn" class="cta-button">Close</button>
+        </div>
+    </div>
+</div>
+
 <!-- Tenant Management Modal (for JavaScript compatibility - modal not directly accessible) -->
-<div id="tenantModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8);">
-    <div class="modal-content" style="background-color: #1a1a1a; border: 2px solid #00ff41; margin: 5% auto; padding: 20px; width: 60%; max-width: 600px; border-radius: 8px; color: #7fff7f; font-family: Consolas, monospace;">
-        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #00ff41; padding-bottom: 10px;">
-            <h2 style="margin: 0; color: #00ff41;">Manage Tenants</h2>
-            <span class="close" style="color: #00ff41; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
+<div id="tenantModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Manage Tenants</h2>
+            <span class="close">&times;</span>
         </div>
         
         <!-- Add New Tenant Form -->
-        <div class="add-tenant-section" style="margin-bottom: 30px; padding: 15px; background: #0f1f0f; border: 1px solid #00ff41; border-radius: 4px;">
-            <h3 style="margin-top: 0; color: #00ff41;">Add New Tenant</h3>
-            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-                <input type="text" id="newTenantId" placeholder="Tenant ID" style="flex: 1; padding: 8px; background: #1a1a1a; border: 1px solid #00ff41; color: #7fff7f; font-family: Consolas, monospace;">
-                <input type="text" id="newClientName" placeholder="Client Name" style="flex: 1; padding: 8px; background: #1a1a1a; border: 1px solid #00ff41; color: #7fff7f; font-family: Consolas, monospace;">
+        <div class="add-tenant-section">
+            <h3>Add New Tenant</h3>
+            <div class="tenant-input-row">
+                <input type="text" id="newTenantId" placeholder="Tenant ID">
+                <input type="text" id="newClientName" placeholder="Client Name">
             </div>
-            <button id="addTenantBtn" class="cta-button" style="margin: 0;">Add Tenant</button>
+            <button id="addTenantBtn" class="cta-button">Add Tenant</button>
         </div>
         
         <!-- Existing Tenants List -->
         <div class="tenants-list-section">
-            <h3 style="color: #00ff41;">Existing Tenants</h3>
-            <div id="tenantsList" style="max-height: 300px; overflow-y: auto;">
+            <h3>Existing Tenants</h3>
+            <div id="tenantsList">
                 <!-- Tenant list will be populated here -->
             </div>
         </div>
         
-        <div style="text-align: right; margin-top: 20px; border-top: 1px solid #00ff41; padding-top: 15px;">
+        <div class="modal-footer">
             <button id="closeTenantModal" class="cta-button">Close</button>
         </div>
     </div>

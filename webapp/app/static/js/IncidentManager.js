@@ -33,7 +33,23 @@ function waitForTenantDropdownAndLoadData() {
     }
     
     if (dropdown.value && dropdown.value.trim() !== '') {
-        loadIncidents();
+        loadIncidents().then(() => {
+            // Mark auto-load as completed
+            if (typeof window.markAutoLoadCompleted === 'function') {
+                window.markAutoLoadCompleted();
+            }
+        }).catch((error) => {
+            console.error('Error in incidents auto-load:', error);
+            // Mark auto-load as completed even on error
+            if (typeof window.markAutoLoadCompleted === 'function') {
+                window.markAutoLoadCompleted();
+            }
+        });
+    } else {
+        // No tenant selected, mark auto-load as completed immediately
+        if (typeof window.markAutoLoadCompleted === 'function') {
+            window.markAutoLoadCompleted();
+        }
     }
 }
 
@@ -42,42 +58,7 @@ function getTenantId() {
     return tenantDropdown ? tenantDropdown.value.trim() : '';
 }
 
-// Loading indicator functions
-function showLoadingIndicator(message = 'Loading...') {
-    let overlay = document.getElementById('loadingOverlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'loadingOverlay';
-        overlay.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            color: #00ff41;
-            font-family: Consolas, monospace;
-            font-size: 18px;
-        `;
-        document.body.appendChild(overlay);
-    }
-    overlay.innerHTML = `<div style="text-align: center;">
-        <div>${message}</div>
-        <div class="progress-bar"><div class="progress-bar-inner"></div></div>
-    </div>`;
-    overlay.style.display = 'flex';
-}
-
-function hideLoadingIndicator() {
-    const overlay = document.getElementById('loadingOverlay');
-    if (overlay) {
-        overlay.style.display = 'none';
-    }
-}
+// Use centralized loading system from base.js
 
 // Main function to load incidents
 async function loadIncidents() {
@@ -88,7 +69,7 @@ async function loadIncidents() {
     }
 
     console.log('Loading incidents...');
-    showLoadingIndicator('Loading Incidents');
+    window.showContentLoading('Loading Incidents');
 
     try {
         // Create AbortController for timeout handling
@@ -123,7 +104,7 @@ async function loadIncidents() {
             alert(`Error loading incidents: ${error.message}. Please try again.`);
         }
     } finally {
-        hideLoadingIndicator();
+        window.hideContentLoading();
     }
 }
 
@@ -141,7 +122,7 @@ function renderIncidentsTable(incidents) {
         window.incidentsGrid.destroy();
     }
 
-    // Filter out incidents with Display Names containing any variation of "email"
+    // Filter out incidents with Display Names containing any variation of "email" or "dlp"
     // and also filter out incomplete incidents that only have Summary or missing essential data
     const filteredIncidents = incidents.filter(incident => {
         // Check if incident has essential properties
@@ -153,9 +134,9 @@ function renderIncidentsTable(incidents) {
             return false;
         }
         
-        const displayName = hasDisplayName || '';
-        // Case-insensitive check for "email" in display name
-        return !displayName.toLowerCase().includes('email');
+        const displayName = hasDisplayName.toLowerCase() || '';
+        // Case-insensitive check for "email" or "dlp" in display name
+        return !displayName.includes('email') && !displayName.includes('dlp');
     });
 
     // Store filtered incidents globally for export
@@ -188,7 +169,7 @@ function renderIncidentsTable(incidents) {
         { 
             id: 'incidentWebUrl', 
             name: 'Incident URL', 
-            width: '12%',
+            width: '11%',
             formatter: (cell) => {
                 if (cell && cell.trim()) {
                     return gridjs.html(`<a href="${cell}" target="_blank" style="color: #00ff41; text-decoration: underline;" title="Open incident in Microsoft 365 Defender">View</a>`);
@@ -196,8 +177,18 @@ function renderIncidentsTable(incidents) {
                 return 'N/A';
             }
         },
-        { id: 'createdDateTime', name: 'Created', width: '9%' },
-        { id: 'lastUpdateTime', name: 'Last Updated', width: '9%' }
+        { 
+            id: 'relatedAlerts', 
+            name: 'Related Alerts', 
+            width: '10%',
+            sort: false,
+            formatter: (_, row) => {
+                const incidentId = row.cells[1].data; // ID is in second column
+                return gridjs.html(`<button class="view-alerts-btn cta-button" data-incidentid="${incidentId}" style="padding: 0.2em 0.6em; font-size: 0.8em; background: #142a17; border: 1px solid #00ff41; color: #00ff41; cursor: pointer;">View</button>`);
+            }
+        },
+        { id: 'createdDateTime', name: 'Created', width: '8%' },
+        { id: 'lastUpdateTime', name: 'Last Updated', width: '8%' }
     ];
 
     const data = filteredIncidents.map(incident => [
@@ -209,6 +200,7 @@ function renderIncidentsTable(incidents) {
         incident.Classification || incident.classification || 'Unknown',
         incident.AssignedTo || incident.assignedTo || 'Unassigned',
         incident.IncidentWebUrl || incident.incidentWebUrl || '', // Incident URL
+        '', // Related Alerts column placeholder - will be populated by formatter
         formatDateTime(incident.CreatedDateTime || incident.createdDateTime),
         formatDateTime(incident.LastUpdateDateTime || incident.lastUpdateDateTime || incident.LastUpdateTime || incident.lastUpdateTime)
     ]);
@@ -262,6 +254,8 @@ function renderIncidentsTable(incidents) {
 
 // Setup event listeners for table actions
 function setupTableEventListeners() {
+    console.log('=== Setting up table event listeners ===');
+    
     // Incident link clicks
     document.querySelectorAll('.incident-link').forEach(link => {
         link.addEventListener('click', (e) => {
@@ -286,6 +280,43 @@ function setupTableEventListeners() {
             updateActionButtons();
         });
     });
+
+    // View Alerts button event listeners - Use event delegation for dynamically created buttons
+    console.log('Setting up View Alerts event delegation...');
+    const tableContainer = document.getElementById('incidentTableContainer');
+    console.log('Table container found:', !!tableContainer);
+    if (tableContainer) {
+        // Remove any existing event listeners to prevent duplicates
+        tableContainer.removeEventListener('click', handleViewAlertsClick);
+        // Add event delegation for View Alerts buttons
+        tableContainer.addEventListener('click', handleViewAlertsClick);
+        console.log('View Alerts event delegation set up on table container');
+    } else {
+        console.error('Table container not found for View Alerts event delegation');
+    }
+}
+
+// Event delegation handler for View Alerts buttons
+function handleViewAlertsClick(e) {
+    console.log('Click detected in table container:', e.target);
+    console.log('Target classes:', e.target.className);
+    console.log('Target tag:', e.target.tagName);
+    
+    // Check if the clicked element is a View Alerts button
+    if (e.target && e.target.classList.contains('view-alerts-btn')) {
+        console.log('View Alerts button clicked via event delegation!');
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const incidentId = e.target.getAttribute('data-incidentid');
+        console.log('View Alerts button clicked! Incident ID:', incidentId);
+        
+        if (incidentId) {
+            viewIncidentAlerts(incidentId, e.target);
+        } else {
+            console.error('No incident ID found on View Alerts button');
+        }
+    }
 }
 
 // Function to update checkbox states when changing pages
@@ -470,7 +501,7 @@ async function updateIncident() {
     };
 
     try {
-        showLoadingIndicator(`Updating ${selectedIncidentIds.length} incident(s)...`);
+        window.showContentLoading(`Updating ${selectedIncidentIds.length} incident(s)...`);
         
         // Send all incident IDs in a single request
         const payload = {
@@ -522,7 +553,7 @@ async function updateIncident() {
         console.error('Error updating incidents:', error);
         alert('Error updating incidents: ' + error.message);
     } finally {
-        hideLoadingIndicator();
+        window.hideContentLoading();
         
         // Ensure buttons are re-enabled
         updateActionButtons();
@@ -550,7 +581,7 @@ async function addComment() {
     }
 
     try {
-        showLoadingIndicator(`Adding comment to ${selectedIncidentIds.length} incident(s)...`);
+        window.showContentLoading(`Adding comment to ${selectedIncidentIds.length} incident(s)...`);
         
         // Send all incident IDs in a single request
         const commentData = {
@@ -602,11 +633,360 @@ async function addComment() {
         console.error('Error adding comment:', error);
         alert('Error adding comment: ' + error.message);
     } finally {
-        hideLoadingIndicator();
+        window.hideContentLoading();
         
         // Ensure buttons are re-enabled
         updateActionButtons();
     }
+}
+
+// Function to view incident alerts
+async function viewIncidentAlerts(incidentId, button) {
+    console.log('=== viewIncidentAlerts called ===');
+    console.log('Incident ID:', incidentId);
+    console.log('Button:', button);
+    console.log('Viewing alerts for incident:', incidentId);
+    
+    const tenantId = getTenantId();
+    console.log('Tenant ID:', tenantId);
+    if (!tenantId) {
+        alert('Please select a tenant first');
+        return;
+    }
+
+    // Show loading state on button
+    const originalText = button.textContent;
+    button.textContent = 'Loading...';  
+    button.disabled = true;
+    button.style.opacity = '0.6';
+
+    try {
+        // Show modal immediately with loading state
+        console.log('Showing alerts modal...');
+        showAlertsModal(incidentId);
+        
+        // Make API call to get alerts
+        console.log('Making API call to /api/incidents/alerts');
+        const response = await fetch('/api/incidents/alerts', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                tenantId: tenantId,
+                incidentId: incidentId
+            })
+        });
+
+        console.log('API response status:', response.status);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        console.log('API response data:', result);
+        console.log('result.success:', result.success);
+        console.log('result.alerts:', result.alerts);
+        console.log('result.alerts type:', typeof result.alerts);
+        console.log('result.alerts isArray:', Array.isArray(result.alerts));
+        
+        if (result.success) {
+            const alertsData = result.alerts || [];
+            console.log('Calling displayAlertsData with:', alertsData);
+            displayAlertsData(alertsData, incidentId);
+        } else {
+            throw new Error(result.error || 'Failed to retrieve alerts');
+        }
+        
+    } catch (error) {
+        console.error('Error fetching incident alerts:', error);
+        displayAlertsError(error.message);
+    } finally {
+        // Restore button state
+        button.textContent = originalText;
+        button.disabled = false;
+        button.style.opacity = '1';
+        console.log('=== viewIncidentAlerts completed ===');
+    }
+}
+
+// Function to show the alerts modal
+function showAlertsModal(incidentId) {
+    const modal = document.getElementById('relatedAlertsModal');
+    if (modal) {
+        // Update modal title
+        const modalTitle = modal.querySelector('h2');
+        if (modalTitle) {
+            modalTitle.textContent = `Related Alerts - Incident ${incidentId}`;
+        }
+        
+        // Reset modal content to loading state
+        const loadingDiv = document.getElementById('alertsLoading');
+        const dataDiv = document.getElementById('alertsData');
+        const errorDiv = document.getElementById('alertsError');
+        
+        if (loadingDiv) loadingDiv.style.display = 'block';
+        if (dataDiv) dataDiv.style.display = 'none';
+        if (errorDiv) errorDiv.style.display = 'none';
+        
+        // Show modal
+        modal.style.display = 'block';
+    }
+}
+
+// Function to display alerts data
+function displayAlertsData(alerts, incidentId) {
+    console.log('displayAlertsData called with:', { alerts, incidentId, alertsType: typeof alerts, isArray: Array.isArray(alerts) });
+    
+    const loadingDiv = document.getElementById('alertsLoading');
+    const dataDiv = document.getElementById('alertsData');
+    const errorDiv = document.getElementById('alertsError');
+    
+    if (loadingDiv) loadingDiv.style.display = 'none';
+    if (errorDiv) errorDiv.style.display = 'none';
+    
+    if (!dataDiv) return;
+    
+    // Ensure alerts is an array
+    if (!Array.isArray(alerts)) {
+        console.error('displayAlertsData: alerts is not an array:', alerts);
+        displayAlertsError(`Invalid alerts data format. Expected array, got ${typeof alerts}`);
+        return;
+    }
+    
+    if (!alerts || alerts.length === 0) {
+        dataDiv.innerHTML = `
+            <div style="text-align: center; color: #7fff7f; padding: 40px;">
+                <div style="font-size: 1.2em; margin-bottom: 15px;">No alerts found</div>
+                <div>Incident ${incidentId} has no related alerts.</div>
+            </div>
+        `;
+    } else {
+        let html = `
+            <div style="margin-bottom: 20px; color: #7fff7f;">
+                <strong>Found ${alerts.length} alert(s) for incident ${incidentId}</strong>
+            </div>
+        `;
+        
+        alerts.forEach((alert, index) => {
+            html += formatAlertCard(alert, index);
+        });
+        
+        dataDiv.innerHTML = html;
+    }
+    
+    dataDiv.style.display = 'block';
+}
+
+// Function to format an individual alert card
+function formatAlertCard(alert, index) {
+    const alertId = alert.Id || alert.id || 'Unknown';
+    const title = alert.Title || alert.title || alert.DisplayName || alert.displayName || 'Untitled Alert';
+    const severity = (alert.Severity || alert.severity || 'Unknown').toLowerCase();
+    const status = alert.Status || alert.status || 'Unknown';
+    const createdDateTime = alert.CreatedDateTime || alert.createdDateTime || alert.AlertCreationTime || alert.alertCreationTime;
+    const description = alert.Description || alert.description || '';
+    const category = alert.Category || alert.category || '';
+    
+    // Format severity class for styling
+    const severityClass = `severity-${severity}`;
+    
+    let html = `
+        <div class="alert-card">
+            <div class="alert-header">
+                <div class="alert-title">${escapeHtml(title)}</div>
+                <div class="alert-severity ${severityClass}">${severity.toUpperCase()}</div>
+            </div>
+            <div class="alert-details">
+                <div class="alert-field">
+                    <span class="alert-field-label">Alert ID:</span>
+                    <span class="alert-field-value">${escapeHtml(alertId)}</span>
+                </div>
+                <div class="alert-field">
+                    <span class="alert-field-label">Status:</span>
+                    <span class="alert-field-value">${escapeHtml(status)}</span>
+                </div>
+    `;
+    
+    if (category) {
+        html += `
+                <div class="alert-field">
+                    <span class="alert-field-label">Category:</span>
+                    <span class="alert-field-value">${escapeHtml(category)}</span>
+                </div>
+        `;
+    }
+    
+    if (createdDateTime) {
+        html += `
+                <div class="alert-field">
+                    <span class="alert-field-label">Created:</span>
+                    <span class="alert-field-value">${formatDateTime(createdDateTime)}</span>
+                </div>
+        `;
+    }
+    
+    if (description) {
+        html += `
+                <div class="alert-field">
+                    <span class="alert-field-label">Description:</span>
+                    <span class="alert-field-value">${escapeHtml(description)}</span>
+                </div>
+        `;
+    }
+    
+    // Add evidence if available
+    const evidence = alert.Evidence || alert.evidence || [];
+    if (evidence && evidence.length > 0) {
+        html += `
+                <div class="evidence-container">
+                    <div class="evidence-header">Evidence (${evidence.length} items):</div>
+        `;
+        
+        evidence.forEach((evidenceItem, evidenceIndex) => {
+            html += formatEvidenceItem(evidenceItem, evidenceIndex);
+        });
+        
+        html += `
+                </div>
+        `;
+    }
+    
+    html += `
+            </div>
+        </div>
+    `;
+    
+    return html;
+}
+
+// Function to format evidence items
+function formatEvidenceItem(evidence, index) {
+    const entityType = evidence.EntityType || evidence.entityType || 'Unknown';
+    const sha1 = evidence.Sha1 || evidence.sha1 || '';
+    const fileName = evidence.FileName || evidence.fileName || '';
+    const filePath = evidence.FilePath || evidence.filePath || '';
+    const processId = evidence.ProcessId || evidence.processId || '';
+    const commandLine = evidence.ProcessCommandLine || evidence.processCommandLine || '';
+    const accountName = evidence.AccountName || evidence.accountName || '';
+    const domainName = evidence.DomainName || evidence.domainName || '';
+    const ipAddress = evidence.IpAddress || evidence.ipAddress || '';
+    const url = evidence.Url || evidence.url || '';
+    
+    let html = `
+        <div class="evidence-item">
+            <div class="alert-field">
+                <span class="alert-field-label">Type:</span>
+                <span class="alert-field-value">${escapeHtml(entityType)}</span>
+            </div>
+    `;
+    
+    // Add relevant fields based on evidence type
+    if (fileName) {
+        html += `
+            <div class="alert-field">
+                <span class="alert-field-label">File Name:</span>
+                <span class="alert-field-value">${escapeHtml(fileName)}</span>
+            </div>
+        `;
+    }
+    
+    if (filePath) {
+        html += `
+            <div class="alert-field">
+                <span class="alert-field-label">File Path:</span>
+                <span class="alert-field-value">${escapeHtml(filePath)}</span>
+            </div>
+        `;
+    }
+    
+    if (sha1) {
+        html += `
+            <div class="alert-field">
+                <span class="alert-field-label">SHA1:</span>
+                <span class="alert-field-value" style="font-family: monospace; font-size: 0.9em;">${escapeHtml(sha1)}</span>
+            </div>
+        `;
+    }
+    
+    if (processId) {
+        html += `
+            <div class="alert-field">
+                <span class="alert-field-label">Process ID:</span>
+                <span class="alert-field-value">${escapeHtml(processId)}</span>
+            </div>
+        `;
+    }
+    
+    if (commandLine) {
+        html += `
+            <div class="alert-field">
+                <span class="alert-field-label">Command Line:</span>
+                <span class="alert-field-value" style="font-family: monospace; font-size: 0.9em;">${escapeHtml(commandLine)}</span>
+            </div>
+        `;
+    }
+    
+    if (accountName) {
+        html += `
+            <div class="alert-field">
+                <span class="alert-field-label">Account:</span>
+                <span class="alert-field-value">${escapeHtml(domainName ? `${domainName}\\${accountName}` : accountName)}</span>
+            </div>
+        `;
+    }
+    
+    if (ipAddress) {
+        html += `
+            <div class="alert-field">
+                <span class="alert-field-label">IP Address:</span>
+                <span class="alert-field-value">${escapeHtml(ipAddress)}</span>
+            </div>
+        `;
+    }
+    
+    if (url) {
+        html += `
+            <div class="alert-field">
+                <span class="alert-field-label">URL:</span>
+                <span class="alert-field-value" style="word-break: break-all;">${escapeHtml(url)}</span>
+            </div>
+        `;
+    }
+    
+    html += `
+        </div>
+    `;
+    
+    return html;
+}
+
+// Function to display error in alerts modal
+function displayAlertsError(errorMessage) {
+    const loadingDiv = document.getElementById('alertsLoading');
+    const dataDiv = document.getElementById('alertsData');
+    const errorDiv = document.getElementById('alertsError');
+    
+    if (loadingDiv) loadingDiv.style.display = 'none';
+    if (dataDiv) dataDiv.style.display = 'none';
+    
+    if (errorDiv) {
+        errorDiv.innerHTML = `
+            <div style="text-align: center; color: #ff4444; padding: 40px;">
+                <div style="font-size: 1.2em; margin-bottom: 15px;">Error Loading Alerts</div>
+                <div>${escapeHtml(errorMessage)}</div>
+            </div>
+        `;
+        errorDiv.style.display = 'block';
+    }
+}
+
+// Utility function to escape HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // Function to update incident counts by severity
@@ -733,6 +1113,13 @@ function setupEventListeners() {
         });
     }
 
+    const closeAlerts = document.querySelector('.close-alerts');
+    if (closeAlerts) {
+        closeAlerts.addEventListener('click', () => {
+            closeModal('relatedAlertsModal');
+        });
+    }
+
     // Modal cancel buttons
     const cancelUpdateBtn = document.getElementById('cancelUpdateBtn');
     if (cancelUpdateBtn) {
@@ -745,6 +1132,13 @@ function setupEventListeners() {
     if (cancelCommentBtn) {
         cancelCommentBtn.addEventListener('click', () => {
             closeModal('addCommentModal');
+        });
+    }
+
+    const closeAlertsBtn = document.getElementById('closeAlertsBtn');
+    if (closeAlertsBtn) {
+        closeAlertsBtn.addEventListener('click', () => {
+            closeModal('relatedAlertsModal');
         });
     }
 
@@ -763,12 +1157,16 @@ function setupEventListeners() {
     window.addEventListener('click', (event) => {
         const updateModal = document.getElementById('updateIncidentModal');
         const commentModal = document.getElementById('addCommentModal');
+        const alertsModal = document.getElementById('relatedAlertsModal');
         
         if (event.target === updateModal) {
             closeModal('updateIncidentModal');
         }
         if (event.target === commentModal) {
             closeModal('addCommentModal');
+        }
+        if (event.target === alertsModal) {
+            closeModal('relatedAlertsModal');
         }
     });
     
@@ -834,6 +1232,11 @@ async function loadTenants() {
     try {
         console.log('Loading tenants from backend...');
         
+        // Update platform loading progress
+        if (typeof window.updatePlatformLoadingProgress === 'function') {
+            window.updatePlatformLoadingProgress('Loading tenants for Incident Manager...', 30);
+        }
+        
         // Add timeout to handle Azure Function cold starts
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
@@ -846,6 +1249,10 @@ async function loadTenants() {
         
         if (!response.ok) {
             console.error('HTTP error response:', response.status, response.statusText);
+            // Mark tenants as loaded even on error
+            if (typeof window.markTenantsLoaded === 'function') {
+                window.markTenantsLoaded();
+            }
             return;
         }
         
@@ -863,12 +1270,26 @@ async function loadTenants() {
         } else {
             const errorMessage = data.Message || data.error || 'Unknown error occurred';
             console.error('Error loading tenants:', errorMessage);
+            // Mark tenants as loaded even on error
+            if (typeof window.markTenantsLoaded === 'function') {
+                window.markTenantsLoaded();
+            }
             return;
         }
         
         populateTenantDropdown(tenants);
+        
+        // Mark tenants as loaded for platform loading system
+        if (typeof window.markTenantsLoaded === 'function') {
+            window.markTenantsLoaded();
+        }
+        
     } catch (error) {
         console.error('Error fetching tenants:', error);
+        // Mark tenants as loaded even on error
+        if (typeof window.markTenantsLoaded === 'function') {
+            window.markTenantsLoaded();
+        }
     }
 }
 
@@ -882,7 +1303,7 @@ function populateTenantDropdown(tenants) {
     // Clear existing options
     tenantDropdown.innerHTML = '';
     
-    // Add tenant options - Client Name first, then Tenant ID in parentheses
+    // Add tenant options - Client Name first, then Tenant ID in parentheses'
     tenants.forEach(tenant => {
         const option = document.createElement('option');
         option.value = tenant.TenantId;

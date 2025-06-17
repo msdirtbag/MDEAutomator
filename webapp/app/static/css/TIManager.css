@@ -71,6 +71,24 @@
     background-color: #cc3300 !important;
 }
 
+/* Special styling for "Delete Selected Detection" button */
+#deleteSelectedDetectionBtn {
+    background-color: #ff4400 !important;
+    border-color: #ff4400 !important;
+    color: #ffffff !important;
+    font-weight: bold;
+}
+
+#deleteSelectedDetectionBtn:hover {
+    background-color: #ff6600 !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(255,68,0,0.3) !important;
+}
+
+#deleteSelectedDetectionBtn:active {
+    background-color: #cc3300 !important;
+}
+
 /* Special styling for any other red buttons that might be added */
 .cta-button.red-button {
     background-color: #ff4400 !important;

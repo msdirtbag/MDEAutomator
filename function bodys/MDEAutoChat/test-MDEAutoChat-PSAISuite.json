@@ -1,0 +1,5 @@
+{
+    "message": "What lateral movement TTPs should I be looking for?",
+    "system_prompt": "You are an expert cybersecurity consultant specializing in Microsoft security products. Provide detailed, accurate information about security tools and best practices.",
+    "context": "There have been 33 High severity alerts in the last 30 days, with 5 of them being unresolved. The most recent alert was on 2023-10-01."
+}

@@ -1,22 +1,28 @@
 {
-  "DetectionAction": {
-    "AlertTemplate": {
-      "Category": "",
-      "Description": "",
-      "MitreTechniques": [
+  "displayName": "",
+  "isEnabled": true,
+  "queryCondition": {
+    "queryText": ""
+  },
+  "schedule": {
+    "period": "0"
+  },    
+  "detectionAction": {
+    "alertTemplate": {
+      "category": "",
+      "description": "",
+      "mitreTechniques": [
         ""
       ],
-      "RecommendedActions": "",
-      "Severity": "",
-      "Title": ""
+      "recommendedActions": "",
+      "severity": "",
+      "title": "",
+      "impactedAssets": []
     }
   },
-  "DisplayName": "",
-  "IsEnabled": true,
-  "QueryCondition": {
-    "QueryText": ""
+  "organizationalScope": {
+    "scopeType": "deviceGroup",
+    "scopeNames": []
   },
-  "Schedule": {
-    "Period": "0"
-  }
+  "responseActions": []
 }

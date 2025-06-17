@@ -1,5 +1,9 @@
 window.addEventListener('DOMContentLoaded', () => {
     console.log('TIManager page JavaScript loaded');
+    
+    // Initialize device groups dropdown
+    clearDeviceGroupsDropdown();
+    
     // Load tenants dropdown on page load
     loadTenants();
 
@@ -9,7 +13,7 @@ window.addEventListener('DOMContentLoaded', () => {
         setupEventListeners();
     }, 100);
 
-    // Wait for tenant dropdown to be populated, then auto-load data
+    // Auto-load threat intelligence data when tenant is available
     waitForTenantDropdownAndLoadData();
 
     // Set up other event listeners
@@ -18,16 +22,252 @@ window.addEventListener('DOMContentLoaded', () => {
     const tiCsvImportBtn = document.getElementById('tiCsvImportBtn');
     const tiCsvExportBtn = document.getElementById('tiCsvExportBtn');
     const refreshDetectionsBtn = document.getElementById('refreshDetectionsBtn');
-    const syncDetectionsBtn = document.getElementById('syncDetectionsBtn');
     const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+    const syncDetectionsBtn = document.getElementById('syncDetectionsBtn');
 
-    refreshIndicatorsBtn.addEventListener('click', loadThreatIntelligence);
+    // Detection Manager buttons
+    const addDetectionBtn = document.getElementById('addDetectionBtn');
+    const updateDetectionBtn = document.getElementById('updateSelectedDetectionBtn');
+    const deleteDetectionBtn = document.getElementById('deleteSelectedDetectionBtn');
+    const libraryDetectionBtn = document.getElementById('libraryDetectionBtn');
+
+    refreshIndicatorsBtn.addEventListener('click', loadAllThreatIntelligenceData);
     tiManualForm.addEventListener('submit', tiManualFormSubmit);
     tiCsvImportBtn.addEventListener('click', tiCsvImportBtnClick);
     tiCsvExportBtn.addEventListener('click', tiCsvExportBtnClick);
-    refreshDetectionsBtn.addEventListener('click', loadThreatIntelligence);
-    syncDetectionsBtn.addEventListener('click', syncDetections);
+    refreshDetectionsBtn.addEventListener('click', loadAllThreatIntelligenceData);
     deleteSelectedBtn.addEventListener('click', deleteSelectedIOCs);
+    if (syncDetectionsBtn) {
+        syncDetectionsBtn.addEventListener('click', syncDetections);
+    }
+
+    // Detection Manager button event listeners
+    if (addDetectionBtn) {
+        addDetectionBtn.addEventListener('click', () => {
+            openDetectionEditorModal('add');
+        });
+    }
+
+    if (updateDetectionBtn) {
+        updateDetectionBtn.addEventListener('click', async () => {
+            const selected = getSelectedDetections();
+            if (selected.length !== 1) {
+                alert('Please select exactly one detection rule to update.');
+                return;
+            }
+            
+            const detectionId = selected[0];
+            const tenantId = getTenantId();
+            
+            try {
+                // Fetch current detection rule details from backend
+                const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
+                const payload = { 
+                    TenantId: tenantId, 
+                    Function: 'GetDetectionRule',
+                    RuleId: detectionId
+                };
+                
+                console.log('Fetching detection rule details for update:', payload);
+                
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                console.log('GetDetectionRule response:', result);
+                
+                // Pass the current detection data to the modal for pre-filling
+                const jsonContent = JSON.stringify(result, null, 2);
+                openDetectionEditorModal('update', detectionId, jsonContent);
+                
+            } catch (error) {
+                console.error('Error fetching detection rule for update:', error);
+                alert('Failed to fetch detection rule details. Please try again.');
+            }
+        });
+    }
+
+    if (deleteDetectionBtn) {
+        deleteDetectionBtn.addEventListener('click', async () => {
+            const selected = getSelectedDetections();
+            if (selected.length === 0) return;
+            if (!confirm(`Are you sure you want to delete ${selected.length} detection rule(s)?`)) return;
+            const tenantId = getTenantId();
+            const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
+            let deletedCount = 0;
+            for (const ruleId of selected) {
+                const payload = { TenantId: tenantId, Function: 'UndoDetectionRule', RuleId: ruleId };
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 30000);
+                    await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                        signal: controller.signal
+                    });
+                    clearTimeout(timeoutId);
+                    deletedCount++;
+                } catch (err) {
+                    console.error('Error deleting detection rule:', err);
+                }
+            }
+            if (deletedCount > 0) {
+                alert(`Successfully deleted ${deletedCount} detection rule(s).`);
+                loadAllThreatIntelligenceData();
+            }
+        });
+    }
+
+    // Library button event listener
+    if (libraryDetectionBtn) {
+        libraryDetectionBtn.addEventListener('click', async () => {
+            const libraryModal = document.getElementById('detectionLibraryModal');
+            const libraryList = document.getElementById('detectionLibraryList');
+            if (!libraryModal || !libraryList) return;
+            
+            libraryModal.style.display = 'flex';
+            libraryList.innerHTML = '<div style="color:#7fff7f;">Loading...</div>';
+            const tenantId = getTenantId();
+            const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
+            const payload = { TenantId: tenantId, Function: 'GetDetectionRulesfromStorage' };
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 30000);
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                const result = await res.json();
+                const rules = Array.isArray(result) ? result : (result.value || result.rules || []);
+                if (!rules.length) {
+                    libraryList.innerHTML = '<div style="color:#ff8888;">No rules found in storage.</div>';
+                    return;
+                }
+                libraryList.innerHTML = '';
+                rules.forEach(rule => {
+                    const title = rule.RuleTitle || rule.DisplayName || rule.displayName || rule.Title || rule.title || rule.RuleName || 'Untitled';
+                    let desc = '';
+                    try {
+                        if (rule.Query) {
+                            const parsed = JSON.parse(rule.Query);
+                            desc = parsed.Description || parsed.description || parsed.AlertDescription || parsed.alertDescription || parsed.alertTemplate?.description || '';
+                        }
+                    } catch (e) { /* ignore */ }
+                    const row = document.createElement('div');
+                    row.style.display = 'flex';
+                    row.style.justifyContent = 'space-between';
+                    row.style.alignItems = 'center';
+                    row.style.padding = '10px';
+                    row.style.borderBottom = '1px solid #333';
+                    row.style.color = '#7fff7f';
+                    const info = document.createElement('div');
+                    info.innerHTML = `<strong>${title}</strong><br><span style="font-size:0.85em;color:#aaa;">${desc || 'No description'}</span>`;
+                    const btn = document.createElement('button');
+                    btn.textContent = 'Use';
+                    btn.className = 'cta-button';
+                    btn.style.padding = '5px 10px';
+                    btn.style.fontSize = '0.85em';
+                    btn.onclick = () => {
+                        // Handle different data structures from library
+                        let ruleData = rule;
+                        
+                        // If rule.Query exists and looks like JSON, try to parse it as the main rule data
+                        if (rule.Query && typeof rule.Query === 'string') {
+                            try {
+                                const parsedQuery = JSON.parse(rule.Query);
+                                // If the parsed query has detection rule properties, use it
+                                if (parsedQuery.displayName || parsedQuery.DisplayName || parsedQuery.query || parsedQuery.Query) {
+                                    ruleData = parsedQuery;
+                                    // Keep the original rule title if the parsed data doesn't have one
+                                    if (!ruleData.displayName && !ruleData.DisplayName && (rule.RuleTitle || rule.Title)) {
+                                        ruleData.displayName = rule.RuleTitle || rule.Title;
+                                    }
+                                } else {
+                                    ruleData = {
+                                        ...rule,
+                                        query: rule.Query,
+                                        displayName: rule.RuleTitle || rule.DisplayName || rule.Title || rule.RuleName
+                                    };
+                                }
+                            } catch (e) {
+                                // If parsing fails, treat rule.Query as just the KQL query text
+                                ruleData = {
+                                    ...rule,
+                                    query: rule.Query,
+                                    displayName: rule.RuleTitle || rule.DisplayName || rule.Title || rule.RuleName
+                                };
+                            }
+                        }
+                        
+                        openDetectionEditorModal('add', '', JSON.stringify(ruleData, null, 2));
+                        libraryModal.style.display = 'none';
+                    };
+                    row.appendChild(info);
+                    row.appendChild(btn);
+                    libraryList.appendChild(row);
+                });
+            } catch (err) {
+                console.error('Error loading library rules:', err);
+                libraryList.innerHTML = '<div style="color:#ff8888;">Error loading rules.</div>';
+            }
+        });
+    }
+
+    // Set up modal close handlers
+    const libraryModal = document.getElementById('detectionLibraryModal');
+    if (libraryModal) {
+        const closeLibraryBtn = libraryModal.querySelector('.close-detection-library');
+        if (closeLibraryBtn) {
+            closeLibraryBtn.onclick = function() {
+                libraryModal.style.display = 'none';
+            };
+        }
+
+        // Set up library install handler (event delegation)
+        const libraryList = document.getElementById('detectionLibraryList');
+        if (libraryList) {
+            libraryList.addEventListener('click', async (e) => {
+                if (e.target && e.target.classList.contains('install-library-rule')) {
+                    const title = decodeURIComponent(e.target.getAttribute('data-title'));
+                    if (!title) return;
+                    if (!confirm(`Install detection rule: ${title}?`)) return;
+                    const tenantId = getTenantId();
+                    const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
+                    const payload = { TenantId: tenantId, Function: 'InstallDetectionRulefromStorage', RuleTitle: title };
+                    try {
+                        e.target.disabled = true;
+                        e.target.textContent = 'Installing...';
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 30000);
+                        await fetch(url, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload),
+                            signal: controller.signal
+                        });
+                        clearTimeout(timeoutId);
+                        e.target.textContent = 'Installed!';
+                        setTimeout(() => { libraryModal.style.display = 'none'; loadAllThreatIntelligenceData(); }, 1200);
+                    } catch (err) {
+                        console.error('Error installing library rule:', err);
+                        e.target.textContent = 'Error';
+                        setTimeout(() => { e.target.textContent = 'Install'; e.target.disabled = false; }, 2000);
+                    }
+                }
+            });
+        }
+    }
 });
 
 // Helper: Wait for tenant dropdown to be populated, then auto-load data
@@ -37,14 +277,31 @@ function waitForTenantDropdownAndLoadData() {
         setTimeout(waitForTenantDropdownAndLoadData, 100);
         return;
     }
-    // Wait until dropdown has at least one option (not just the placeholder)
+    
     if (dropdown.options.length === 0) {
         setTimeout(waitForTenantDropdownAndLoadData, 100);
         return;
     }
-    // If a tenant is selected, load data for it
+    
     if (dropdown.value && dropdown.value.trim() !== '') {
-        loadThreatIntelligence();
+        console.log('Auto-loading threat intelligence data for tenant:', dropdown.value);
+        loadAllThreatIntelligenceData().then(() => {
+            // Mark auto-load as completed
+            if (typeof window.markAutoLoadCompleted === 'function') {
+                window.markAutoLoadCompleted();
+            }
+        }).catch((error) => {
+            console.error('Error in threat intelligence auto-load:', error);
+            // Mark auto-load as completed even on error
+            if (typeof window.markAutoLoadCompleted === 'function') {
+                window.markAutoLoadCompleted();
+            }
+        });
+    } else {
+        // No tenant selected, mark auto-load as completed immediately
+        if (typeof window.markAutoLoadCompleted === 'function') {
+            window.markAutoLoadCompleted();
+        }
     }
 }
 
@@ -53,130 +310,305 @@ function getTenantId() {
     return tenantDropdown ? tenantDropdown.value.trim() : '';
 }
 
-// Loading indicator functions
-function showLoadingIndicator(message = 'Loading...') {
-    let overlay = document.getElementById('loadingOverlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'loadingOverlay';
-        overlay.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            color: #00ff41;
-            font-family: Consolas, monospace;
-            font-size: 18px;
-        `;
-        document.body.appendChild(overlay);
-    }
-    overlay.innerHTML = `<div style="text-align: center;">
-        <div>${message}</div>
-        <div class="progress-bar"><div class="progress-bar-inner"></div></div>
-    </div>`;
-    overlay.style.display = 'flex';
-    // Add CSS animation if not already present
-    if (!document.getElementById('loadingStyles')) {
-        const style = document.createElement('style');
-        style.id = 'loadingStyles';
-        style.textContent = `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
-        document.head.appendChild(style);
-    }
-}
-
-function hideLoadingIndicator() {
-    const overlay = document.getElementById('loadingOverlay');
-    if (overlay) {
-        overlay.style.display = 'none';
-    }
-}
-
-// Combined function to load all threat intelligence data
-async function loadThreatIntelligence() {
+// Main function to systematically load all threat intelligence data
+async function loadAllThreatIntelligenceData() {
     const tenantId = getTenantId();
     if (!tenantId) {
         console.warn('No tenant selected for loading threat intelligence');
         return;
     }
 
-    console.log('Starting threat intelligence loading...');
-    showLoadingIndicator('Loading Threat Intelligence...');
+    console.log(`Starting systematic threat intelligence loading for tenant: ${tenantId}`);
+    window.showContentLoading('Loading Threat Intelligence Data');
 
     try {
-        // Load both indicators and detections concurrently
-        await Promise.all([
-            loadIndicatorsInternal(),
-            loadDetectionsInternal()
-        ]);
-        console.log('Threat intelligence loading completed');
+        // Step 1: Load Device Groups first
+        console.log('Step 1: Loading Device Groups...');
+        await loadDeviceGroupsForTenant(tenantId);
+        
+        // Step 2: Load Indicators
+        console.log('Step 2: Loading Indicators...');
+        await loadIndicatorsForTenant(tenantId);
+        
+        // Step 3: Load Detection Rules
+        console.log('Step 3: Loading Detection Rules...');
+        await loadDetectionRulesForTenant(tenantId);
+        
+        console.log('All threat intelligence data loaded successfully');
     } catch (error) {
-        console.error('Error loading threat intelligence:', error);
+        console.error('Error loading threat intelligence data:', error);
+        alert(`Error loading data: ${error.message}`);
     } finally {
-        hideLoadingIndicator();
+        window.hideContentLoading();
     }
 }
 
-async function loadIndicatorsInternal() {
-    const tenantId = getTenantId();
-    if (!tenantId) return;
-
+// Step 1: Load Device Groups using MDETIManager
+async function loadDeviceGroupsForTenant(tenantId) {
     const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
-    const payload = { TenantId: tenantId, Function: 'GetIndicators' };
+    const payload = { 
+        TenantId: tenantId, 
+        Function: 'GetDeviceGroups' 
+    };
+    
+    console.log('Calling MDETIManager GetDeviceGroups with payload:', payload);
     
     // Add timeout to handle Azure Function cold starts
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
     
-    const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-    const result = await res.json();
-    let indicators = result.value || result.machines || result || [];
-    if (!Array.isArray(indicators) && indicators.value) indicators = indicators.value;
-    
-    // Filter out webcategory indicators
-    const filteredIndicators = Array.isArray(indicators) ? indicators.filter(indicator => {
-        const indicatorType = (indicator.IndicatorType || '').toLowerCase();
-        return indicatorType !== 'webcategory';
-    }) : [];
-    
-    renderIndicatorsTable(filteredIndicators);
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('HTTP error response text:', errorText);
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const responseText = await response.text();
+        console.log('Raw response text:', responseText);
+        
+        let result;
+        try {
+            result = JSON.parse(responseText);
+        } catch (parseError) {
+            console.error('JSON parse error:', parseError);
+            console.error('Response text that failed to parse:', responseText);
+            
+            // Try to extract JSON from the response if it's mixed with other text
+            const jsonMatch = responseText.match(/\[.*\]|\{.*\}/s);
+            if (jsonMatch) {
+                console.log('Found potential JSON in response:', jsonMatch[0]);
+                try {
+                    result = JSON.parse(jsonMatch[0]);
+                    console.log('Successfully parsed extracted JSON:', result);
+                } catch (extractParseError) {
+                    console.error('Failed to parse extracted JSON:', extractParseError);
+                    throw new Error(`Failed to parse JSON response: ${parseError.message}`);
+                }
+            } else {
+                throw new Error(`No valid JSON found in response: ${parseError.message}`);
+            }
+        }
+        
+        console.log('Device Groups API response:', result);
+        console.log('Device Groups API response type:', typeof result);
+        console.log('Device Groups API response keys:', Object.keys(result || {}));
+        
+        // Handle different response formats with comprehensive parsing
+        let deviceGroups = [];
+        
+        // First, check if it's a direct array
+        if (Array.isArray(result)) {
+            deviceGroups = result;
+            console.log('Device groups found as direct array');
+        } 
+        // Check for common property names that might contain the device groups
+        else if (result && typeof result === 'object') {
+            // Try various possible property names
+            const possibleKeys = ['value', 'DeviceGroups', 'deviceGroups', 'groups', 'data', 'result', 'Value'];
+            
+            for (const key of possibleKeys) {
+                if (result[key] && Array.isArray(result[key])) {
+                    deviceGroups = result[key];
+                    console.log(`Device groups found in property: ${key}`);
+                    break;
+                }
+            }
+            
+            // If still no device groups found, log the full response for debugging
+            if (deviceGroups.length === 0) {
+                console.log('No device groups found in expected properties. Full response:', JSON.stringify(result, null, 2));
+                
+                // Try to extract any string arrays from the response
+                for (const [key, value] of Object.entries(result)) {
+                    if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'string') {
+                        console.log(`Found potential device groups array in property: ${key}`, value);
+                        deviceGroups = value;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        console.log('Final device groups array:', deviceGroups);
+        console.log('Device groups count:', deviceGroups.length);
+        
+        // Populate the device groups dropdown
+        populateDeviceGroupsDropdown(deviceGroups);
+        
+        console.log(`Successfully loaded ${deviceGroups.length} device groups`);
+        
+    } catch (error) {
+        clearTimeout(timeoutId);
+        console.error('Error loading device groups:', error);
+        console.error('Device groups error stack:', error.stack);
+        
+        // Populate dropdown with error message but don't throw - allow other data to load
+        const dropdown = document.getElementById('tiDeviceGroups');
+        if (dropdown) {
+            dropdown.innerHTML = '<option value="">Error loading device groups - check console</option>';
+            dropdown.disabled = true;
+        }
+        
+        // Log warning but don't throw to allow other steps to continue
+        console.warn(`Failed to load device groups: ${error.message}, continuing with other data...`);
+    }
 }
 
-async function loadDetectionsInternal() {
-    const tenantId = getTenantId();
-    if (!tenantId) return;
-
+// Step 2: Load Indicators using MDETIManager
+async function loadIndicatorsForTenant(tenantId) {
     const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
-    const payload = { TenantId: tenantId, Function: 'GetDetectionRules' };
+    const payload = { 
+        TenantId: tenantId, 
+        Function: 'GetIndicators' 
+    };
+    
+    console.log('Calling MDETIManager GetIndicators with payload:', payload);
     
     // Add timeout to handle Azure Function cold starts
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
     
-    const res = await fetch(url, { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify(payload),
-        signal: controller.signal
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('Indicators API response:', result);
+        
+        // Handle different response formats
+        let indicators = [];
+        if (Array.isArray(result)) {
+            indicators = result;
+        } else if (result.value && Array.isArray(result.value)) {
+            indicators = result.value;
+        }
+        
+        // Filter out webcategory indicators
+        const filteredIndicators = indicators.filter(indicator => {
+            const indicatorType = (indicator.IndicatorType || '').toLowerCase();
+            return indicatorType !== 'webcategory';
+        });
+        
+        // Render the indicators table
+        renderIndicatorsTable(filteredIndicators);
+        
+        console.log(`Successfully loaded ${filteredIndicators.length} indicators (${indicators.length - filteredIndicators.length} webcategory indicators filtered out)`);
+        
+    } catch (error) {
+        clearTimeout(timeoutId);
+        console.error('Error loading indicators:', error);
+        // Clear the table on error
+        const container = document.getElementById('iocTableContainer');
+        if (container) container.innerHTML = '<p style="color: #ff6666;">Error loading indicators</p>';
+        throw new Error(`Failed to load indicators: ${error.message}`);
+    }
+}
+
+// Step 3: Load Detection Rules using MDETIManager  
+async function loadDetectionRulesForTenant(tenantId) {
+    const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
+    const payload = { 
+        TenantId: tenantId, 
+        Function: 'GetDetectionRules' 
+    };
+    
+    console.log('Calling MDETIManager GetDetectionRules with payload:', payload);
+    
+    // Add timeout to handle Azure Function cold starts
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+    
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('Detection Rules API response:', result);
+        
+        // Handle different response formats
+        let detectionRules = [];
+        if (Array.isArray(result)) {
+            detectionRules = result;
+        } else if (result.value && Array.isArray(result.value)) {
+            detectionRules = result.value;
+        }
+        
+        // Render the detection rules table
+        renderDetectionsTable(detectionRules);
+        
+        console.log(`Successfully loaded ${detectionRules.length} detection rules`);
+        
+    } catch (error) {
+        clearTimeout(timeoutId);
+        console.error('Error loading detection rules:', error);
+        // Clear the table on error
+        const container = document.getElementById('detectionsTableContainer');
+        if (container) container.innerHTML = '<p style="color: #ff6666;">Error loading detection rules</p>';
+        throw new Error(`Failed to load detection rules: ${error.message}`);
+    }
+}
+
+// Helper function to populate device groups dropdown
+function populateDeviceGroupsDropdown(deviceGroups) {
+    const dropdown = document.getElementById('tiDeviceGroups');
+    if (!dropdown) return;
+    
+    dropdown.innerHTML = '';
+    dropdown.disabled = false;
+    
+    if (!Array.isArray(deviceGroups) || deviceGroups.length === 0) {
+        dropdown.innerHTML = '<option value="">No device groups found</option>';
+        console.log('No device groups found');
+        return;
+    }
+    
+    // Add "All Device Groups" option first
+    const allOption = document.createElement('option');
+    allOption.value = '';
+    allOption.textContent = 'All Device Groups';
+    dropdown.appendChild(allOption);
+    
+    // Add individual device group options
+    deviceGroups.forEach(group => {
+        if (group && group.trim()) { // Only add non-empty groups
+            const opt = document.createElement('option');
+            opt.value = group;
+            opt.textContent = group;
+            dropdown.appendChild(opt);
+        }
     });
     
-    clearTimeout(timeoutId);
-    const result = await res.json();
-    let detections = result.value || result.machines || result || [];
-    if (!Array.isArray(detections) && detections.value) detections = detections.value;
-    renderDetectionsTable(Array.isArray(detections) ? detections : []);
+    console.log(`Device groups dropdown populated with ${deviceGroups.length} groups`);
 }
 
 function renderIndicatorsTable(indicators) {
@@ -192,6 +624,7 @@ function renderIndicatorsTable(indicators) {
         { id: 'Action', name: 'Action' },
         { id: 'Severity', name: 'Severity' },
         { id: 'Title', name: 'Title' },
+        { id: 'RbacGroupNames', name: 'Device Groups', formatter: cell => Array.isArray(cell) ? cell.join(', ') : (cell || '') },
         { id: 'CreationTimeDateTimeUtc', name: 'Created' },
     ];
     const data = indicators.map(i => [
@@ -202,6 +635,7 @@ function renderIndicatorsTable(indicators) {
         i.Action, 
         i.Severity, 
         i.Title, 
+        i.RbacGroupNames, // Device Groups column
         i.CreationTimeDateTimeUtc
     ]);
     window.iocGrid = new gridjs.Grid({ columns, data, search: true, sort: true, pagination: true, autoWidth: true, width: '100%', height: 'auto' }).render(container);
@@ -237,12 +671,16 @@ async function tiManualFormSubmit(e) {
     const typeText = typeSelect.options[typeSelect.selectedIndex].text;
     const value = document.getElementById('tiValue').value.trim();
     const indicatorName = document.getElementById('tiIndicatorName').value.trim();
+    // DeviceGroups dropdown (multi-select) - TEMPORARILY DISABLED due to MDE API issue
+    const deviceGroupsInput = document.getElementById('tiDeviceGroups');
+    let deviceGroups = [];
+    if (deviceGroupsInput) {
+        deviceGroups = Array.from(deviceGroupsInput.selectedOptions).map(opt => opt.value).filter(Boolean);
+    }
     const tenantId = getTenantId();
-    
     if (!tenantId) { alert('Tenant ID is required.'); return; }
     if (!value) { alert('Please enter a value.'); return; }
     const mapping = getTypeAndFunctionForAdd(typeText);
-    
     if (!mapping) { 
         alert(`Invalid type selected. Type text: "${typeText}"`); 
         return; 
@@ -253,18 +691,60 @@ async function tiManualFormSubmit(e) {
     if (indicatorName) {
         payload.IndicatorName = indicatorName; // Send as string, not array
     }
-    // Add timeout to handle Azure Function cold starts
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-    await fetch(url, { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify(payload),
-        signal: controller.signal
-    });
+    // Add DeviceGroups if present
+    if (deviceGroups.length > 0) { 
+        payload.DeviceGroups = deviceGroups; 
+        console.log('Adding device groups to payload:', deviceGroups);
+        console.log('Device groups type:', typeof deviceGroups, 'isArray:', Array.isArray(deviceGroups));
+        console.log('Device groups individual values:', deviceGroups.map((dg, i) => `[${i}]: "${dg}" (${typeof dg})`));
+    } else {
+        console.log('No device groups selected - indicator will apply to all devices');
+    }
     
-    clearTimeout(timeoutId);
-    loadThreatIntelligence();
+    console.log('TI Manual Form - Final payload being sent:', JSON.stringify(payload, null, 2));
+    console.log('DeviceGroups in payload:', payload.DeviceGroups);
+    
+    try {
+        // Add timeout to handle Azure Function cold starts
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
+        const response = await fetch(url, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify(payload),
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        console.log('TI Manual Form - Backend response:', result);
+        console.log('Backend response type:', typeof result);
+        console.log('Backend response keys:', Object.keys(result));
+        
+        if (result.error) {
+            alert(`Error adding indicator: ${result.error}`);
+            return;
+        }
+        
+        // Check if result contains any device group information
+        if (result.DeviceGroups) {
+            console.log('Backend confirmed device groups:', result.DeviceGroups);
+        }
+        
+        alert('Threat indicator added successfully!');
+    } catch (error) {
+        console.error('Error submitting TI form:', error);
+        alert(`Error adding indicator: ${error.message}`);
+        return;
+    }
+    
+    loadAllThreatIntelligenceData();
 }
 
 function getTypeAndFunctionForDelete(type) {
@@ -383,7 +863,7 @@ async function deleteSelectedIOCs() {
 
     if (deletedCount > 0) {
         alert(`Successfully deleted ${deletedCount} IOC(s).`);
-        loadThreatIntelligence(); // Refresh the table
+        loadAllThreatIntelligenceData(); // Refresh the table
     }
 }
 
@@ -392,6 +872,16 @@ async function tiCsvImportBtnClick() {
     const tenantId = getTenantId();
     if (!tenantId) { alert('Tenant ID is required.'); return; }
     if (!fileInput.files.length) { alert('Please select a CSV file.'); return; }
+    
+    // Get device groups from dropdown for CSV import
+    const deviceGroupsInput = document.getElementById('tiDeviceGroups');
+    let deviceGroups = [];
+    if (deviceGroupsInput) {
+        deviceGroups = Array.from(deviceGroupsInput.selectedOptions).map(opt => opt.value).filter(Boolean);
+    }
+    
+    console.log('CSV Import - Selected device groups:', deviceGroups);
+    
     const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
     const file = fileInput.files[0];
     const reader = new FileReader();
@@ -490,7 +980,7 @@ async function tiCsvImportBtnClick() {
         } else {
             console.log(`CSV Import complete. Processed: ${processingSummary.join(', ')}`);
         }
-        loadThreatIntelligence();
+        loadAllThreatIntelligenceData();
     };
     reader.readAsText(file);
 };
@@ -597,7 +1087,18 @@ function renderDetectionsTable(detections) {
     container.innerHTML = '';
     if (!window.gridjs) return;
     if (window.detectionsGrid) window.detectionsGrid.destroy();
+    
     const columns = [
+        { 
+            id: 'checkbox', 
+            name: '', 
+            width: '40px', 
+            sort: false,
+            formatter: (_, row) => {
+                const detectionId = row.cells[1].data; // ID is in second column
+                return gridjs.html(`<input type='checkbox' class='detection-checkbox' data-id='${detectionId}' />`);
+            }
+        },
         { id: 'id', name: 'Id' },
         { id: 'displayName', name: 'Title' },
         { id: 'createdBy', name: 'Created By' },
@@ -606,7 +1107,9 @@ function renderDetectionsTable(detections) {
         { id: 'period', name: 'Schedule' },
         { id: 'isEnabled', name: 'Active', formatter: cell => cell === true ? 'Yes' : cell === false ? 'No' : '' }
     ];
+    
     const data = detections.map(d => [
+        '', // Checkbox column placeholder
         d.id, 
         d.displayName, 
         d.createdBy, 
@@ -615,29 +1118,159 @@ function renderDetectionsTable(detections) {
         d.schedule?.period || '',
         d.isEnabled
     ]);
-    window.detectionsGrid = new gridjs.Grid({ columns, data, search: true, sort: true, pagination: true, autoWidth: true, width: '100%', height: 'auto' }).render(container);
+    
+    window.detectionsGrid = new gridjs.Grid({ 
+        columns, 
+        data, 
+        search: true, 
+        sort: true, 
+        pagination: {
+            limit: 25,
+            summary: true
+        }, 
+        autoWidth: true, 
+        width: '100%', 
+        height: 'auto' 
+    }).render(container);
+
+    // Use event delegation on the container instead of individual checkbox listeners
+    // Remove any existing event listeners first
+    container.removeEventListener('change', handleDetectionCheckboxChange);
+    container.addEventListener('change', handleDetectionCheckboxChange);
+
+    // Initial state update after grid renders
+    window.detectionsGrid.on('ready', () => {
+        setTimeout(() => {
+            updateDetectionButtonsState();
+        }, 100);
+    });
+
+    // Update state after pagination changes
+    container.addEventListener('click', (e) => {
+        if (e.target.classList.contains('gridjs-page') || 
+            e.target.closest('.gridjs-pagination')) {
+            setTimeout(() => {
+                updateDetectionButtonsState();
+            }, 100);
+        }
+    });
 }
 
+// Event delegation handler for detection checkbox changes
+function handleDetectionCheckboxChange(e) {
+    if (e.target && e.target.classList.contains('detection-checkbox')) {
+        console.log('Detection checkbox changed:', e.target.getAttribute('data-id'), 'checked:', e.target.checked);
+        updateDetectionButtonsState();
+    }
+}
+
+// Separate function to set up detection checkbox listeners
+function setupDetectionCheckboxListeners() {
+    console.log('Setting up detection checkbox listeners...');
+    document.querySelectorAll('.detection-checkbox').forEach(cb => {
+        // Remove existing listeners to prevent duplicates
+        cb.removeEventListener('change', updateDetectionButtonsState);
+        // Add new listener
+        cb.addEventListener('change', updateDetectionButtonsState);
+    });
+    console.log(`Detection checkbox listeners set up for ${document.querySelectorAll('.detection-checkbox').length} checkboxes`);
+}
+
+function getSelectedDetections() {
+    const checkedBoxes = document.querySelectorAll('.detection-checkbox:checked');
+    return Array.from(checkedBoxes).map(cb => cb.getAttribute('data-id'));
+}
+
+function updateDetectionButtonsState() {
+    const checked = document.querySelectorAll('.detection-checkbox:checked');
+    const updateBtn = document.getElementById('updateSelectedDetectionBtn');
+    const deleteBtn = document.getElementById('deleteSelectedDetectionBtn');
+    
+    console.log(`Detection buttons state update: ${checked.length} checkboxes selected`);
+    
+    if (updateBtn) {
+        updateBtn.disabled = checked.length !== 1;
+        updateBtn.textContent = checked.length === 1 ? 'Update Selected (1)' : 'Update Selected';
+        console.log(`Update button: disabled=${updateBtn.disabled}, text="${updateBtn.textContent}"`);
+    } else {
+        console.log('Update button not found');
+    }
+    
+    if (deleteBtn) {
+        deleteBtn.disabled = checked.length === 0;
+        deleteBtn.textContent = checked.length > 0 ? `Delete Selected (${checked.length})` : 'Delete Selected';
+        console.log(`Delete button: disabled=${deleteBtn.disabled}, text="${deleteBtn.textContent}"`);
+    } else {
+        console.log('Delete button not found');
+    }
+}
+
+// Sync detections function - calls MDECDManager to trigger sync
 async function syncDetections() {
     const tenantId = getTenantId();
-    if (!tenantId) return;
-    const url = `https://${window.FUNCURL}/api/MDECDManager?code=${window.FUNCKEY}`;
-    const payload = { TenantId: tenantId, Function: 'Sync' };
+    if (!tenantId) {
+        alert('Please select a tenant first.');
+        return;
+    }
+
+    if (!confirm('Are you sure you want to sync detections? This will trigger a sync process in MDECDManager.')) {
+        return;
+    }
+
+    console.log('Starting detection sync for tenant:', tenantId);
     
-    // Add timeout to handle Azure Function cold starts
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
-    
-    await fetch(url, { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify(payload),
-        signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-    loadThreatIntelligence();
-};
+    try {
+        window.showContentLoading('Syncing Detections...');
+        
+        const url = `https://${window.FUNCURL}/api/MDECDManager?code=${window.FUNCKEY}`;
+        const payload = { 
+            TenantId: tenantId,
+            Function: 'Sync'  // Assuming the function parameter for sync
+        };
+        
+        console.log('Calling MDECDManager Sync with payload:', payload);
+        
+        // Add timeout to handle Azure Function cold starts
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        console.log('Sync response:', result);
+        
+        if (result.error) {
+            alert(`Error during sync: ${result.error}`);
+        } else {
+            alert('Detection sync initiated successfully!');
+            // Optionally reload detection data after sync
+            setTimeout(() => {
+                loadAllThreatIntelligenceData();
+            }, 2000);
+        }
+        
+    } catch (error) {
+        console.error('Error during sync:', error);
+        if (error.name === 'AbortError') {
+            alert('Sync request timed out. The sync may still be processing in the background.');
+        } else {
+            alert(`Error during sync: ${error.message}`);
+        }
+    } finally {
+        window.hideContentLoading();
+    }
+}
 
 // Tenant Management Functions (copied from index.js)
 
@@ -654,10 +1287,17 @@ function setupEventListeners() {
             if (selectedTenant) {
                 sessionStorage.setItem('TenantId', selectedTenant);
                 console.log('Selected tenant:', selectedTenant);
-                // Auto-load all threat intelligence data when tenant is selected
-                loadThreatIntelligence();
+                // Load all threat intelligence data systematically
+                loadAllThreatIntelligenceData();
             } else {
                 sessionStorage.removeItem('TenantId');
+                // Clear device groups when no tenant is selected
+                clearDeviceGroupsDropdown();
+                // Clear tables
+                const iocContainer = document.getElementById('iocTableContainer');
+                const detectionsContainer = document.getElementById('detectionsTableContainer');
+                if (iocContainer) iocContainer.innerHTML = '';
+                if (detectionsContainer) detectionsContainer.innerHTML = '';
             }
         });
     } else {
@@ -669,6 +1309,11 @@ function setupEventListeners() {
 async function loadTenants() {
     try {
         console.log('Loading tenants from backend...');
+        
+        // Update platform loading progress
+        if (typeof window.updatePlatformLoadingProgress === 'function') {
+            window.updatePlatformLoadingProgress('Loading tenants for TI Manager...', 30);
+        }
         
         // Add timeout to handle Azure Function cold starts
         const controller = new AbortController();
@@ -682,6 +1327,10 @@ async function loadTenants() {
         
         if (!response.ok) {
             console.error('HTTP error response:', response.status, response.statusText);
+            // Mark tenants as loaded even on error
+            if (typeof window.markTenantsLoaded === 'function') {
+                window.markTenantsLoaded();
+            }
             return;
         }
         
@@ -699,12 +1348,26 @@ async function loadTenants() {
         } else {
             const errorMessage = data.Message || data.error || 'Unknown error occurred';
             console.error('Error loading tenants:', errorMessage);
+            // Mark tenants as loaded even on error
+            if (typeof window.markTenantsLoaded === 'function') {
+                window.markTenantsLoaded();
+            }
             return;
         }
         
         populateTenantDropdown(tenants);
+        
+        // Mark tenants as loaded for platform loading system
+        if (typeof window.markTenantsLoaded === 'function') {
+            window.markTenantsLoaded();
+        }
+        
     } catch (error) {
         console.error('Error fetching tenants:', error);
+        // Mark tenants as loaded even on error
+        if (typeof window.markTenantsLoaded === 'function') {
+            window.markTenantsLoaded();
+        }
     }
 }
 
@@ -718,12 +1381,1053 @@ function populateTenantDropdown(tenants) {
     // Clear existing options
     tenantDropdown.innerHTML = '';
     
-    // Add tenant options - Client Name first, then Tenant ID in parentheses
+    // Add tenant options - Client Name first, then Tenant ID in parentheses'
     tenants.forEach(tenant => {
         const option = document.createElement('option');
         option.value = tenant.TenantId;
         option.textContent = `${tenant.ClientName} (${tenant.TenantId})`;
         tenantDropdown.appendChild(option);
     });
+}
+
+// --- Custom Detection Manager Button Handlers ---
+// (Event listeners are now set up in DOMContentLoaded)
+
+// --- Detection Editor Modal Logic (Form-Based) ---
+
+function openDetectionEditorModal(mode, detectionId = '', jsonContent = '') {
+    const modal = document.getElementById('detectionEditorModal');
+    const title = document.getElementById('detectionEditorTitle');
+    const saveBtn = document.getElementById('saveDetectionRuleBtn');
+    const cancelBtn = document.getElementById('cancelDetectionEditorBtn');
+    if (!modal || !title || !saveBtn || !cancelBtn) return;
+    
+    // Show modal first
+    modal.style.display = 'flex';
+    title.textContent = mode === 'add' ? 'Add Custom Detection Rule' : 'Update Custom Detection Rule';
+    
+    // Initialize or clear form fields
+    initializeDetectionForm();
+    
+    // Parse the detection data early to extract query text
+    let detectionData = null;
+    let queryTextToSet = '';
+    if (jsonContent) {
+        try {
+            detectionData = JSON.parse(jsonContent);
+            // Extract query text now for later use
+            if (detectionData.query) {
+                queryTextToSet = detectionData.query;
+            } else if (detectionData.Query) {
+                queryTextToSet = detectionData.Query;
+            } else if (detectionData.queryCondition && detectionData.queryCondition.queryText) {
+                queryTextToSet = detectionData.queryCondition.queryText;
+            } else if (detectionData.KQL) {
+                queryTextToSet = detectionData.KQL;
+            } else if (detectionData.kql) {
+                queryTextToSet = detectionData.kql;
+            } else if (detectionData.QueryText) {
+                queryTextToSet = detectionData.QueryText;
+            }
+            console.log('Extracted queryTextToSet:', queryTextToSet);
+        } catch (e) {
+            console.warn('Failed to parse existing detection JSON:', e);
+        }
+    }
+    
+    // Initialize CodeMirror after modal is visible
+    setTimeout(() => {
+        console.log('Initializing CodeMirror...');
+        const editor = initCodeMirrorKqlEditor();
+        if (editor) {
+            console.log('CodeMirror initialized successfully');
+            
+            // Set query text if we have it
+            if (queryTextToSet) {
+                console.log('Setting query text in CodeMirror:', queryTextToSet);
+                editor.setValue(queryTextToSet);
+            } else {
+                // Clear editor and focus
+                editor.setValue('');
+            }
+            editor.focus();
+            
+            // Add change listener for form validation
+            editor.on('change', function() {
+                updateFormValidationStatus();
+            });
+        } else {
+            console.error('Failed to initialize CodeMirror');
+        }
+        
+        // Populate form fields after CodeMirror is ready
+        if (detectionData) {
+            console.log('Populating form with detection data...');
+            populateDetectionForm(detectionData);
+        }
+    }, 100);
+    
+    // Set up form validation
+    setupFormValidation();
+    
+    // Set up response action checkboxes
+    setupResponseActionHandlers();
+    
+    // Save handler
+    saveBtn.onclick = async function() {
+        if (!validateDetectionForm()) {
+            return;
+        }
+        
+        const tenantId = getTenantId();
+        const detectionData = collectDetectionFormData();
+        
+        console.log('Detection data before JSON.stringify:', detectionData);
+        console.log('KQL query in detection data:', detectionData.queryCondition?.QueryText);
+        
+        // Test JSON serialization before sending to backend
+        let jsonContent;
+        try {
+            jsonContent = JSON.stringify(detectionData, null, 2);
+            console.log('JSON serialization successful');
+        } catch (jsonError) {
+            console.error('Failed to serialize detection data to JSON:', jsonError);
+            showFormError(`Failed to serialize detection rule data: ${jsonError.message}`);
+            return;
+        }
+        
+        const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
+        const payload = { 
+            TenantId: tenantId, 
+            Function: mode === 'add' ? 'InstallDetectionRule' : 'UpdateDetectionRule', 
+            jsonContent: jsonContent
+        };
+        if (mode === 'update' && detectionId) {
+            payload.RuleId = detectionId;
+        }
+        
+        console.log('Final payload being sent to backend:', JSON.stringify(payload, null, 2));
+        console.log('Specifically, the jsonContent field:', payload.jsonContent);
+        
+        // Parse the jsonContent back to verify KQL query escaping is correct
+        try {
+            const parsedContent = JSON.parse(payload.jsonContent);
+            console.log('Parsed jsonContent KQL query:', parsedContent.queryCondition?.QueryText);
+            console.log('KQL query successfully roundtrip through JSON serialization');
+        } catch (parseError) {
+            console.error('Failed to parse jsonContent back - JSON escaping issue:', parseError);
+            showFormError(`JSON serialization issue detected: ${parseError.message}`);
+            return;
+        }
+        
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            closeDetectionEditorModal();
+            loadAllThreatIntelligenceData();
+        } catch (err) {
+            showFormError(`Error saving detection rule: ${err.message}`);
+            console.error(err);
+        }
+    };
+    
+    // Cancel handler
+    cancelBtn.onclick = function() {
+        closeDetectionEditorModal();
+    };
+    
+    // Close (X) handler
+    const closeX = modal.querySelector('.close-detection-editor');
+    if (closeX) {
+        closeX.onclick = function() {
+            closeDetectionEditorModal();
+        };
+    }
+}
+
+function initializeDetectionForm() {
+    // Clear all form fields - safely handle missing elements
+    const setValueSafely = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.value = value;
+    };
+    
+    const setCheckedSafely = (id, checked) => {
+        const element = document.getElementById(id);
+        if (element) element.checked = checked;
+    };
+    
+    const setDisabledSafely = (id, disabled) => {
+        const element = document.getElementById(id);
+        if (element) element.disabled = disabled;
+    };
+    
+    // Clear basic form fields
+    setValueSafely('detectionDisplayName', '');
+    setValueSafely('detectionDescription', '');
+    setValueSafely('detectionEnabled', 'true');
+    setValueSafely('detectionSeverity', '');
+    setValueSafely('detectionCategory', '');
+    setValueSafely('detectionPeriod', '12H');
+    
+    // Clear response action checkboxes
+    setCheckedSafely('responseActionIsolate', false);
+    setCheckedSafely('responseActionInvestigation', false);
+    setCheckedSafely('responseActionRestrict', false);
+    setDisabledSafely('responseActionIsolateType', true);
+    setDisabledSafely('responseActionInvestigationComment', true);
+    setDisabledSafely('responseActionRestrictComment', true);
+    
+    // Clear form validation status
+    updateFormValidationStatus();
+}
+
+function populateDetectionForm(detectionData) {
+    // Helper function for safe value setting
+    const setValueSafely = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.value = value;
+    };
+    
+    // Populate basic fields with robust mapping
+    const displayName = detectionData.displayName || detectionData.DisplayName || detectionData.RuleTitle || detectionData.Title || detectionData.RuleName || '';
+    document.getElementById('detectionDisplayName').value = displayName;
+
+    const description = detectionData.description || detectionData.Description || detectionData.AlertDescription || detectionData.alertDescription || '';
+    document.getElementById('detectionDescription').value = description;
+
+    if (detectionData.isEnabled !== undefined) {
+        document.getElementById('detectionEnabled').value = detectionData.isEnabled.toString();
+    } else if (detectionData.Enabled !== undefined) {
+        document.getElementById('detectionEnabled').value = detectionData.Enabled.toString();
+    }
+
+    // Query field (KQL) - handled separately in openDetectionEditorModal
+    // The query is extracted and set directly in CodeMirror after it's initialized
+    console.log('Skipping query setting in populateDetectionForm - handled in modal opener');
+
+    // Alert template and related fields
+    let alertTemplate = detectionData.detectionAction?.alertTemplate || detectionData.AlertTemplate || detectionData.alertTemplate || {};
+    // Fallback: sometimes alert fields are at the root
+    if (!alertTemplate.title && (detectionData.AlertTitle || detectionData.alertTitle)) {
+        alertTemplate.title = detectionData.AlertTitle || detectionData.alertTitle;
+    }
+    if (!alertTemplate.description && (detectionData.AlertDescription || detectionData.alertDescription)) {
+        alertTemplate.description = detectionData.AlertDescription || detectionData.alertDescription;
+    }
+    if (!alertTemplate.severity && (detectionData.Severity || detectionData.severity)) {
+        alertTemplate.severity = (detectionData.Severity || detectionData.severity).toLowerCase();
+    }
+    if (!alertTemplate.category && (detectionData.Category || detectionData.category)) {
+        alertTemplate.category = detectionData.Category || detectionData.category;
+    }
+    if (!alertTemplate.recommendedActions && (detectionData.RecommendedActions || detectionData.recommendedActions)) {
+        alertTemplate.recommendedActions = detectionData.RecommendedActions || detectionData.recommendedActions;
+    }
+    if (!alertTemplate.mitreTechniques && (detectionData.MitreTechniques || detectionData.mitreTechniques)) {
+        alertTemplate.mitreTechniques = Array.isArray(detectionData.MitreTechniques) ? detectionData.MitreTechniques : (detectionData.mitreTechniques ? detectionData.mitreTechniques.split(',') : []);
+    }
+
+    if (alertTemplate.severity) {
+        document.getElementById('detectionSeverity').value = alertTemplate.severity.toLowerCase();
+    }
+    if (alertTemplate.category) {
+        document.getElementById('detectionCategory').value = alertTemplate.category;
+    }
+    if (alertTemplate.title) {
+        setValueSafely('detectionDisplayName', alertTemplate.title);
+    }
+    if (alertTemplate.description) {
+        setValueSafely('detectionDescription', alertTemplate.description);
+    }
+    // Note: detectionRecommendedActions and detectionMitreTechniques fields have been removed from the form
+
+    // Schedule/Period - check multiple possible locations and normalize format
+    let period = '';
+    if (detectionData.schedule && detectionData.schedule.period) {
+        period = detectionData.schedule.period;
+    } else if (detectionData.Period) {
+        period = detectionData.Period;
+    } else if (detectionData.period) {
+        period = detectionData.period;
+    } else if (detectionData.runFrequency) {
+        period = detectionData.runFrequency;
+    } else if (detectionData.RunFrequency) {
+        period = detectionData.RunFrequency;
+    }
+    
+    // Normalize period format to match the dropdown options
+    if (period) {
+        // Convert backend format to form format
+        if (period === "0") {
+            period = "0H"; // Backend sends "0", form expects "0H" for Near Realtime
+        } else if (period === "1" || period === 1) {
+            period = "1H"; // Every Hour
+        } else if (period === "3" || period === 3) {
+            period = "3H"; // Every 3 Hours
+        } else if (period === "12" || period === 12) {
+            period = "12H"; // Every 12 Hours
+        } else if (period === "24" || period === 24) {
+            period = "24H"; // Daily
+        }
+        // If it already has 'H' suffix, keep as is
+        else if (typeof period === 'string' && period.endsWith('H')) {
+            // Already in correct format
+        }
+        // Handle other common formats
+        else if (period.toLowerCase() === 'realtime' || period.toLowerCase() === 'near realtime') {
+            period = "0H";
+        } else if (period.toLowerCase() === 'hourly') {
+            period = "1H";
+        } else if (period.toLowerCase() === 'daily') {
+            period = "24H";
+        }
+        
+        console.log('Setting period to:', period);
+        document.getElementById('detectionPeriod').value = period;
+    }
+
+    // Response actions (optional, add more mappings as needed)
+    // ...existing code...
+
+    updateFormValidationStatus();
+}
+
+// --- Form Validation and Submission ---
+
+function setupFormValidation() {
+    // Add event listeners to required fields for real-time validation
+    const requiredFields = [
+        'detectionDisplayName',
+        'detectionDescription',
+        'detectionSeverity', 
+        'detectionCategory'
+        // Note: Alert Title and Alert Description were unified with Display Name and Description
+    ];
+    
+    requiredFields.forEach(fieldId => {
+        const el = document.getElementById(fieldId);
+        if (el) {
+            el.addEventListener('input', updateFormValidationStatus);
+        }
+    });
+}
+
+function setupResponseActionHandlers() {
+    // Isolate device checkbox
+    const isolateCheckbox = document.getElementById('responseActionIsolate');
+    const isolateType = document.getElementById('responseActionIsolateType');
+    isolateCheckbox.addEventListener('change', function() {
+        isolateType.disabled = !this.checked;
+    });
+    
+    // Investigation package checkbox
+    const investigationCheckbox = document.getElementById('responseActionInvestigation');
+    const investigationComment = document.getElementById('responseActionInvestigationComment');
+    investigationCheckbox.addEventListener('change', function() {
+        investigationComment.disabled = !this.checked;
+    });
+    
+    // Restrict app execution checkbox
+    const restrictCheckbox = document.getElementById('responseActionRestrict');
+    const restrictComment = document.getElementById('responseActionRestrictComment');
+    restrictCheckbox.addEventListener('change', function() {
+        restrictComment.disabled = !this.checked;
+    });
+}
+
+function updateFormValidationStatus() {
+    const statusElement = document.getElementById('formValidationStatus');
+    const saveBtn = document.getElementById('saveDetectionRuleBtn');
+    
+    if (!statusElement || !saveBtn) {
+        console.error('Required form elements missing');
+        return;
+    }
+    
+    const isValid = validateDetectionForm(false); // Don't show errors, just check
+    
+    if (isValid) {
+        statusElement.textContent = '✓ Form is valid and ready to save';
+        statusElement.style.color = '#7fff7f';
+        saveBtn.disabled = false;
+        saveBtn.style.opacity = '1';
+    } else {
+        statusElement.textContent = 'Fill in required fields (*) to enable save';
+        statusElement.style.color = '#aaa';
+        saveBtn.disabled = true;
+        saveBtn.style.opacity = '0.6';
+    }
+}
+
+function validateDetectionForm(showErrors = true) {
+    const errors = [];
+    
+    // Helper function to safely get element value
+    const getValueSafely = (id) => {
+        const element = document.getElementById(id);
+        return element ? element.value.trim() : '';
+    };
+    
+    // Required fields validation - only check fields that actually exist
+    const displayName = getValueSafely('detectionDisplayName');
+    if (!displayName) {
+        errors.push('Display Name is required.');
+    }
+    
+    const description = getValueSafely('detectionDescription');
+    if (!description) {
+        errors.push('Description is required.');
+    }
+    
+    const severity = getValueSafely('detectionSeverity');
+    if (!severity) {
+        errors.push('Severity is required.');
+    }
+    
+    const category = getValueSafely('detectionCategory');
+    if (!category) {
+        errors.push('Category is required.');
+    }
+    
+    // Note: Alert Title and Alert Description fields were unified with Display Name and Description
+    // So we don't need to check separate detectionAlertTitle and detectionAlertDescription fields
+    
+    // KQL query validation - DISABLED for now
+    // const queryText = window.codeMirrorKqlEditor ? window.codeMirrorKqlEditor.getValue().trim() : '';
+    // if (!queryText) {
+    //     errors.push('Detection Query (KQL) is required.');
+    // }
+    
+    if (showErrors && errors.length > 0) {
+        showFormError(errors.join(' '));
+    }
+    return errors.length === 0;
+}
+
+function collectDetectionFormData() {
+    // Helper function to safely get element value
+    const getValueSafely = (id, defaultValue = '') => {
+        const element = document.getElementById(id);
+        return element ? element.value.trim() : defaultValue;
+    };
+    
+    // Helper function to safely get checkbox state
+    const getCheckedSafely = (id) => {
+        const element = document.getElementById(id);
+        return element ? element.checked : false;
+    };
+    
+    const displayName = getValueSafely('detectionDisplayName');
+    const description = getValueSafely('detectionDescription');
+    const isEnabled = getValueSafely('detectionEnabled') === 'true';
+    const severity = getValueSafely('detectionSeverity');
+    const category = getValueSafely('detectionCategory');
+    const rawPeriod = getValueSafely('detectionPeriod', '12H');
+    
+    // Convert period format for backend - backend expects "0" for Near Realtime, not "0H"
+    let period = rawPeriod;
+    if (rawPeriod === '0H') {
+        period = '0'; // Backend expects just "0" for Near Realtime
+    }
+    // For other values (1H, 3H, 12H, 24H), keep as-is since backend expects the "H" suffix
+    
+    console.log('Period conversion:', rawPeriod, '->', period);
+    // Use the unified fields for alert title and description
+    const alertTitle = displayName; // Use display name as alert title
+    const alertDescription = description; // Use description as alert description
+    // Note: MITRE techniques and recommended actions fields have been removed from the form
+    const mitreTechniques = []; // Empty array since field was removed
+    const recommendedActions = ''; // Empty string since field was removed
+    const queryText = window.codeMirrorKqlEditor ? window.codeMirrorKqlEditor.getValue().trim() : '';
+    
+    // Validate and prepare KQL query text for JSON serialization
+    const validatedQueryText = validateAndPrepareKqlQuery(queryText);
+    console.log('Validated KQL query ready for JSON serialization');
+    
+    // Collect response actions
+    const responseActions = [];
+    let actionOrder = 1;
+    
+    if (getCheckedSafely('responseActionIsolate')) {
+        const isolationType = getValueSafely('responseActionIsolateType', 'full');
+        responseActions.push({
+            "@odata.type": "#microsoft.graph.security.isolateDeviceResponseAction",
+            "identifier": "deviceId",
+            "isolationType": isolationType
+        });
+    }
+    
+    if (getCheckedSafely('responseActionInvestigation')) {
+        // Add both mark user as compromised and disable user response actions
+        responseActions.push({
+            "@odata.type": "#microsoft.graph.security.markUserAsCompromisedResponseAction",
+            "identifier": "initiatingProcessAccountObjectId"
+        });
+        responseActions.push({
+            "@odata.type": "#microsoft.graph.security.disableUserResponseAction",
+            "identifier": "initiatingProcessAccountSid"
+        });
+    }
+    
+    if (getCheckedSafely('responseActionRestrict')) {
+        const comment = getValueSafely('responseActionRestrictComment', 'App execution restricted by detection rule');
+        responseActions.push({
+            "@odata.type": "#microsoft.graph.security.restrictAppExecutionResponseAction",
+            "identifier": "deviceId",
+            "comment": comment || "App execution restricted by detection rule"
+        });
+    }
+    
+    // Build detection rule object to match the API template exactly
+    const detectionRule = {
+        "displayName": displayName,
+        "isEnabled": isEnabled,
+        "queryCondition": {
+            "QueryText": validatedQueryText
+        },
+        "schedule": {
+            "period": period
+        },
+        "detectionAction": {
+            "alertTemplate": {
+                "category": category,
+                "description": alertDescription || description,
+                "severity": severity,
+                "title": alertTitle || displayName,
+                "impactedAssets": [
+                    {
+                        "@odata.type": "#microsoft.graph.security.impactedDeviceAsset",
+                        "identifier": "deviceName"
+                    }
+                ]
+            }
+        },
+        "organizationalScope": {
+            "scopeType": "deviceGroup",
+            "scopeNames": []
+        },
+        "responseActions": responseActions
+    };
+    
+    console.log('Detection rule payload:', JSON.stringify(detectionRule, null, 2));
+    return detectionRule;
+}
+
+function showFormError(message) {
+    // Create or update error display
+    let errorDisplay = document.getElementById('formErrorDisplay');
+    if (!errorDisplay) {
+        errorDisplay = document.createElement('div');
+        errorDisplay.id = 'formErrorDisplay';
+        errorDisplay.style.cssText = `
+            margin-top: 10px; 
+            padding: 10px; 
+            background: #2d1a1a; 
+            border: 1px solid #ff4444; 
+            border-radius: 4px; 
+            color: #ff8888; 
+            font-size: 0.9em;
+            white-space: pre-line;
+        `;
+        
+        const validationStatus = document.getElementById('formValidationStatus');
+        if (validationStatus && validationStatus.parentNode) {
+            validationStatus.parentNode.insertBefore(errorDisplay, validationStatus.nextSibling);
+        }
+    }
+    
+    errorDisplay.textContent = message;
+    errorDisplay.style.display = 'block';
+    
+    // Auto-hide after 10 seconds
+    setTimeout(() => {
+        if (errorDisplay) {
+            errorDisplay.style.display = 'none';
+        }
+    }, 10000);
+}
+
+function clearFormError() {
+    const errorDisplay = document.getElementById('formErrorDisplay');
+    if (errorDisplay) {
+        errorDisplay.style.display = 'none';
+    }
+}
+
+// Initialize JSON editor enhancements
+function initializeJsonEditor(editor) {
+    // Auto-indent and smart tabbing
+    editor.addEventListener('keydown', function(e) {
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            const start = this.selectionStart;
+            const end = this.selectionEnd;
+            
+            if (e.shiftKey) {
+                // Shift+Tab: Remove indentation
+                const lines = this.value.substring(0, start).split('\n');
+                const currentLine = lines[lines.length - 1];
+                if (currentLine.startsWith('  ')) {
+                    const newStart = start - 2;
+                    this.value = this.value.substring(0, start - 2) + this.value.substring(start);
+                    this.selectionStart = this.selectionEnd = newStart;
+                }
+            } else {
+                // Tab: Add indentation
+                this.value = this.value.substring(0, start) + '  ' + this.value.substring(end);
+                this.selectionStart = this.selectionEnd = start + 2;
+            }
+            updateLineNumbers(this);
+        } else if (e.key === 'Enter') {
+            // Auto-indent on new line
+            const start = this.selectionStart;
+            const textBeforeCursor = this.value.substring(0, start);
+            const lines = textBeforeCursor.split('\n');
+            const currentLine = lines[lines.length - 1];
+            const indent = currentLine.match(/^(\s*)/)[1];
+            
+            // Add extra indent if line ends with { or [
+            const extraIndent = /[{\[]$/.test(currentLine.trim()) ? '  ' : '';
+            
+            setTimeout(() => {
+                const newPos = this.selectionStart;
+                this.value = this.value.substring(0, newPos) + indent + extraIndent + this.value.substring(newPos);
+                this.selectionStart = this.selectionEnd = newPos + indent.length + extraIndent.length;
+                updateLineNumbers(this);
+            }, 0);
+        }
+    });
+    
+    // Update line numbers and validation on input
+    editor.addEventListener('input', function() {
+        updateLineNumbers(this);
+        updateCharacterCount(this);
+        validateJsonContent(this);
+    });
+    
+    // Sync scroll between line numbers and editor
+    editor.addEventListener('scroll', function() {
+        const lineNumbers = document.getElementById('lineNumbers');
+        if (lineNumbers) {
+            lineNumbers.scrollTop = this.scrollTop;
+        }
+    });
+}
+
+// Update line numbers
+function updateLineNumbers(editor) {
+    const lineNumbers = document.getElementById('lineNumbers');
+    if (!lineNumbers) return;
+    
+    const lines = editor.value.split('\n');
+    const lineNumbersText = lines.map((_, index) => index + 1).join('\n');
+    lineNumbers.textContent = lineNumbersText;
+}
+
+// Update character count
+function updateCharacterCount(editor) {
+    const charCount = document.getElementById('jsonCharCount');
+    if (!charCount) return;
+    
+    const count = editor.value.length;
+    charCount.textContent = `${count.toLocaleString()} characters`;
+}
+
+// Validate JSON content and show status
+function validateJsonContent(editor) {
+    const status = document.getElementById('jsonValidationStatus');
+    if (!status) return;
+    
+    try {
+        if (editor.value.trim() === '') {
+            status.textContent = '';
+            status.style.background = '';
+            clearJsonError();
+            return;
+        }
+        
+        JSON.parse(editor.value);
+        status.textContent = '✓ Valid JSON';
+        status.style.background = '#1a4a1a';
+        status.style.color = '#7fff7f';
+        clearJsonError();
+    } catch (e) {
+        status.textContent = '✗ Invalid JSON';
+        status.style.background = '#4a1a1a';
+        status.style.color = '#ff8888';
+    }
+}
+
+// Set up JSON editor toolbar functionality
+function setupJsonEditorToolbar(editor) {
+    // Format JSON button
+    const formatBtn = document.getElementById('formatJsonBtn');
+    if (formatBtn) {
+        formatBtn.onclick = function() {
+            try {
+                const parsed = JSON.parse(editor.value);
+                editor.value = JSON.stringify(parsed, null, 2);
+                updateLineNumbers(editor);
+                updateCharacterCount(editor);
+                validateJsonContent(editor);
+            } catch (e) {
+                showJsonError(`Cannot format invalid JSON: ${e.message}`);
+            }
+        };
+    }
+    
+    // Validate JSON button
+    const validateBtn = document.getElementById('validateJsonBtn');
+    if (validateBtn) {
+        validateBtn.onclick = function() {
+            try {
+                const parsed = JSON.parse(editor.value);
+                
+                // Perform additional validation for custom detection rules
+                const errors = [];
+                
+                // Check required top-level fields
+                if (!parsed.DisplayName || parsed.DisplayName.trim() === '') {
+                    errors.push('Missing or empty "DisplayName" field');
+                }
+                
+                if (!parsed.QueryCondition || !parsed.QueryCondition.QueryText || parsed.QueryCondition.QueryText.trim() === '') {
+                    errors.push('Missing "QueryCondition.QueryText" field (KQL query)');
+                }
+                
+                // Check DetectionAction structure
+                if (parsed.DetectionAction) {
+                    if (!parsed.DetectionAction.AlertTemplate) {
+                        errors.push('DetectionAction must contain "AlertTemplate"');
+                    } else {
+                        const alertTemplate = parsed.DetectionAction.AlertTemplate;
+                        if (!alertTemplate.Title || alertTemplate.Title.trim() === '') {
+                            errors.push('AlertTemplate missing "Title" field');
+                        }
+                        if (!alertTemplate.Severity || alertTemplate.Severity.trim() === '') {
+                            errors.push('AlertTemplate missing "Severity" field');
+                        }
+                        if (alertTemplate.Severity && !['low', 'medium', 'high', 'informational'].includes(alertTemplate.Severity.toLowerCase())) {
+                            errors.push('AlertTemplate "Severity" must be: low, medium, high, or informational');
+                        }
+                    }
+                }
+                
+                // Check Schedule structure
+                if (parsed.Schedule && parsed.Schedule.Period !== undefined) {
+                    const period = parsed.Schedule.Period;
+                    if (typeof period !== 'string' && typeof period !== 'number') {
+                        errors.push('Schedule "Period" must be a string or number');
+                    }
+                }
+                
+                if (errors.length > 0) {
+                    showJsonError(`Validation errors:\n• ${errors.join('\n• ')}`);
+                } else {
+                    showJsonSuccess('✓ Detection rule JSON is valid and ready to save!');
+                }
+            } catch (e) {
+                showJsonError(`JSON syntax error: ${e.message}`);
+            }
+        };
+    }
+    
+    // Minify JSON button
+    const minifyBtn = document.getElementById('minifyJsonBtn');
+    if (minifyBtn) {
+        minifyBtn.onclick = function() {
+            try {
+                const parsed = JSON.parse(editor.value);
+                editor.value = JSON.stringify(parsed);
+                updateLineNumbers(editor);
+                updateCharacterCount(editor);
+                validateJsonContent(editor);
+            } catch (e) {
+                showJsonError(`Cannot minify invalid JSON: ${e.message}`);
+            }
+        };
+    }
+    
+    // Clear JSON button
+    const clearBtn = document.getElementById('clearJsonBtn');
+    if (clearBtn) {
+        clearBtn.onclick = function() {
+            if (confirm('Are you sure you want to clear the JSON content?')) {
+                editor.value = '';
+                updateLineNumbers(editor);
+                updateCharacterCount(editor);
+                validateJsonContent(editor);
+                clearJsonError();
+            }
+        };
+    }
+}
+
+// Show JSON error message
+function showJsonError(message) {
+    const errorDisplay = document.getElementById('jsonErrorDisplay');
+    if (errorDisplay) {
+        errorDisplay.textContent = message;
+        errorDisplay.style.display = 'block';
+        errorDisplay.style.background = '#2d1a1a';
+        errorDisplay.style.borderColor = '#ff4444';
+        errorDisplay.style.color = '#ff8888';
+    }
+}
+
+// Show JSON success message
+function showJsonSuccess(message) {
+    const errorDisplay = document.getElementById('jsonErrorDisplay');
+    if (errorDisplay) {
+        errorDisplay.textContent = message;
+        errorDisplay.style.display = 'block';
+        errorDisplay.style.background = '#1a2d1a';
+        errorDisplay.style.borderColor = '#44ff44';
+        errorDisplay.style.color = '#88ff88';
+        
+        // Auto-hide success message after 3 seconds
+        setTimeout(() => {
+            clearJsonError();
+        }, 3000);
+    }
+}
+
+// Clear JSON error/success message
+function clearJsonError() {
+    const errorDisplay = document.getElementById('jsonErrorDisplay');
+    if (errorDisplay) {
+        errorDisplay.style.display = 'none';
+    }
+}
+
+// --- Detection Library Modal Logic ---
+// (Event listeners are now set up in DOMContentLoaded)
+
+// --- Device Groups Dropdown Logic ---
+function clearDeviceGroupsDropdown() {
+    const dropdown = document.getElementById('tiDeviceGroups');
+    if (!dropdown) return;
+    dropdown.innerHTML = '<option value="">Select a tenant first</option>';
+    dropdown.disabled = true;
+}
+
+// Call on page load and on tenant change
+
+// Debug function to test API connectivity
+async function testApiConnectivity() {
+    try {
+        console.log('Testing basic API connectivity...');
+        const response = await fetch('/api/test');
+        const data = await response.json();
+        console.log('API test result:', data);
+        return data;
+    } catch (error) {
+        console.error('API test failed:', error);
+        return null;
+    }
+}
+
+// Call this function from browser console to test: testApiConnectivity()
+window.testApiConnectivity = testApiConnectivity;
+
+// Debug function to test device groups API with specific tenant
+async function testDeviceGroupsApi(tenantId) {
+    if (!tenantId) {
+        tenantId = getTenantId();
+    }
+    
+    if (!tenantId) {
+        console.error('No tenant ID provided for device groups test');
+        return null;
+    }
+    
+    try {
+        console.log(`Testing device groups API with tenant: ${tenantId}`);
+        const encodedTenantId = encodeURIComponent(tenantId.trim());
+        const apiUrl = `/api/device-groups/${encodedTenantId}`;
+        console.log('Testing URL:', apiUrl);
+        
+        const response = await fetch(apiUrl);
+        console.log('Response status:', response.status, response.statusText);
+        console.log('Response headers:', [...response.headers.entries()]);
+        
+        const data = await response.json();
+        console.log('Device groups test result:', data);
+        return data;
+    } catch (error) {
+        console.error('Device groups test failed:', error);
+        return null;
+    }
+}
+
+// Call this function from browser console to test: testDeviceGroupsApi('your-tenant-id')
+window.testDeviceGroupsApi = testDeviceGroupsApi;
+
+// Test function to manually populate device groups for debugging
+function testDeviceGroupsPopulation() {
+    console.log('Testing device groups population...');
+    const testGroups = ["UnassignedGroup", "soctraining"];
+    populateDeviceGroupsDropdown(testGroups);
+    console.log('Test device groups populated');
+}
+
+// Make it available globally for console testing
+window.testDeviceGroupsPopulation = testDeviceGroupsPopulation;
+
+// Debug function to test what device groups are actually selected
+function debugDeviceGroups() {
+    const deviceGroupsInput = document.getElementById('tiDeviceGroups');
+    if (!deviceGroupsInput) {
+        console.log('Device groups dropdown not found');
+        return;
+    }
+    
+    console.log('=== Device Groups Debug ===');
+    console.log('Dropdown element:', deviceGroupsInput);
+    console.log('Selected index:', deviceGroupsInput.selectedIndex);
+    console.log('All options:', Array.from(deviceGroupsInput.options).map(opt => ({ value: opt.value, text: opt.textContent, selected: opt.selected })));
+    console.log('Selected options:', Array.from(deviceGroupsInput.selectedOptions).map(opt => ({ value: opt.value, text: opt.textContent })));
+    
+    const deviceGroups = Array.from(deviceGroupsInput.selectedOptions).map(opt => opt.value).filter(Boolean);
+    console.log('Final device groups array:', deviceGroups);
+    console.log('Device groups types:', deviceGroups.map(dg => typeof dg));
+    console.log('========================');
+    
+    return deviceGroups;
+}
+
+// Make it available globally for testing
+window.debugDeviceGroups = debugDeviceGroups;
+
+// Debug function to test detection checkbox functionality
+function debugDetectionCheckboxes() {
+    console.log('=== Detection Checkboxes Debug ===');
+    const allCheckboxes = document.querySelectorAll('.detection-checkbox');
+    const checkedCheckboxes = document.querySelectorAll('.detection-checkbox:checked');
+    
+    console.log(`Total checkboxes: ${allCheckboxes.length}`);
+    console.log(`Checked checkboxes: ${checkedCheckboxes.length}`);
+    
+    allCheckboxes.forEach((cb, index) => {
+        console.log(`Checkbox ${index}: id="${cb.getAttribute('data-id')}", checked=${cb.checked}`);
+    });
+    
+    const updateBtn = document.getElementById('updateSelectedDetectionBtn');
+    const deleteBtn = document.getElementById('deleteSelectedDetectionBtn');
+    
+    console.log(`Update button: exists=${!!updateBtn}, disabled=${updateBtn?.disabled}`);
+    console.log(`Delete button: exists=${!!deleteBtn}, disabled=${deleteBtn?.disabled}`);
+    
+    console.log('Calling updateDetectionButtonsState...');
+    updateDetectionButtonsState();
+    console.log('=== End Debug ===');
+}
+
+// Make it available globally for testing
+window.debugDetectionCheckboxes = debugDetectionCheckboxes;
+
+// Close detection editor modal and clean up
+function closeDetectionEditorModal() {
+    const modal = document.getElementById('detectionEditorModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    
+    // Clear CodeMirror editor
+    if (window.codeMirrorKqlEditor && typeof window.codeMirrorKqlEditor.setValue === 'function') {
+        try {
+            window.codeMirrorKqlEditor.setValue('');
+        } catch (error) {
+            console.warn('Error clearing CodeMirror editor:', error);
+        }
+    }
+    
+    // Clear form fields
+    clearDetectionForm();
+}
+
+// Clear detection form fields
+function clearDetectionForm() {
+    // Clear all form fields - safely handle missing elements
+    const setValueSafely = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.value = value;
+    };
+    
+    const setCheckedSafely = (id, checked) => {
+        const element = document.getElementById(id);
+        if (element) element.checked = checked;
+    };
+    
+    const setDisabledSafely = (id, disabled) => {
+        const element = document.getElementById(id);
+        if (element) element.disabled = disabled;
+    };
+    
+    // Clear basic form fields
+    setValueSafely('detectionDisplayName', '');
+    setValueSafely('detectionDescription', '');
+    setValueSafely('detectionEnabled', 'true');
+    setValueSafely('detectionSeverity', '');
+    setValueSafely('detectionCategory', '');
+    setValueSafely('detectionPeriod', '12H');
+    
+    // Clear response action checkboxes
+    setCheckedSafely('responseActionIsolate', false);
+    setCheckedSafely('responseActionInvestigation', false);
+    setCheckedSafely('responseActionRestrict', false);
+    setDisabledSafely('responseActionIsolateType', true);
+    setDisabledSafely('responseActionInvestigationComment', true);
+    setDisabledSafely('responseActionRestrictComment', true);
+    
+    // Clear form validation status
+    updateFormValidationStatus();
+}
+
+// Helper function to validate and prepare KQL query text for JSON serialization
+function validateAndPrepareKqlQuery(queryText) {
+    if (!queryText || typeof queryText !== 'string') {
+        return '';
+    }
+    
+    // Log the original query for debugging
+    console.log('Original KQL query length:', queryText.length);
+    console.log('Original KQL query preview:', queryText.substring(0, 200) + (queryText.length > 200 ? '...' : ''));
+    
+    // Check for potentially problematic characters
+    const problematicChars = {
+        'unescapedQuotes': /(?<!\\)"/g,
+        'controlChars': /[\x00-\x1F\x7F]/g,
+        'invalidUnicode': /[\uFFFE\uFFFF]/g
+    };
+    
+    let warnings = [];
+    for (const [issue, regex] of Object.entries(problematicChars)) {
+        const matches = queryText.match(regex);
+        if (matches) {
+            warnings.push(`${issue}: ${matches.length} occurrences`);
+        }
+    }
+    
+    if (warnings.length > 0) {
+        console.warn('Potential KQL query issues detected:', warnings);
+    }
+    
+    // Return the original query text - JSON.stringify will handle escaping
+    // We're just validating and logging here
+    return queryText;
 }
 

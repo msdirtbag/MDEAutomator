@@ -1,0 +1,32 @@
+{
+    "TenantId": "",
+    "Function": "InstallDetectionRule",
+    "jsonContent": {
+        "displayName": "",
+        "isEnabled": true,
+        "queryCondition": {
+            "queryText": ""
+        },
+        "schedule": {
+            "period": "0"
+        },    
+        "detectionAction": {
+            "alertTemplate": {
+                "category": "",
+                "description": "",
+                "mitreTechniques": [
+                    ""
+                ],
+                "recommendedActions": "",
+                "severity": "",
+                "title": "",
+                "impactedAssets": []
+            }
+        },
+        "organizationalScope": {
+            "scopeType": "deviceGroup",
+            "scopeNames": []
+        },
+        "responseActions": []
+    }
+}

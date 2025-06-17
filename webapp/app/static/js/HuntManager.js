@@ -100,7 +100,25 @@ function waitForTenantDropdownAndLoadQueries() {
         }
     }
     // Auto-load queries for selected tenant
-    loadQueries();
+    if (dropdown.value && dropdown.value.trim() !== '') {
+        loadQueries().then(() => {
+            // Mark auto-load as completed
+            if (typeof window.markAutoLoadCompleted === 'function') {
+                window.markAutoLoadCompleted();
+            }
+        }).catch((error) => {
+            console.error('Error in queries auto-load:', error);
+            // Mark auto-load as completed even on error
+            if (typeof window.markAutoLoadCompleted === 'function') {
+                window.markAutoLoadCompleted();
+            }
+        });
+    } else {
+        // No tenant selected, mark auto-load as completed immediately
+        if (typeof window.markAutoLoadCompleted === 'function') {
+            window.markAutoLoadCompleted();
+        }
+    }
 }
 
 function getTenantId() {
@@ -108,54 +126,12 @@ function getTenantId() {
     return tenantDropdown ? tenantDropdown.value.trim() : '';
 }
 
-// Loading indicator functions
-function showLoadingIndicator(message = 'Loading...') {
-    let overlay = document.getElementById('loadingOverlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'loadingOverlay';
-        overlay.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            color: #00ff41;
-            font-family: Consolas, monospace;
-            font-size: 18px;
-        `;
-        document.body.appendChild(overlay);
-    }
-    overlay.innerHTML = `<div style="text-align: center;">
-        <div>${message}</div>
-        <div class="progress-bar"><div class="progress-bar-inner"></div></div>
-    </div>`;
-    overlay.style.display = 'flex';
-    // Add CSS animation if not already present
-    if (!document.getElementById('loadingStyles')) {
-        const style = document.createElement('style');
-        style.id = 'loadingStyles';
-        style.textContent = `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
-        document.head.appendChild(style);
-    }
-}
-
-function hideLoadingIndicator() {
-    const overlay = document.getElementById('loadingOverlay');
-    if (overlay) {
-        overlay.style.display = 'none';
-    }
-}
+// Use centralized loading system from base.js
 
 async function loadQueries() {
     const tenantId = getTenantId();
     if (!tenantId) return;
-    showLoadingIndicator('Loading Queries...');
+    window.showContentLoading('Loading Queries...');
     try {
         const url = `https://${window.FUNCURL}/api/MDEHuntManager?code=${window.FUNCKEY}`;
         const payload = { TenantId: tenantId, Function: 'GetQueries' };
@@ -177,14 +153,13 @@ async function loadQueries() {
             queries = result.value;
         } else if (Array.isArray(result.queries)) {
             queries = result.queries;
-        }
-        allQueries = queries;
+        }        allQueries = queries;
         renderQueriesTable(allQueries);
     } catch (error) {
         allQueries = [];
         renderQueriesTable(allQueries);
     } finally {
-        hideLoadingIndicator();
+        window.hideContentLoading();
     }
 }
 
@@ -292,8 +267,7 @@ async function saveNewQuery() {
             alert('Please fill in all fields.');
             return;
         }
-        showLoadingIndicator('Saving Query...');
-        try {
+        showLoadingIndicator('Saving Query...');        try {
             const url = `https://${window.FUNCURL}/api/MDEHuntManager?code=${window.FUNCKEY}`;
             const payload = { TenantId: tenantId, Function: 'AddQuery', QueryName: queryName, Query: queryText };
             const controller = new AbortController();
@@ -312,7 +286,7 @@ async function saveNewQuery() {
         } catch (error) {
             alert('Error saving query: ' + error.message);
         } finally {
-            hideLoadingIndicator();
+            window.hideContentLoading();
         }
     } finally {
         if (saveBtn && spinner && saveText) {
@@ -327,7 +301,7 @@ window.removeQuery = async function(queryName) {
     const tenantId = getTenantId();
     if (!tenantId || !queryName) return;
     if (!confirm(`Remove query "${queryName}"?`)) return;
-    showLoadingIndicator('Removing Query...');
+    window.showContentLoading('Removing Query...');
     try {
         const url = `https://${window.FUNCURL}/api/MDEHuntManager?code=${window.FUNCKEY}`;
         const payload = { TenantId: tenantId, Function: 'UndoQuery', QueryName: queryName };
@@ -345,7 +319,7 @@ window.removeQuery = async function(queryName) {
     } catch (error) {
         alert('Error removing query: ' + error.message);
     } finally {
-        hideLoadingIndicator();
+        window.hideContentLoading();
     }
 }
 
@@ -355,9 +329,8 @@ window.runQueryNow = async function(queryName) {
         console.warn('Missing required parameters:', { tenantId, queryName });
         return;
     }
-    
-    console.log('Running query:', { queryName, tenantId });
-    showLoadingIndicator('Running Query...');
+      console.log('Running query:', { queryName, tenantId });
+    window.showContentLoading('Running Query...');
     
     try {
         const url = `https://${window.FUNCURL}/api/MDEHunter?code=${window.FUNCKEY}`;
@@ -451,11 +424,10 @@ window.runQueryNow = async function(queryName) {
                 console.warn('Error scrolling to results:', scrollError);
             }
         } else {
-            // Fallback to alert
-            alert('Error running query: ' + error.message + '\nCheck browser console for details.');
+            // Fallback to alert            alert('Error running query: ' + error.message + '\nCheck browser console for details.');
         }
     } finally {
-        hideLoadingIndicator();
+        window.hideContentLoading();
     }
 }
 
@@ -504,6 +476,11 @@ async function loadTenants() {
     try {
         console.log('Loading tenants from backend...');
         
+        // Update platform loading progress
+        if (typeof window.updatePlatformLoadingProgress === 'function') {
+            window.updatePlatformLoadingProgress('Loading tenants for Hunt Manager...', 30);
+        }
+        
         // Add timeout to handle Azure Function cold starts
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
@@ -516,6 +493,10 @@ async function loadTenants() {
         
         if (!response.ok) {
             console.error('HTTP error response:', response.status, response.statusText);
+            // Mark tenants as loaded even on error
+            if (typeof window.markTenantsLoaded === 'function') {
+                window.markTenantsLoaded();
+            }
             return;
         }
         
@@ -533,12 +514,26 @@ async function loadTenants() {
         } else {
             const errorMessage = data.Message || data.error || 'Unknown error occurred';
             console.error('Error loading tenants:', errorMessage);
+            // Mark tenants as loaded even on error
+            if (typeof window.markTenantsLoaded === 'function') {
+                window.markTenantsLoaded();
+            }
             return;
         }
         
         populateTenantDropdown(tenants);
+        
+        // Mark tenants as loaded for platform loading system
+        if (typeof window.markTenantsLoaded === 'function') {
+            window.markTenantsLoaded();
+        }
+        
     } catch (error) {
         console.error('Error fetching tenants:', error);
+        // Mark tenants as loaded even on error
+        if (typeof window.markTenantsLoaded === 'function') {
+            window.markTenantsLoaded();
+        }
     }
 }
 

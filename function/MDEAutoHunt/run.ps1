@@ -1,5 +1,4 @@
 # MDEAutoHunt Function App
-# 1.6.0
 
 using namespace System.Net
 

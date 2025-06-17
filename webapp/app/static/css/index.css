@@ -562,3 +562,75 @@ div[class*="summary"] {
 .gridjs-tr.flash {
     animation: row-flash 0.7s;
 }
+
+/* Master Tenant Device Group Styles */
+#deviceGroupBar {
+    background: linear-gradient(135deg, #0d1f10 0%, #1a2b1f 100%);
+    border-bottom: 2px solid #00ff41;
+    box-shadow: 0 2px 4px rgba(0, 255, 65, 0.1);
+}
+
+#deviceGroupBar .toolbar-left {
+    align-items: center;
+    gap: 1rem;
+}
+
+#deviceGroupDropdown {
+    background: #1a1a1a;
+    border: 2px solid #00ff41;
+    color: #7fff7f;
+    font-family: Consolas, monospace;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0, 255, 65, 0.2);
+}
+
+#deviceGroupDropdown:focus {
+    outline: none;
+    border-color: #1aff5c;
+    box-shadow: 0 0 0 2px rgba(26, 255, 92, 0.3);
+}
+
+#refreshDeviceGroups {
+    background-color: #006600;
+    border-color: #006600;
+    font-size: 0.8em;
+    padding: 0.3em 0.8em;
+}
+
+#refreshDeviceGroups:hover {
+    background-color: #00aa00;
+    border-color: #00aa00;
+}
+
+#deviceGroupInfo {
+    font-style: italic;
+    color: #aaa;
+    font-size: 0.9em;
+}
+
+/* Master Tenant Indicators */
+.master-tenant-badge {
+    background: linear-gradient(135deg, #00ff41 0%, #1aff5c 100%);
+    color: #101c11;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.7em;
+    font-weight: bold;
+    margin-left: 4px;
+}
+
+/* Tenant Modal Master Tenant Checkbox */
+#newTenantMasterFlag {
+    accent-color: #00ff41;
+    transform: scale(1.2);
+}
+
+#newTenantMasterFlag:checked {
+    background-color: #00ff41;
+}
+
+/* Master Tenant visual enhancement in tenant list */
+.tenant-item.master-tenant {
+    border-left: 4px solid #00ff41;
+    background: linear-gradient(135deg, #0a1a0a 0%, #0f2f0f 100%);
+}

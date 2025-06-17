@@ -1,4 +1,5 @@
 import os
+import json
 import requests
 from flask import Blueprint, render_template, request, current_app, flash, redirect, url_for, jsonify, render_template_string
 
@@ -33,8 +34,7 @@ def call_azure_function(function_name, payload, read_timeout=3):
         except requests.exceptions.JSONDecodeError:
             # Log detailed error information for debugging
             current_app.logger.error(f"Failed to decode JSON response from {function_name}. Status: {resp.status_code}. Response text (first 1000 chars): {resp.text[:1000]}")
-            
-            # Check what type of response we got
+              # Check what type of response we got
             response_preview = resp.text[:200] if resp.text else "Empty response"
             
             if resp.text.strip().startswith('<!DOCTYPE') or resp.text.strip().startswith('<html'):
@@ -55,7 +55,12 @@ def call_azure_function(function_name, payload, read_timeout=3):
     except requests.exceptions.HTTPError as http_err:
         error_text = http_err.response.text[:500] if http_err.response else 'No response body'
         status_code = http_err.response.status_code if http_err.response else 'Unknown'
-        current_app.logger.error(f"HTTP error occurred while calling {function_name}: {http_err}. Status: {status_code}. Response: {error_text}")
+        
+        if http_err.response:
+            current_app.logger.error(f"HTTP error - Response headers: {dict(http_err.response.headers)}")
+            current_app.logger.error(f"HTTP error - Response status code: {http_err.response.status_code}")
+            current_app.logger.error(f"HTTP error - Response text length: {len(http_err.response.text) if http_err.response.text else 0}")
+        
         return {'error': f"HTTP error: {status_code}", 'details': error_text}
     except requests.exceptions.RequestException as req_err: 
         current_app.logger.error(f"Request exception occurred while calling {function_name}: {req_err}")
@@ -68,7 +73,6 @@ def call_azure_function(function_name, payload, read_timeout=3):
 def index():
     result = None
     if request.method == 'POST':
-        # Example: Call Core function with user input
         core_input = request.form.get('core_input')
         payload = {'input': core_input}
         result = call_azure_function('MDEAutomatorapp-Core', payload)
@@ -178,6 +182,12 @@ def send_command():
         current_app.logger.error(f"Missing or empty 'TenantId' for action '{specific_action}'. Payload: {azure_function_payload}")
         return jsonify({'error': f"TenantId is required and cannot be empty for action: {specific_action}."}), 400
 
+    # Handle device group targeting for master tenants
+    device_group = azure_function_payload.get('DeviceGroup')
+    if device_group:
+        current_app.logger.info(f"Device group targeting enabled for action '{specific_action}': {device_group}")
+        azure_function_payload['DeviceGroup'] = device_group
+
     # DeviceIds validation (exempt when allDevices=true or for specific actions)
     device_ids = azure_function_payload.get('DeviceIds')
     all_devices = azure_function_payload.get('allDevices', False)
@@ -234,15 +244,6 @@ def actionmanager():
         FUNCKEY=current_app.config.get('FUNCKEY')
     )
 
-
-
-@main_bp.route('/actionmanager-test')
-def actionmanager_test():
-    """Test version of ActionManager using mock data"""
-    return render_template('ActionManagerTest.html', 
-                         FUNCURL=current_app.config.get('FUNCURL'), 
-                         FUNCKEY=current_app.config.get('FUNCKEY'))
-
 @main_bp.route('/api/actions', methods=['POST'])
 def manage_actions():
     """Handle action management requests (GetActions, UndoActions)"""
@@ -273,78 +274,11 @@ def manage_actions():
     
     result = call_azure_function('MDEAutomator', azure_function_payload)
     
-    # Debug: Log the result structure
-    current_app.logger.info(f"Azure Function result type: {type(result)}")
-    current_app.logger.info(f"Azure Function result content: {result}")
-    
     if isinstance(result, dict) and 'error' in result:
         current_app.logger.error(f"Action management failed: {result}")
         return jsonify({'error': result['error'], 'details': result.get('details', '')}), 500
     
     return jsonify({'message': f'{function_name} completed successfully!', 'result': result})
-
-@main_bp.route('/api/actions-mock', methods=['POST'])
-def manage_actions_mock():
-    """Mock endpoint for testing ActionManager functionality"""
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'Request must be JSON and not empty.'}), 400
-
-    function_name = data.get('Function')
-    
-    if function_name == 'GetActions':
-        # Mock response simulating Azure Function GetActions response
-        mock_actions = [
-            {
-                "Id": "12345678-1234-1234-1234-123456789012",
-                "Type": "Isolate",
-                "Title": "Isolate machine for investigation",
-                "Status": "Pending",
-                "ComputerDnsName": "WORKSTATION-01.contoso.com",
-                "Requestor": "admin@contoso.com",
-                "RequestorComment": "Suspicious activity detected",
-                "CreationDateTimeUtc": "2024-01-15T14:30:00Z",
-                "LastUpdateDateTimeUtc": "2024-01-15T14:35:00Z",
-                "RequestSource": "API"
-            },
-            {
-                "Id": "87654321-4321-4321-4321-210987654321",
-                "Type": "RunAntivirusScan",
-                "Title": "Run full antivirus scan",
-                "Status": "Succeeded",
-                "ComputerDnsName": "SERVER-02.contoso.com",
-                "Requestor": "security@contoso.com",
-                "RequestorComment": "Scheduled security scan",
-                "CreationDateTimeUtc": "2024-01-15T10:00:00Z",
-                "LastUpdateDateTimeUtc": "2024-01-15T12:45:00Z",
-                "RequestSource": "Portal"
-            },
-            {
-                "Id": "11111111-2222-3333-4444-555555555555",
-                "Type": "CollectInvestigationPackage",
-                "Title": "Collect investigation package",
-                "Status": "Failed",
-                "ComputerDnsName": "LAPTOP-03.contoso.com",
-                "Requestor": "analyst@contoso.com",
-                "RequestorComment": "Investigation required",
-                "CreationDateTimeUtc": "2024-01-15T08:15:00Z",
-                "LastUpdateDateTimeUtc": "2024-01-15T08:20:00Z",
-                "RequestSource": "API"
-            }
-        ]
-        
-        return jsonify({
-            'message': 'GetActions completed successfully!',
-            'result': mock_actions
-        })
-    
-    elif function_name == 'UndoActions':
-        return jsonify({
-            'message': 'UndoActions completed successfully!',
-            'result': {'message': 'All pending actions have been cancelled', 'count': 1}
-        })
-    
-    return jsonify({'error': 'Function must be GetActions or UndoActions.'}), 400
 
 # Tenant Management API Endpoints
 
@@ -368,6 +302,7 @@ def get_tenants():
                     {
                         'TenantId': 'test-tenant-1',
                         'ClientName': 'Test Client 1',
+                        'IsMasterTenant': True,
                         'Enabled': True,
                         'AddedDate': '2025-01-01T00:00:00.000Z',
                         'AddedBy': 'MockData'
@@ -375,23 +310,23 @@ def get_tenants():
                     {
                         'TenantId': 'test-tenant-2', 
                         'ClientName': 'Test Client 2',
+                        'IsMasterTenant': False,
                         'Enabled': True,
                         'AddedDate': '2025-01-02T00:00:00.000Z',
                         'AddedBy': 'MockData'
                     }
-                ],
-                'Count': 2,
+                ],                'Count': 2,
                 'Timestamp': '2025-05-31T00:00:00.000Z'
             }
             return jsonify(mock_response)
-          # Call the MDEAutoDB function to get tenant IDs
+            
+        # Call the MDEAutoDB function to get tenant IDs
         response = call_azure_function('MDEAutoDB', {
             'Function': 'GetTenantIds'
         }, read_timeout=60)  # Increased timeout for tenant operations to handle cold starts
         
         current_app.logger.info(f"Azure Function response: {response}")
-        
-        # Handle timeout/initiated status
+          # Handle timeout/initiated status
         if response.get('status') == 'initiated':
             current_app.logger.warning("Azure Function timed out but may still be processing")
             return jsonify({'error': 'Azure Function request timed out. Please try again.'}), 408
@@ -401,6 +336,13 @@ def get_tenants():
             return jsonify({'error': response['error']}), 500
             
         current_app.logger.info(f"Successfully retrieved {response.get('Count', 0)} tenants")
+        
+        # Convert MasterTenant field to IsMasterTenant for frontend compatibility
+        if 'TenantIds' in response and isinstance(response['TenantIds'], list):
+            for tenant in response['TenantIds']:
+                if 'MasterTenant' in tenant:
+                    tenant['IsMasterTenant'] = tenant.pop('MasterTenant')
+        
         return jsonify(response)
         
     except Exception as e:
@@ -417,6 +359,7 @@ def save_tenant():
             
         tenant_id = data.get('TenantId', '').strip()
         client_name = data.get('ClientName', '').strip()
+        is_master_tenant = data.get('IsMasterTenant', False)
         
         if not tenant_id:
             return jsonify({'error': 'TenantId is required'}), 400
@@ -424,7 +367,7 @@ def save_tenant():
         if not client_name:
             return jsonify({'error': 'ClientName is required'}), 400
             
-        current_app.logger.info(f"Saving tenant: {tenant_id} for client: {client_name}")
+        current_app.logger.info(f"Saving tenant: {tenant_id} for client: {client_name}, master: {is_master_tenant}")
         
         # Check if Azure Function is available
         func_url_base = current_app.config.get('FUNCURL')
@@ -437,14 +380,15 @@ def save_tenant():
                 'Status': 'Success',
                 'Message': f"Mock: Tenant ID '{tenant_id}' saved to storage table (Azure Function not configured)",
                 'TenantId': tenant_id,
+                'IsMasterTenant': is_master_tenant,
                 'Timestamp': '2025-05-31T00:00:00.000Z'
             }
-            return jsonify(mock_response)
-          # Call the MDEAutoDB function to save tenant ID
+            return jsonify(mock_response)        # Call the MDEAutoDB function to save tenant ID
         response = call_azure_function('MDEAutoDB', {
             'Function': 'SaveTenantId',
             'TenantId': tenant_id,
-            'ClientName': client_name
+            'ClientName': client_name,
+            'MasterTenant': 'true' if is_master_tenant else 'false'
         }, read_timeout=60)  # Increased timeout for tenant operations to handle cold starts
         
         if 'error' in response:
@@ -471,8 +415,7 @@ def delete_tenant(tenant_id):
         func_url_base = current_app.config.get('FUNCURL')
         func_key = current_app.config.get('FUNCKEY')
         
-        if not func_url_base or not func_key:
-            # Return mock success response when Azure Function is not available
+        if not func_url_base or not func_key:            # Return mock success response when Azure Function is not available
             current_app.logger.warning("FUNCURL or FUNCKEY not configured, returning mock success")
             mock_response = {
                 'Status': 'Success',
@@ -481,7 +424,8 @@ def delete_tenant(tenant_id):
                 'Timestamp': '2025-05-31T00:00:00.000Z'
             }
             return jsonify(mock_response)
-          # Call the MDEAutoDB function to remove tenant ID
+            
+        # Call the MDEAutoDB function to remove tenant ID
         response = call_azure_function('MDEAutoDB', {
             'Function': 'RemoveTenantId',
             'TenantId': tenant_id.strip()
@@ -667,355 +611,6 @@ def huntmanager():
         FUNCKEY=current_app.config.get('FUNCKEY')
     )
 
-@main_bp.route('/test-actions')
-def test_actions():
-    """Test endpoint to debug the actions API response"""
-    return render_template_string('''
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Test Actions API</title>
-</head>
-<body>
-    <h1>Test Actions API</h1>
-    <input type="text" id="tenantId" placeholder="Tenant ID" style="width: 300px;">
-    <button onclick="testAPI()">Test API</button>
-    <div id="output" style="margin-top: 20px; padding: 20px; background: #f0f0f0; white-space: pre-wrap; font-family: monospace;"></div>
-    
-    <script>
-    async function testAPI() {
-        const tenantId = document.getElementById('tenantId').value.trim();
-        const output = document.getElementById('output');
-        
-        if (!tenantId) {
-            output.textContent = 'Please enter a tenant ID';
-            return;
-        }
-        
-        output.textContent = 'Testing...';
-        
-        try {
-            const res = await fetch('/api/actions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    TenantId: tenantId,
-                    Function: 'GetActions'
-                })
-            });
-            
-            const responseText = await res.text();
-            
-            output.textContent = `Status: ${res.status}\\n\\nRaw Response:\\n${responseText}\\n\\n`;
-            
-            try {
-                const parsed = JSON.parse(responseText);
-                output.textContent += `Parsed JSON:\\n${JSON.stringify(parsed, null, 2)}\\n\\n`;
-                output.textContent += `Type of result: ${typeof parsed.result}\\n`;
-                output.textContent += `Is result array: ${Array.isArray(parsed.result)}\\n`;
-                
-                if (parsed.result && typeof parsed.result === 'string') {
-                    try {
-                        const nestedParsed = JSON.parse(parsed.result);
-                        output.textContent += `\\nNested Parsed:\\n${JSON.stringify(nestedParsed, null, 2)}`;
-                    } catch (e) {
-                        output.textContent += `\\nFailed to parse result as JSON: ${e.message}`;
-                    }
-                }
-            } catch (e) {
-                output.textContent += `Failed to parse as JSON: ${e.message}`;
-            }
-            
-        } catch (error) {
-            output.textContent = `Error: ${error.message}`;
-        }
-    }
-    </script>
-</body>
-</html>
-    ''')
-
-@main_bp.route('/test-modal')
-def test_modal():
-    """Test page for modal functionality"""
-    return render_template_string('''
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Test Modal</title>
-    <style>
-        body { font-family: Arial, sans-serif; padding: 20px; background: #1a1a1a; color: #00ff41; }
-        button { padding: 10px 20px; margin: 10px; background: #00ff41; color: #000; border: none; cursor: pointer; }
-        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); }
-        .modal-content { background-color: #1a1a1a; border: 2px solid #00ff41; margin: 5% auto; padding: 20px; width: 60%; max-width: 600px; border-radius: 8px; }
-        .close { color: #00ff41; font-size: 28px; font-weight: bold; cursor: pointer; float: right; }
-        #output { background: #0a1a0a; border: 1px solid #00ff41; padding: 15px; margin: 10px 0; border-radius: 5px; }
-    </style>
-</head>
-<body>
-    <h1>Modal Test</h1>
-    
-    <button id="openModalBtn">Open Modal</button>
-    <button onclick="testTenantAPI()">Test Tenant API</button>
-    <button onclick="window.location.href='/'">Back to Main App</button>
-    
-    <div id="output"></div>
-
-    <!-- Modal -->
-    <div id="testModal" class="modal">
-        <div class="modal-content">
-            <span class="close">&times;</span>
-            <h2>Test Modal</h2>
-            <p>This is a test modal.</p>
-            <button id="closeModalBtn">Close</button>
-        </div>
-    </div>
-
-    <script>
-        function log(message) {
-            const output = document.getElementById('output');
-            output.innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + message + '</div>';
-        }
-
-        // Test modal functionality
-        const modal = document.getElementById('testModal');
-        const openBtn = document.getElementById('openModalBtn');
-        const closeBtn = document.getElementById('closeModalBtn');
-        const closeSpan = document.querySelector('.close');
-
-        openBtn.addEventListener('click', function() {
-            log('Open button clicked');
-            modal.style.display = 'block';
-            log('Modal displayed');
-        });
-
-        closeBtn.addEventListener('click', function() {
-            log('Close button clicked');
-            modal.style.display = 'none';
-            log('Modal hidden');
-        });
-
-        closeSpan.addEventListener('click', function() {
-            log('Close X clicked');
-            modal.style.display = 'none';
-            log('Modal hidden');
-        });
-
-        // Test tenant API
-        async function testTenantAPI() {
-            try {
-                log('Testing tenant API...');
-                const response = await fetch('/api/tenants');
-                log('Response status: ' + response.status);
-                const data = await response.json();
-                log('Response data: ' + JSON.stringify(data, null, 2));
-                
-                if (data.Status === 'Success' && data.TenantIds) {
-                    log('Found ' + data.TenantIds.length + ' tenants');
-                    data.TenantIds.forEach((tenant, index) => {
-                        log('Tenant ' + (index + 1) + ': ' + tenant.TenantId + ' - ' + tenant.ClientName);
-                    });
-                }
-            } catch (error) {
-                log('ERROR: ' + error.message);
-            }
-        }
-
-        log('Page loaded, event listeners added');
-    </script>
-</body>
-</html>
-    ''')
-
-@main_bp.route('/test-tenant-api')
-def test_tenant_api():
-    """Test page for tenant API"""
-    return render_template_string('''
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Test Tenant API</title>
-    <style>
-        body { font-family: Arial, sans-serif; padding: 20px; background: #1a1a1a; color: #00ff41; }
-        button { padding: 10px 20px; margin: 10px; background: #00ff41; color: #000; border: none; cursor: pointer; }
-        .response { background: #0a1a0a; border: 1px solid #00ff41; padding: 15px; margin: 10px 0; border-radius: 5px; }
-        pre { white-space: pre-wrap; word-wrap: break-word; }
-    </style>
-</head>
-<body>
-    <h1>Tenant API Test</h1>
-    
-    <div>
-        <button onclick="testGetTenants()">Test GET /api/tenants</button>
-        <button onclick="testAddTenant()">Test POST /api/tenants</button>
-        <button onclick="testDeleteTenant()">Test DELETE /api/tenants/test-tenant-1</button>
-        <button onclick="window.location.href='/'">Back to Main App</button>
-    </div>
-    
-    <div id="results"></div>
-
-    <script>
-        async function testGetTenants() {
-            try {
-                const response = await fetch('/api/tenants');
-                const data = await response.json();
-                showResult('GET /api/tenants', response.status, data);
-            } catch (error) {
-                showResult('GET /api/tenants', 'ERROR', error.message);
-            }
-        }
-
-        async function testAddTenant() {
-            try {
-                const payload = {
-                    TenantId: 'test-tenant-new',
-                    ClientName: 'New Test Client'
-                };
-                const response = await fetch('/api/tenants', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await response.json();
-                showResult('POST /api/tenants', response.status, data);
-            } catch (error) {
-                showResult('POST /api/tenants', 'ERROR', error.message);
-            }
-        }
-
-        async function testDeleteTenant() {
-            try {
-                const response = await fetch('/api/tenants/test-tenant-1', {
-                    method: 'DELETE'
-                });
-                const data = await response.json();
-                showResult('DELETE /api/tenants/test-tenant-1', response.status, data);
-            } catch (error) {
-                showResult('DELETE /api/tenants/test-tenant-1', 'ERROR', error.message);
-            }
-        }
-
-        function showResult(endpoint, status, data) {
-            const resultsDiv = document.getElementById('results');
-            const resultDiv = document.createElement('div');
-            resultDiv.className = 'response';
-            resultDiv.innerHTML = `
-                <h3>${endpoint}</h3>
-                <p><strong>Status:</strong> ${status}</p>
-                <pre>${JSON.stringify(data, null, 2)}</pre>
-            `;
-            resultsDiv.appendChild(resultDiv);
-        }
-    </script>
-</body>
-</html>
-    ''')
-
-@main_bp.route('/debug-actions')
-def debug_actions():
-    """Debug page to manually test the ActionManager functionality"""
-    return render_template_string('''
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Debug ActionManager</title>
-    <style>
-        body { font-family: monospace; margin: 20px; background: #001100; color: #00ff41; }
-        button { background: #004400; color: #00ff41; border: 1px solid #00ff41; padding: 10px; margin: 5px; cursor: pointer; }
-        button:hover { background: #006600; }
-        .output { background: #000; border: 1px solid #00ff41; padding: 10px; margin: 10px 0; white-space: pre-wrap; max-height: 400px; overflow-y: auto; }
-        .error { color: #ff4444; }
-        .success { color: #44ff44; }
-    </style>
-</head>
-<body>
-    <h1>ActionManager Debug Console</h1>
-    
-    <button onclick="testMockAPI()">Test Mock API</button>
-    <button onclick="testUndoAPI()">Test Undo API</button>
-    <button onclick="clearOutput()">Clear Output</button>
-    
-    <div id="output" class="output">Debug output will appear here...</div>
-    
-    <script>
-    function log(message, type = 'info') {
-        const output = document.getElementById('output');
-        const timestamp = new Date().toLocaleTimeString();
-        const className = type === 'error' ? 'error' : (type === 'success' ? 'success' : '');
-        output.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
-        output.scrollTop = output.scrollHeight;
-    }
-    
-    function clearOutput() {
-        document.getElementById('output').innerHTML = '';
-    }
-    
-    async function testMockAPI() {
-        log('Testing mock GetActions API...');
-        
-        try {
-            const response = await fetch('/api/actions-mock', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    TenantId: 'test-tenant',
-                    Function: 'GetActions'
-                })
-            });
-            
-            log(`Response status: ${response.status}`);
-            
-            const data = await response.json();
-            log(`Response data: ${JSON.stringify(data, null, 2)}`, 'success');
-            
-            if (data.result && Array.isArray(data.result)) {
-                log(`Found ${data.result.length} actions in response`, 'success');
-                data.result.forEach((action, index) => {
-                    log(`Action ${index + 1}: ${action.Type} - ${action.Status} - ${action.ComputerDnsName}`);
-                });
-            }
-            
-        } catch (error) {
-            log(`Error: ${error.message}`, 'error');
-        }
-    }
-    
-    async function testUndoAPI() {
-        log('Testing mock UndoActions API...');
-        
-        try {
-            const response = await fetch('/api/actions-mock', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    TenantId: 'test-tenant',
-                    Function: 'UndoActions'
-                })
-            });
-            
-            log(`Response status: ${response.status}`);
-            
-            const data = await response.json();
-            log(`Response data: ${JSON.stringify(data, null, 2)}`, 'success');
-            
-        } catch (error) {
-            log(`Error: ${error.message}`, 'error');
-        }
-    }
-    
-    // Auto-run initial test
-    window.addEventListener('DOMContentLoaded', () => {
-        log('Debug page loaded, ready for testing...');
-    });    </script>
-</body>
-</html>
-    ''')
-
-@main_bp.route('/debug-tenants')
-def debug_tenants():
-    """Debug page for tenant management functionality"""
-    return render_template_string(open('debug_tenants.html', 'r').read())
-
 # Incident Management endpoints for IncidentManager
 
 @main_bp.route('/api/incidents', methods=['POST'])
@@ -1178,6 +773,69 @@ def add_incident_comment():
         current_app.logger.error(f"Exception in add_incident_comment: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@main_bp.route('/api/incidents/alerts', methods=['POST'])
+def get_incident_alerts():
+    """Get alerts for a specific incident"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request must be JSON and not empty.'}), 400
+        
+        tenant_id = data.get('tenantId')
+        incident_id = data.get('incidentId')
+        
+        if not tenant_id:
+            return jsonify({'error': 'tenantId is required'}), 400
+            
+        if not incident_id:
+            return jsonify({'error': 'incidentId is required'}), 400
+        
+        current_app.logger.info(f"Getting alerts for incident {incident_id} in tenant: {tenant_id}")
+        
+        # Call Azure Function for getting incident alerts with extended timeout
+        response = call_azure_function('MDEIncidentManager', {
+            'TenantId': tenant_id,
+            'Function': 'GetIncidentAlerts',
+            'IncidentIds': [incident_id]
+        }, read_timeout=30)  # Extended timeout for alerts processing
+        
+        current_app.logger.info(f"Azure Function response: {response}")
+        
+        # Handle errors from Azure Function
+        if 'error' in response:
+            current_app.logger.error(f"Error getting incident alerts: {response['error']}")
+            return jsonify({'error': response['error']}), 500
+        elif isinstance(response, dict) and response.get('Status') == 'Error':
+            error_msg = response.get('Message', 'Unknown error from Azure Function')
+            current_app.logger.error(f"Error getting incident alerts: {error_msg}")
+            return jsonify({'error': error_msg}), 500
+              # Handle response format from GetIncidentAlerts function
+        alerts = []
+        if isinstance(response, list):
+            alerts = response
+        elif isinstance(response, dict):
+            # Handle the specific response format from Azure Function
+            if response.get('Status') == 'Success' and 'Result' in response:
+                result = response.get('Result', {})
+                # Extract alerts from the Result object
+                alerts = result.get('Alerts', [])
+            else:
+                # Fallback to other possible formats
+                alerts = response.get('alerts', response.get('Alerts', response.get('value', [])))
+        
+        current_app.logger.info(f"Extracted alerts count: {len(alerts) if isinstance(alerts, list) else 'Not a list'}")
+        current_app.logger.debug(f"Alerts data: {alerts}")
+        
+        return jsonify({
+            'success': True,
+            'alerts': alerts,
+            'incidentId': incident_id
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Exception in get_incident_alerts: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 @main_bp.route('/incidentmanager', methods=['GET'])
 def incidentmanager():
     return render_template(
@@ -1185,3 +843,103 @@ def incidentmanager():
         FUNCURL=current_app.config.get('FUNCURL'),
         FUNCKEY=current_app.config.get('FUNCKEY')
     )
+
+@main_bp.route('/api/device-groups/<tenant_id>')
+def fetch_device_groups(tenant_id):
+    """Get device groups for a tenant to populate the device group filter dropdown"""
+    try:
+        current_app.logger.info(f"Getting device groups for tenant: {tenant_id}")
+        
+        # Validate tenant ID format
+        if not tenant_id or not tenant_id.strip():
+            current_app.logger.error(f"Invalid tenant ID provided: '{tenant_id}'")
+            return jsonify({'error': 'Invalid tenant ID provided'}), 400
+        
+        # Check if FUNCURL and FUNCKEY are configured
+        func_url = current_app.config.get('FUNCURL')
+        func_key = current_app.config.get('FUNCKEY')
+        
+        if not func_url or not func_key:
+            current_app.logger.error("FUNCURL or FUNCKEY not configured")
+            return jsonify({'error': 'Azure Function configuration missing'}), 500
+        
+        # Prepare the payload for the Azure Function
+        azure_function_payload = {
+            'Function': 'GetDeviceGroups',
+            'TenantId': tenant_id.strip()
+        }
+        
+        current_app.logger.info(f"Calling MDETIManager function with payload: {azure_function_payload}")
+        
+        # Call the Azure Function with longer timeout for device group retrieval
+        result = call_azure_function('MDETIManager', azure_function_payload, read_timeout=30)
+        
+        current_app.logger.info(f"Azure Function result type: {type(result)}, content: {result}")
+        
+        if result is None:
+            current_app.logger.error(f"No response from Azure Function for tenant {tenant_id}")
+            return jsonify({'error': 'No response from Azure Function'}), 500
+        
+        # Handle timeout/initiated status
+        if result.get('status') == 'initiated':
+            current_app.logger.info(f"Azure Function initiated for tenant {tenant_id}")
+            return jsonify({'message': 'Request initiated, processing'}), 202
+        
+        # Handle Azure Function errors
+        if 'error' in result:
+            error_details = result.get('details', 'No additional details')
+            current_app.logger.error(f"Azure Function error for tenant {tenant_id}: {result['error']}, details: {error_details}")
+            return jsonify({'error': result['error'], 'details': error_details}), 500
+        
+        # Handle function execution failures
+        if isinstance(result, dict) and result.get('status') == 'failed':
+            failure_reason = result.get('reason', 'Unknown reason')
+            current_app.logger.error(f"Azure Function execution failed for tenant {tenant_id}: {failure_reason}")
+            return jsonify({'error': 'Azure Function execution failed', 'reason': failure_reason}), 500
+        
+        # Process successful response - handle multiple formats
+        try:
+            device_groups = []
+            
+            current_app.logger.debug(f"Processing result for tenant {tenant_id}: {result}")
+            
+            # Handle different response formats from Azure Function
+            if isinstance(result, list):
+                # Direct array response (expected format from MDETIManager)
+                device_groups = result
+                current_app.logger.info(f"Found {len(device_groups)} device groups in direct array response for tenant {tenant_id}")
+            elif isinstance(result, dict):
+                if result.get('Status') == 'Success':
+                    # New format: {"Status": "Success", "DeviceGroups": [...]}
+                    device_groups = result.get('DeviceGroups', [])
+                    current_app.logger.info(f"Found {len(device_groups)} device groups in Success response for tenant {tenant_id}")
+                else:
+                    # Legacy format: {"deviceGroups": [...]}
+                    device_groups = result.get('deviceGroups', [])
+                    current_app.logger.info(f"Found {len(device_groups)} device groups in legacy response for tenant {tenant_id}")
+            else:
+                current_app.logger.error(f"Unexpected result type for tenant {tenant_id}: {type(result)}")
+                return jsonify({'error': f'Unexpected response type: {type(result)}'}), 500
+            
+            current_app.logger.info(f"Returning {len(device_groups)} device groups for tenant {tenant_id}")
+            
+            # Return in the format expected by TI Manager
+            return jsonify({
+                'Status': 'Success',
+                'DeviceGroups': device_groups
+            })
+            
+        except Exception as e:
+            current_app.logger.error(f"Error processing device groups for tenant {tenant_id}: {e}", exc_info=True)
+            return jsonify({'error': 'Failed to process device groups', 'details': str(e)}), 500
+    
+    except Exception as e:
+        current_app.logger.error(f"Unexpected error in fetch_device_groups for tenant {tenant_id}: {e}", exc_info=True)
+        return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
+
+# Test route to verify API is working
+@main_bp.route('/api/test')
+def test_api():
+    """Simple test route to verify API is working"""
+    return jsonify({'status': 'ok', 'message': 'API is working'})
+
