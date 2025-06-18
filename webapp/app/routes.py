@@ -1,5 +1,6 @@
 import os
 import json
+import base64
 import requests
 from flask import Blueprint, render_template, request, current_app, flash, redirect, url_for, jsonify, render_template_string
 
@@ -125,12 +126,13 @@ def send_command():
         target_filename = request.form.get('TargetFileName') or (file.filename if file else None)
         if not function_name_for_url or not specific_action or not tenant_id or not file or not target_filename:
             return jsonify({'error': 'Missing required fields for file upload.'}), 400
+        
         file_content = file.read()  # bytes
-        # Build payload for PowerShell backend (fileContent as bytes, TargetFileName as string)
+        # Build payload for PowerShell backend (fileContent as base64 encoded string, TargetFileName as string)
         azure_function_payload = {
             'Function': specific_action,
             'TenantId': tenant_id,
-            'fileContent': list(file_content),  # Convert bytes to list of ints for JSON serialization
+            'fileContent': base64.b64encode(file_content).decode('utf-8'),  # Convert bytes to base64 string for JSON serialization
             'TargetFileName': target_filename
         }
         result = call_azure_function(function_name_for_url, azure_function_payload)

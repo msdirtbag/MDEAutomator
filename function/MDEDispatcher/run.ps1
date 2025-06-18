@@ -4,8 +4,7 @@ using namespace System.Net
 
 param($Request)
 
-try {
-    # Get request parameters
+try {    # Get request parameters
     $TenantId = Get-RequestParam -Name "TenantId" -Request $Request
     $Function = Get-RequestParam -Name "Function" -Request $Request
     $DeviceIds = Get-RequestParam -Name "DeviceIds" -Request $Request
@@ -75,10 +74,10 @@ try {
                 }
                 "UndoRestrictAppExecution" { 
                     Undo-RestrictAppExecution -token $using:token -DeviceIds $deviceId 
-                }
+                }                
                 "InvokeStopAndQuarantineFile" { 
                     Invoke-StopAndQuarantineFile -token $using:token -Sha1s $Sha1s
-                }
+                }                  
                 "InvokeMachineOffboard" { 
                     Invoke-MachineOffboard -token $using:token -DeviceIds $deviceId 
                 }

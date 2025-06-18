@@ -1,5 +1,4 @@
 # MDEOrchestrator Function App
-# 1.6.1
 
 using namespace System.Net
 
@@ -27,11 +26,16 @@ try {
     Disable-AzContextAutosave -Scope Process | Out-Null
     Connect-AzAccount -Identity -AccountId $ManagedIdentityId | Out-Null
     $subscriptionId = [System.Environment]::GetEnvironmentVariable('SUBSCRIPTION_ID', 'Process')
-    Set-AzContext -Subscription $subscriptionId -ErrorAction Stop
-
+    Set-AzContext -Subscription $subscriptionId -ErrorAction Stop  
+    
     # Early upload if fileContent and TargetFileName are present
     if ($fileContent -and $TargetFileName) {
-        $bytesToUpload = if ($fileContent -is [byte[]]) { $fileContent } else { [System.Text.Encoding]::UTF8.GetBytes($fileContent) }
+        $bytesToUpload = if ($fileContent -is [byte[]]) { 
+            $fileContent 
+        } else { 
+            # Assume fileContent is base64 encoded and decode it
+            [System.Convert]::FromBase64String($fileContent)
+        }
         $results = Invoke-UploadLR -token $token -fileContent $bytesToUpload -TargetFileName $TargetFileName
         $output = [PSCustomObject]@{
             Status = "Upload attempt finished. Check logs for details."

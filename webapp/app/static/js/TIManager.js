@@ -1848,9 +1848,12 @@ function collectDetectionFormData() {
     // Use the unified fields for alert title and description
     const alertTitle = displayName; // Use display name as alert title
     const alertDescription = description; // Use description as alert description
-    // Note: MITRE techniques and recommended actions fields have been removed from the form
-    const mitreTechniques = []; // Empty array since field was removed
-    const recommendedActions = ''; // Empty string since field was removed
+    
+    // Set default values to match PowerShell structure exactly
+    const recommendedActions = ''; // Empty string as default
+    const mitreTechniques = []; // Empty array as default
+    const identifier = 'deviceName'; // Default identifier value
+    
     const queryText = window.codeMirrorKqlEditor ? window.codeMirrorKqlEditor.getValue().trim() : '';
     
     // Validate and prepare KQL query text for JSON serialization
@@ -1891,35 +1894,34 @@ function collectDetectionFormData() {
         });
     }
     
-    // Build detection rule object to match the API template exactly
+    // Build detection rule object to match the PowerShell API body exactly
     const detectionRule = {
         "displayName": displayName,
         "isEnabled": isEnabled,
         "queryCondition": {
-            "QueryText": validatedQueryText
+            "queryText": validatedQueryText  // Use lowercase 'queryText' to match PowerShell
         },
         "schedule": {
             "period": period
         },
         "detectionAction": {
             "alertTemplate": {
+                "title": alertTitle,
+                "description": alertDescription,
+                "severity": severity.toLowerCase(), // Ensure lowercase to match PowerShell
                 "category": category,
-                "description": alertDescription || description,
-                "severity": severity,
-                "title": alertTitle || displayName,
+                "recommendedActions": recommendedActions,
+                "mitreTechniques": mitreTechniques,
                 "impactedAssets": [
                     {
                         "@odata.type": "#microsoft.graph.security.impactedDeviceAsset",
-                        "identifier": "deviceName"
+                        "identifier": identifier
                     }
                 ]
-            }
-        },
-        "organizationalScope": {
-            "scopeType": "deviceGroup",
-            "scopeNames": []
-        },
-        "responseActions": responseActions
+            },
+            "organizationalScope": null, // Set to null to match PowerShell structure
+            "responseActions": responseActions // This will be empty array by default
+        }
     };
     
     console.log('Detection rule payload:', JSON.stringify(detectionRule, null, 2));

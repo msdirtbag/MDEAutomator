@@ -16,7 +16,7 @@
     <div class="toolbar-left">
         <div class="dropdown-group" style="display: flex; align-items: center;">            <select id="tenantDropdown" class="toolbar-dropdown" style="width: 280px; margin-right: 0.5rem;">
             </select>
-            <span class="page-title-bar">Threat Intelligence Manager</span>
+            <span class="page-title-bar">Cybersecurity Threat Intelligence Manager</span>
         </div>
     </div>
 </div>
@@ -146,23 +146,22 @@
                     </div>
                     <div>
                         <label style="color: var(--text-color-light); display: block; margin-bottom: 5px; font-weight: bold;">Category *</label>
-                        <select id="detectionCategory" style="width: 100%; padding: 8px; background: #101c11; border: 1px solid #00ff41; color: #7fff7f; border-radius: 4px;" required>
-                            <option value="">Select Category</option>
+                        <select id="detectionCategory" style="width: 100%; padding: 8px; background: #101c11; border: 1px solid #00ff41; color: #7fff7f; border-radius: 4px;" required>                            <option value="">Select Category</option>
+                            <option value="Malware">Malware</option>
                             <option value="Execution">Execution</option>
-                            <option value="Persistence">Persistence</option>
-                            <option value="PrivilegeEscalation">Privilege Escalation</option>
-                            <option value="DefenseEvasion">Defense Evasion</option>
-                            <option value="CredentialAccess">Credential Access</option>
                             <option value="Discovery">Discovery</option>
-                            <option value="LateralMovement">Lateral Movement</option>
+                            <option value="Lateral Movement">Lateral Movement</option>
+                            <option value="Persistence">Persistence</option>
+                            <option value="PrivilegeEscalation">PrivilegeEscalation</option>
+                            <option value="DefenseEvasion">DefenseEvasion</option>
+                            <option value="CredentialAccess">CredentialAccess</option>
                             <option value="Collection">Collection</option>
-                            <option value="CommandAndControl">Command and Control</option>
                             <option value="Exfiltration">Exfiltration</option>
-                            <option value="Impact">Impact</option>
-                            <option value="InitialAccess">Initial Access</option>
+                            <option value="CommandAndControl">CommandAndControl</option>
+                            <option value="SuspiciousActivity">SuspiciousActivity</option>
+                            <option value="Unwanted Software">Unwanted Software</option>
+                            <option value="Ransomware">Ransomware</option>
                             <option value="Exploit">Exploit</option>
-                            <option value="SuspiciousActivity">Suspicious activity</option>
-                            <option value="UnwantedSoftware">Unwanted Software</option>
                         </select>
                     </div>
                     <div>
