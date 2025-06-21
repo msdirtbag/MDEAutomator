@@ -195,6 +195,8 @@ function Connect-MDE {
             $response = Invoke-RestMethod -Method Post -Uri $oAuthUri -Body $body -ErrorAction Stop
             $tokenString = $response.access_token
             $finalToken = ConvertTo-SecureString -String $tokenString -AsPlainText -Force
+            $ClientSecretCredential = ConvertTo-SecureString -String $plainSecret -AsPlainText -Force
+            Connect-MgGraph -ClientId $SpnId -TenantId $TenantId -ClientSecretCredential $ClientSecretCredential -NoWelcome | Out-Null
             Write-Host "Successfully obtained token using client secret"
         } catch {
             Write-Error "Failed to retrieve access token for MDE using client secret. Error: $_"

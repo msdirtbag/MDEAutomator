@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.36.1.42791",
-      "templateHash": "17131698820134623866"
+      "templateHash": "17354707476692472351"
     }
   },
   "parameters": {
@@ -1107,10 +1107,6 @@
               "value": "powershell"
             },
             {
-              "name": "AzureWebJobsStorage",
-              "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', format('stmdeauto{0}', variables('environmentid')), listKeys(resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid'))), '2024-01-01').keys[0].value, environment().suffixes.storage)]"
-            },
-            {
               "name": "AzureWebJobsStorage__accountname",
               "value": "[format('stmdeauto{0}', variables('environmentid'))]"
             },
@@ -1131,8 +1127,8 @@
               "value": "[format('https://{0}.file.{1}/', format('stmdeauto{0}', variables('environmentid')), environment().suffixes.storage)]"
             },
             {
-              "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
-              "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1}', format('stmdeauto{0}', variables('environmentid')), listKeys(resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid'))), '2024-01-01').keys[0].value)]"
+              "name": "WEBSITE_AZUREFILESCONNECTIONSTRING",
+              "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', format('stmdeauto{0}', variables('environmentid')), environment().suffixes.storage, listKeys(resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid'))), '2024-01-01').keys[0].value)]"
             },
             {
               "name": "WEBSITE_RUN_FROM_PACKAGE",

@@ -34,10 +34,8 @@ function Save-TenantIdToTable {
         }
           # Create context for AzBobbyTables - prioritize connection string authentication
         try {
-            Write-Host "Creating AzBobbyTables context for storage account: $storageAccountName"
-            
             # Prioritize connection string from AzureWebJobsStorage
-            $connectionString = [System.Environment]::GetEnvironmentVariable('AzureWebJobsStorage', 'Process')
+            $connectionString = [System.Environment]::GetEnvironmentVariable('WEBSITE_AZUREFILESCONNECTIONSTRING', 'Process')
             $context = New-AzDataTableContext -TableName "TenantIds" -ConnectionString $connectionString
         } catch {
             Write-Host "Failed to create context: $($_.Exception.Message)"
@@ -118,14 +116,11 @@ function Remove-TenantIdFromTable {
             throw "STORAGE_ACCOUNT environment variable is required"
         }
         
-        # Create context for AzBobbyTables - prioritize connection string authentication
+        # Create context for AzBobbyTables
         try {
-            Write-Host "Creating AzBobbyTables context for storage account: $storageAccountName"
-            
             # Prioritize connection string from AzureWebJobsStorage
-            $connectionString = [System.Environment]::GetEnvironmentVariable('AzureWebJobsStorage', 'Process')
+            $connectionString = [System.Environment]::GetEnvironmentVariable('WEBSITE_AZUREFILESCONNECTIONSTRING', 'Process')
             $context = New-AzDataTableContext -TableName "TenantIds" -ConnectionString $connectionString
-            Write-Host "Context created successfully"
         } catch {
             Write-Host "Failed to create context: $($_.Exception.Message)"
             throw "Unable to create storage context: $($_.Exception.Message)"
@@ -177,12 +172,9 @@ function Get-TenantIdsFromTable {
         
         # Create context for AzBobbyTables - prioritize connection string authentication
         try {
-            Write-Host "Creating AzBobbyTables context for storage account: $storageAccountName"
-            
             # Prioritize connection string from AzureWebJobsStorage
-            $connectionString = [System.Environment]::GetEnvironmentVariable('AzureWebJobsStorage', 'Process')
+            $connectionString = [System.Environment]::GetEnvironmentVariable('WEBSITE_AZUREFILESCONNECTIONSTRING', 'Process')
             $context = New-AzDataTableContext -TableName "TenantIds" -ConnectionString $connectionString
-            Write-Host "Context created successfully"
         } catch {
             Write-Host "Failed to create context: $($_.Exception.Message)"
             throw "Unable to create storage context: $($_.Exception.Message)"

@@ -920,7 +920,8 @@ resource function01 'Microsoft.Web/sites@2023-12-01' = {
       http20Enabled: true
       functionAppScaleLimit: 10
       functionsRuntimeScaleMonitoringEnabled: true
-      appSettings: [        {
+      appSettings: [        
+        {
             name: 'FUNCTIONS_EXTENSION_VERSION'
             value: '~4'
         }
@@ -945,10 +946,6 @@ resource function01 'Microsoft.Web/sites@2023-12-01' = {
             value: 'powershell'
         }
         {
-            name: 'AzureWebJobsStorage'
-            value: 'DefaultEndpointsProtocol=https;AccountName=${storage01.name};AccountKey=${storage01.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
-        }
-        {
             name: 'AzureWebJobsStorage__accountname'
             value: storage01.name
         }
@@ -969,8 +966,8 @@ resource function01 'Microsoft.Web/sites@2023-12-01' = {
             value: 'https://${storage01.name}.file.${environment().suffixes.storage}/'
         }
         {
-            name: 'WEBSITE_CONTENTAZUREFILECONNECTIONSTRING'
-            value: 'DefaultEndpointsProtocol=https;AccountName=${storage01.name};AccountKey=${storage01.listKeys().keys[0].value}'
+            name: 'WEBSITE_AZUREFILESCONNECTIONSTRING'
+            value: 'DefaultEndpointsProtocol=https;AccountName=${storage01.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storage01.listKeys().keys[0].value}'
         }
         {
             name: 'WEBSITE_RUN_FROM_PACKAGE'
