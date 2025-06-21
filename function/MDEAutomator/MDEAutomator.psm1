@@ -2773,6 +2773,49 @@ function Get-Incidents {
     }
 }
 
+function Get-Incident {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$IncidentId
+    )
+
+    try {
+        $uri = "https://graph.microsoft.com/v1.0/security/incidents/$IncidentId"
+        $response = Invoke-MgGraphRequest -Uri $uri -Method GET -ErrorAction Stop
+
+        if ($response) {
+            $formattedIncident = [PSCustomObject]@{
+                Id = $response.Id
+                IncidentWebUrl = $response.IncidentWebUrl
+                RedirectIncidentId = $response.RedirectIncidentId
+                TenantId = $response.TenantId
+                DisplayName = $response.DisplayName
+                Description = $response.Description
+                Severity = $response.Severity
+                Status = $response.Status
+                Classification = $response.Classification
+                Determination = $response.Determination
+                AssignedTo = $response.AssignedTo
+                CreatedDateTime = $response.CreatedDateTime
+                LastUpdateDateTime = $response.LastUpdateDateTime
+                Tags = $response.Tags
+                Comments = $response.Comments
+                SystemTags = $response.SystemTags
+                Summary = $response.Summary
+                Alerts = $response.Alerts
+            }
+            return $formattedIncident
+        } else {
+            Write-Host "Incident not found: $IncidentId"
+            return $null
+        }
+    } catch {
+        Write-Error "Failed to retrieve incident: $_"
+        Write-Host "Error details: $($_.Exception.Message)"
+        return $null
+    }
+}
+
 function Get-IncidentAlerts {
     param (
         [Parameter(Mandatory = $true)]

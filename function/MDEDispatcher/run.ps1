@@ -63,11 +63,11 @@ try {    # Get request parameters
                 "InvokeMachineIsolation" { 
                     Invoke-MachineIsolation -token $using:token -DeviceIds $deviceId 
                 }
-                "InvokeFullDiskScan" { 
-                    Invoke-FullDiskScan -token $using:token -DeviceIds $deviceId 
-                }
                 "UndoMachineIsolation" { 
                     Undo-MachineIsolation -token $using:token -DeviceIds $deviceId 
+                }
+                "InvokeFullDiskScan" { 
+                    Invoke-FullDiskScan -token $using:token -DeviceIds $deviceId 
                 }
                 "InvokeRestrictAppExecution" { 
                     Invoke-RestrictAppExecution -token $using:token -DeviceIds $deviceId 
@@ -78,9 +78,6 @@ try {    # Get request parameters
                 "InvokeStopAndQuarantineFile" { 
                     Invoke-StopAndQuarantineFile -token $using:token -Sha1s $Sha1s
                 }                  
-                "InvokeMachineOffboard" { 
-                    Invoke-MachineOffboard -token $using:token -DeviceIds $deviceId 
-                }
                 "InvokeCollectInvestigationPackage" {
                     
                     $output = @()

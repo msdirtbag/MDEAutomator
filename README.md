@@ -1,30 +1,44 @@
 # MDEAutomator
 
-MDEAutomator is a modular, serverless solution for endpoint management and incident response in Microsoft Defender for Endpoint (MDE) environments. It leverages Azure Function Apps and a custom PowerShell module to orchestrate MDE deployments.
-
-![main](./media/main.png)
+MDEAutomator is designed to support incident response activities in Microsoft Defender for Endpoint (MDE) environments. It leverages Azure serverless componets in a private virtual network and Federated App Registration + UMI (FIC/Workload Identity) authentication for enhanced security. 
 
 ---
 
 ## Core Components
 
 - **MDEAutomator PowerShell Module**  
-  A comprehensive PowerShell module delivering cmdlets for Microsoft Defender for Endpoint operations, including advanced authentication mechanisms, profile orchestration, live response automation, response action management, custom detection rule deployment, advanced hunting query execution, and threat indicator lifecycle management.
+  A comprehensive PowerShell module providing cmdlets for Microsoft Defender for Endpoint operations, including advanced authentication, profile management, live response automation, response action orchestration, custom detection management, advanced hunting query execution, and threat indicator lifecycle management.
 
 - **MDEAutomator**  
-  A serverless orchestration platform designed for large-scale response action automation, distributed Live Response command execution across endpoint fleets, and programmatic deployment of PowerShell configuration scripts to Microsoft Defender for Endpoint managed devices.
+  A serverless orchestration platform for large-scale response action automation, distributed Live Response command execution across endpoint fleets, and programmatic deployment of PowerShell configuration scripts to Microsoft Defender for Endpoint managed devices.
+
+  Dispatcher- Isolate Device, Collect Investigation Package, Run Antivirus Scan, Restrict App Execution, Stop & Quarantine File
+
+  Orchestator- Run Live Response Script, Collect File, Put File, Upload file to Live Response Library
+  
+  Profiles- Active & Passive
+
+  ![main](./media/main.png)
 
 - **Threat Intelligence Manager**  
-  An threat indicator orchestration system providing automated lifecycle management for diverse indicator types including hashes, network infrastructure indicators (IPs, URLs, domains), and code signing certificates within Microsoft Defender for Endpoint. Features automated synchronization of Custom Detection rules from Azure Blob Storage with version control and deployment validation.
+  A threat indicator orchestration system providing automated lifecycle management for diverse indicator types including hashes, network infrastructure indicators (IPs, URLs, domains), and code signing certificates within Microsoft Defender for Endpoint. Features streamlined Custom Detection authoring and management, automated backup of existing Custom Detections, and a content library.
+
+  ![timanager](./media/timanager.png)
 
 - **Action Manager**  
-  Provides reporting on MDE machines actions and a safety switch to cancel all pending actions in the tenant.
+  Provides comprehensive reporting on MDE machine actions and includes a safety switch to cancel all pending actions in the tenant.
+
+  ![actionmanager](./media/actionmanager.png)
 
 - **Hunt Manager**  
-  An advanced threat hunting automation engine supporting both on-demand and scheduled hunting operations, featuring sophisticated query management, automated result processing, and seamless Azure Blob Storage integration.
+  An advanced threat hunting automation engine supporting both on-demand and scheduled hunting operations, with sophisticated query management, automated result processing, and native Azure Blob Storage integration.
+
+  ![huntmanager](./media/huntmanager.png)
 
 - **Incident Manager**  
-  A streamlined incident response platform providing centralized management of Microsoft Defender XDR incidents and integrated comment tracking.
+  A streamlined incident portal for managing Microsoft Defender XDR incidents, featuring integrated comment tracking and downloadable incident summaries powered by Azure OpenAI.
+
+  ![incidentmanager](./media/incidentmanager.png)
 
 ---
 
@@ -36,34 +50,32 @@ MDEAutomator is a modular, serverless solution for endpoint management and incid
 - Designed for multi-tenant use cases
 - Secretless App Registration/UMI auth + manual `$SPNSECRET` flexibility
 - Ability to deliver key configuration settings via PowerShell that are not available in Endpoint Security Profiles
-- Automated daily Threat Hunting for all onboarded tenants
-- Custom Detection syncronization & management with Azure Storage
-- Convenient upload of endpoint packages/files to Azure Storage
+- Custom Detection syncronization with Azure Storage & simplified authoring experience
+- Hunt Manager offers on-demand & programatic Threat Hunting via Graph
+- Convenient upload of endpoint forensic packages/files to Azure Storage
 - Simplified management of Defender incidents
-
-## Development Features
-
-- Python/Flask-based GUI hosted in a Azure App Service. 
-- Core functionality: Dispatcher, Orchestator, Profiles
-- Threat Intelligence Manager
-- Action Manager
-- Hunt Manager
-- Incident Manager
 
 ---
 
 ## Azure Resources Deployed
 
 - Application Insights
-- Azure Function
+- Azure Function (PowerShell)
 - Azure App Service
-- App Service Plan 
-- Azure Storage
+- App Service Plan(s) 
+- Azure Storage Account
+- Azure OpenAI
 - User Managed Identity
+- Log Analytics Workspace
+- Azure Monitor Private Link Scope
+- Virtual Network
+- Private DNS Zone(s)
+- Network Security Group(s)
+
 
   ![AzureParts](./media/azureparts.png)
 
-MDEAutomator Estimated Monthly Azure Cost: ~$210 USD
+MDEAutomator Estimated Monthly Azure Cost: ~$220 USD
 
 ---
 
@@ -156,6 +168,10 @@ Import-Module -Name MDEAutomator -ErrorAction Stop -Force
 ### Common Operations
 
 ```powershell
+# Using direct secret to authenticate
+$secureSecret = Read-Host "Enter Secret" -AsSecureString
+$token = Connect-MDE -SpnId "<appId>" -SpnSecret $secureSecret
+
 # Upload a file to the Live Response library (limit: 250 MB)
 Invoke-UploadLR -token $token -filePath "C:\MDEAutomator\tester.txt"
 

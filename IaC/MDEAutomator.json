@@ -5,12 +5,24 @@
     "_generator": {
       "name": "bicep",
       "version": "0.36.1.42791",
-      "templateHash": "2732018471599744785"
+      "templateHash": "14806959301834131887"
     }
   },
   "parameters": {
+    "zones": {
+      "type": "array",
+      "defaultValue": [
+        "agentsvc.azure-automation.net",
+        "monitor.azure.com",
+        "ods.opinsights.azure.com",
+        "oms.opinsights.azure.com"
+      ]
+    },
     "env": {
       "type": "string",
+      "defaultValue": "dev",
+      "minLength": 1,
+      "maxLength": 10,
       "metadata": {
         "description": "Chose a variable for the environment. Example: dev, test, soc"
       }
@@ -32,14 +44,492 @@
   },
   "variables": {
     "environmentid": "[uniqueString(tenant().tenantId, subscription().id, parameters('env'))]",
-    "location": "[resourceGroup().location]"
+    "location": "[resourceGroup().location]",
+    "vnetspace": "10.0.0.0/22",
+    "mainsnetspace": "10.0.0.0/24",
+    "funcsnetspace": "10.0.1.0/24"
   },
   "resources": [
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2023-09-01",
+      "name": "[format('vnet-mdeauto-{0}', variables('environmentid'))]",
+      "location": "[variables('location')]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('vnetspace')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "main",
+            "properties": {
+              "addressPrefix": "[variables('mainsnetspace')]",
+              "privateEndpointNetworkPolicies": "Disabled",
+              "privateLinkServiceNetworkPolicies": "Disabled",
+              "defaultOutboundAccess": false,
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-mdeauto-main-{0}', variables('environmentid')))]"
+              },
+              "serviceEndpoints": [
+                {
+                  "service": "Microsoft.AzureActiveDirectory"
+                }
+              ]
+            }
+          },
+          {
+            "name": "func",
+            "properties": {
+              "addressPrefix": "[variables('funcsnetspace')]",
+              "privateEndpointNetworkPolicies": "Disabled",
+              "privateLinkServiceNetworkPolicies": "Disabled",
+              "defaultOutboundAccess": false,
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-mdeauto-func-{0}', variables('environmentid')))]"
+              },
+              "serviceEndpoints": [
+                {
+                  "service": "Microsoft.AzureActiveDirectory"
+                },
+                {
+                  "service": "Microsoft.CognitiveServices"
+                }
+              ],
+              "delegations": [
+                {
+                  "name": "Microsoft.Web/serverFarms",
+                  "properties": {
+                    "serviceName": "Microsoft.Web/serverFarms"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-mdeauto-func-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-mdeauto-main-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[format('Microsoft.Network/virtualNetworks/{0}', format('vnet-mdeauto-{0}', variables('environmentid')))]",
+      "name": "Monitor",
+      "properties": {
+        "metrics": [
+          {
+            "category": "allMetrics",
+            "enabled": true
+          }
+        ],
+        "workspaceId": "[if(parameters('useExistingWorkspace'), parameters('existingWorkspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid'))))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2024-06-01",
+      "name": "[format('privatelink.blob.{0}', environment().suffixes.storage)]",
+      "location": "global"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2024-06-01",
+      "name": "[format('privatelink.file.{0}', environment().suffixes.storage)]",
+      "location": "global"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2024-06-01",
+      "name": "[format('privatelink.queue.{0}', environment().suffixes.storage)]",
+      "location": "global"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2024-06-01",
+      "name": "[format('privatelink.table.{0}', environment().suffixes.storage)]",
+      "location": "global"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2024-06-01",
+      "name": "privatelink.azurewebsites.net",
+      "location": "global"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2024-06-01",
+      "name": "privatelink.openai.azure.com",
+      "location": "global"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', format('privatelink.blob.{0}', environment().suffixes.storage), format('vnet-mdeauto-{0}', variables('environmentid')))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.blob.{0}', environment().suffixes.storage))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', format('privatelink.file.{0}', environment().suffixes.storage), format('vnet-mdeauto-{0}', variables('environmentid')))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.file.{0}', environment().suffixes.storage))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', format('privatelink.queue.{0}', environment().suffixes.storage), format('vnet-mdeauto-{0}', variables('environmentid')))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.queue.{0}', environment().suffixes.storage))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', format('privatelink.table.{0}', environment().suffixes.storage), format('vnet-mdeauto-{0}', variables('environmentid')))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.table.{0}', environment().suffixes.storage))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', 'privatelink.azurewebsites.net', format('vnet-mdeauto-{0}', variables('environmentid')))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.azurewebsites.net')]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', 'privatelink.openai.azure.com', format('vnet-mdeauto-{0}', variables('environmentid')))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.openai.azure.com')]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2023-04-01",
+      "name": "[format('nsg-mdeauto-main-{0}', variables('environmentid'))]",
+      "location": "[variables('location')]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "Allow_VNET_Inbound",
+            "properties": {
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "destinationAddressPrefix": "VirtualNetwork",
+              "access": "Allow",
+              "priority": 800,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "Allow_VNET_Outbound",
+            "properties": {
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "destinationAddressPrefix": "VirtualNetwork",
+              "access": "Allow",
+              "priority": 800,
+              "direction": "Outbound"
+            }
+          },
+          {
+            "name": "Allow_AzureCloud_Outbound",
+            "properties": {
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "destinationAddressPrefix": "AzureCloud",
+              "access": "Allow",
+              "priority": 900,
+              "direction": "Outbound"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[format('Microsoft.Network/networkSecurityGroups/{0}', format('nsg-mdeauto-main-{0}', variables('environmentid')))]",
+      "name": "Monitor-mainnsg",
+      "properties": {
+        "logs": [
+          {
+            "categoryGroup": "allLogs",
+            "enabled": true
+          }
+        ],
+        "workspaceId": "[if(parameters('useExistingWorkspace'), parameters('existingWorkspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid'))))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-mdeauto-main-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2023-04-01",
+      "name": "[format('nsg-mdeauto-func-{0}', variables('environmentid'))]",
+      "location": "[variables('location')]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "Allow_VNET_Inbound",
+            "properties": {
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "destinationAddressPrefix": "VirtualNetwork",
+              "access": "Allow",
+              "priority": 800,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "Allow_VNET_Outbound",
+            "properties": {
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "destinationAddressPrefix": "VirtualNetwork",
+              "access": "Allow",
+              "priority": 800,
+              "direction": "Outbound"
+            }
+          },
+          {
+            "name": "Allow_AzureCloud_Outbound",
+            "properties": {
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "destinationAddressPrefix": "AzureCloud",
+              "access": "Allow",
+              "priority": 900,
+              "direction": "Outbound"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[format('Microsoft.Network/networkSecurityGroups/{0}', format('nsg-mdeauto-func-{0}', variables('environmentid')))]",
+      "name": "Monitor-funcnsg",
+      "properties": {
+        "logs": [
+          {
+            "categoryGroup": "allLogs",
+            "enabled": true
+          }
+        ],
+        "workspaceId": "[if(parameters('useExistingWorkspace'), parameters('existingWorkspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid'))))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', format('nsg-mdeauto-func-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid')))]"
+      ]
+    },
     {
       "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
       "apiVersion": "2024-11-30",
       "name": "[format('umi-mdeautomator-{0}', variables('environmentid'))]",
       "location": "[variables('location')]"
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2023-05-01",
+      "name": "[format('oai-mdeautomator-{0}', variables('environmentid'))]",
+      "location": "[variables('location')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid'))))]": {}
+        }
+      },
+      "sku": {
+        "name": "S0"
+      },
+      "kind": "OpenAI",
+      "properties": {
+        "publicNetworkAccess": "Disabled",
+        "networkAcls": {
+          "defaultAction": "Deny",
+          "virtualNetworkRules": [
+            {
+              "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid'))), '2023-09-01').subnets[1].id]"
+            }
+          ],
+          "bypass": "AzureServices"
+        },
+        "disableLocalAuth": false,
+        "customSubDomainName": "[format('mdeautomator-{0}', variables('environmentid'))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[format('Microsoft.CognitiveServices/accounts/{0}', format('oai-mdeautomator-{0}', variables('environmentid')))]",
+      "name": "Monitor-AIAccount",
+      "properties": {
+        "logs": [
+          {
+            "categoryGroup": "AllLogs",
+            "enabled": true
+          }
+        ],
+        "metrics": [
+          {
+            "category": "AllMetrics",
+            "enabled": true
+          }
+        ],
+        "workspaceId": "[if(parameters('useExistingWorkspace'), parameters('existingWorkspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid'))))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', format('oai-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/deployments",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}', format('oai-mdeautomator-{0}', variables('environmentid')), 'gpt-4-1')]",
+      "sku": {
+        "name": "GlobalStandard",
+        "capacity": 10
+      },
+      "properties": {
+        "model": {
+          "format": "OpenAI",
+          "name": "gpt-4.1",
+          "version": "2025-04-14"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', format('oai-mdeautomator-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2023-04-01",
+      "name": "[format('pe-{0}aiaccount', variables('environmentid'))]",
+      "location": "[variables('location')]",
+      "properties": {
+        "subnet": {
+          "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid'))), '2023-09-01').subnets[0].id]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "[format('psc-{0}aiaccount', variables('environmentid'))]",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.CognitiveServices/accounts', format('oai-mdeautomator-{0}', variables('environmentid')))]",
+              "groupIds": [
+                "account"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', format('oai-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2023-04-01",
+      "name": "[format('{0}/{1}', format('pe-{0}aiaccount', variables('environmentid')), format('oai-mdeautomator-{0}', variables('environmentid')))]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "[format('oai-mdeautomator-{0}', variables('environmentid'))]",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.openai.azure.com')]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', format('oai-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Network/privateEndpoints', format('pe-{0}aiaccount', variables('environmentid')))]",
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.openai.azure.com')]"
+      ]
     },
     {
       "type": "Microsoft.Authorization/roleAssignments",
@@ -57,9 +547,9 @@
     {
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
-      "name": "[guid(variables('environmentid'), 'ba92f5b4-2d11-453d-a403-e96b0029c9fe', subscription().id)]",
+      "name": "[guid(variables('environmentid'), 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b', subscription().id)]",
       "properties": {
-        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b')]",
         "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid'))), '2024-11-30').principalId]",
         "principalType": "ServicePrincipal"
       },
@@ -152,6 +642,25 @@
       ]
     },
     {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[format('Microsoft.Storage/storageAccounts/{0}', format('stmdeauto{0}', variables('environmentid')))]",
+      "name": "Monitor-Storage",
+      "properties": {
+        "metrics": [
+          {
+            "category": "Transaction",
+            "enabled": true
+          }
+        ],
+        "workspaceId": "[if(parameters('useExistingWorkspace'), parameters('existingWorkspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid'))))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]"
+      ]
+    },
+    {
       "type": "Microsoft.Storage/storageAccounts/blobServices",
       "apiVersion": "2024-01-01",
       "name": "[format('{0}/{1}', format('stmdeauto{0}', variables('environmentid')), 'default')]",
@@ -231,12 +740,219 @@
       "apiVersion": "2023-09-01",
       "name": "[format('log-mdeautomator-{0}', variables('environmentid'))]",
       "location": "[variables('location')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid'))))]": {}
+        }
+      },
       "properties": {
         "sku": {
           "name": "PerGB2018"
         },
+        "publicNetworkAccessForIngestion": "Disabled",
+        "publicNetworkAccessForQuery": "Enabled",
         "retentionInDays": 30
-      }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/privateLinkScopes/scopedResources",
+      "apiVersion": "2021-07-01-preview",
+      "name": "[format('{0}/{1}', format('ampls-mdeautomator-{0}', variables('environmentid')), format('laampls-{0}', variables('environmentid')))]",
+      "properties": {
+        "linkedResourceId": "[if(parameters('useExistingWorkspace'), parameters('existingWorkspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid'))))]"
+      },
+      "dependsOn": [
+        "[resourceId('microsoft.insights/privateLinkScopes', format('ampls-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2023-04-01",
+      "name": "[format('pe-{0}funcst01blob', variables('environmentid'))]",
+      "location": "[variables('location')]",
+      "properties": {
+        "subnet": {
+          "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid'))), '2023-09-01').subnets[0].id]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "[format('psc-{0}funcst01blob', variables('environmentid'))]",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]",
+              "groupIds": [
+                "blob"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2023-04-01",
+      "name": "[format('{0}/{1}', format('pe-{0}funcst01blob', variables('environmentid')), format('stmdeauto{0}', variables('environmentid')))]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "[format('stmdeauto{0}', variables('environmentid'))]",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.blob.{0}', environment().suffixes.storage))]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.blob.{0}', environment().suffixes.storage))]",
+        "[resourceId('Microsoft.Network/privateEndpoints', format('pe-{0}funcst01blob', variables('environmentid')))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2023-04-01",
+      "name": "[format('pe-{0}funcst01file', variables('environmentid'))]",
+      "location": "[variables('location')]",
+      "properties": {
+        "subnet": {
+          "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid'))), '2023-09-01').subnets[0].id]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "[format('psc-func01file-{0}', variables('environmentid'))]",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]",
+              "groupIds": [
+                "file"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2023-04-01",
+      "name": "[format('{0}/{1}', format('pe-{0}funcst01file', variables('environmentid')), format('stmdeauto{0}', variables('environmentid')))]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "[format('stmdeauto{0}', variables('environmentid'))]",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.file.{0}', environment().suffixes.storage))]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.file.{0}', environment().suffixes.storage))]",
+        "[resourceId('Microsoft.Network/privateEndpoints', format('pe-{0}funcst01file', variables('environmentid')))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2023-04-01",
+      "name": "[format('pe-{0}funcst01queue', variables('environmentid'))]",
+      "location": "[variables('location')]",
+      "properties": {
+        "subnet": {
+          "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid'))), '2023-09-01').subnets[0].id]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "[format('psc-{0}funcst01queue', variables('environmentid'))]",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]",
+              "groupIds": [
+                "queue"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2023-04-01",
+      "name": "[format('{0}/{1}', format('pe-{0}funcst01queue', variables('environmentid')), format('stmdeauto{0}', variables('environmentid')))]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "[format('stmdeauto{0}', variables('environmentid'))]",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.queue.{0}', environment().suffixes.storage))]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.queue.{0}', environment().suffixes.storage))]",
+        "[resourceId('Microsoft.Network/privateEndpoints', format('pe-{0}funcst01queue', variables('environmentid')))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2023-04-01",
+      "name": "[format('pe-{0}funcst01table', variables('environmentid'))]",
+      "location": "[variables('location')]",
+      "properties": {
+        "subnet": {
+          "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid'))), '2023-09-01').subnets[0].id]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "[format('psc-{0}funcst01table', variables('environmentid'))]",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]",
+              "groupIds": [
+                "table"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2023-04-01",
+      "name": "[format('{0}/{1}', format('pe-{0}funcst01table', variables('environmentid')), format('stmdeauto{0}', variables('environmentid')))]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "[format('stmdeauto{0}', variables('environmentid'))]",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.table.{0}', environment().suffixes.storage))]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.table.{0}', environment().suffixes.storage))]",
+        "[resourceId('Microsoft.Network/privateEndpoints', format('pe-{0}funcst01table', variables('environmentid')))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]"
+      ]
     },
     {
       "type": "Microsoft.Insights/components",
@@ -247,11 +963,50 @@
       "properties": {
         "Application_Type": "web",
         "RetentionInDays": 30,
-        "DisableLocalAuth": true,
+        "DisableLocalAuth": false,
+        "publicNetworkAccessForIngestion": "Enabled",
+        "publicNetworkAccessForQuery": "Enabled",
         "WorkspaceResourceId": "[if(parameters('useExistingWorkspace'), parameters('existingWorkspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid'))))]"
       },
       "dependsOn": [
         "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[format('Microsoft.Insights/components/{0}', format('appi-mdeauto{0}', variables('environmentid')))]",
+      "name": "Monitor-Appinsights",
+      "properties": {
+        "logs": [
+          {
+            "categoryGroup": "allLogs",
+            "enabled": true
+          }
+        ],
+        "metrics": [
+          {
+            "category": "allMetrics",
+            "enabled": true
+          }
+        ],
+        "workspaceId": "[if(parameters('useExistingWorkspace'), parameters('existingWorkspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid'))))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/components', format('appi-mdeauto{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/privateLinkScopes/scopedResources",
+      "apiVersion": "2021-07-01-preview",
+      "name": "[format('{0}/{1}', format('ampls-mdeautomator-{0}', variables('environmentid')), format('aiampls-{0}', variables('environmentid')))]",
+      "properties": {
+        "linkedResourceId": "[resourceId('Microsoft.Insights/components', format('appi-mdeauto{0}', variables('environmentid')))]"
+      },
+      "dependsOn": [
+        "[resourceId('microsoft.insights/privateLinkScopes', format('ampls-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Insights/components', format('appi-mdeauto{0}', variables('environmentid')))]"
       ]
     },
     {
@@ -270,6 +1025,25 @@
       }
     },
     {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[format('Microsoft.Web/serverfarms/{0}', format('asp-mdeautomator-func-{0}', variables('environmentid')))]",
+      "name": "Monitor-AppServicePlanFunc",
+      "properties": {
+        "metrics": [
+          {
+            "category": "allMetrics",
+            "enabled": true
+          }
+        ],
+        "workspaceId": "[if(parameters('useExistingWorkspace'), parameters('existingWorkspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid'))))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', format('asp-mdeautomator-func-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
       "type": "Microsoft.Web/sites",
       "apiVersion": "2023-12-01",
       "name": "[format('funcmdeauto{0}', variables('environmentid'))]",
@@ -283,29 +1057,11 @@
       },
       "properties": {
         "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('asp-mdeautomator-func-{0}', variables('environmentid')))]",
-        "publicNetworkAccess": "Enabled",
+        "virtualNetworkSubnetId": "[reference(resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid'))), '2023-09-01').subnets[1].id]",
+        "publicNetworkAccess": "Disabled",
         "httpsOnly": true,
         "siteConfig": {
-          "ipSecurityRestrictions": [
-            {
-              "ipAddress": "Any",
-              "action": "Allow",
-              "priority": 2147483647,
-              "name": "Allow all",
-              "description": "Allow all access"
-            }
-          ],
-          "scmIpSecurityRestrictions": [
-            {
-              "ipAddress": "Any",
-              "action": "Deny",
-              "priority": 2147483647,
-              "name": "Block all",
-              "description": "Block all access"
-            }
-          ],
-          "scmIpSecurityRestrictionsDefaultAction": "Deny",
-          "scmIpSecurityRestrictionsUseMain": false,
+          "vnetRouteAllEnabled": true,
           "autoHealEnabled": true,
           "detailedErrorLoggingEnabled": true,
           "httpLoggingEnabled": true,
@@ -351,8 +1107,28 @@
               "value": "powershell"
             },
             {
+              "name": "AzureWebJobsStorage",
+              "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', format('stmdeauto{0}', variables('environmentid')), listKeys(resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid'))), '2024-01-01').keys[0].value, environment().suffixes.storage)]"
+            },
+            {
               "name": "AzureWebJobsStorage__accountname",
               "value": "[format('stmdeauto{0}', variables('environmentid'))]"
+            },
+            {
+              "name": "AzureWebJobsStorage__blobServiceUri",
+              "value": "[format('https://{0}.blob.{1}/', format('stmdeauto{0}', variables('environmentid')), environment().suffixes.storage)]"
+            },
+            {
+              "name": "AzureWebJobsStorage__queueServiceUri",
+              "value": "[format('https://{0}.queue.{1}/', format('stmdeauto{0}', variables('environmentid')), environment().suffixes.storage)]"
+            },
+            {
+              "name": "AzureWebJobsStorage__tableServiceUri",
+              "value": "[format('https://{0}.table.{1}/', format('stmdeauto{0}', variables('environmentid')), environment().suffixes.storage)]"
+            },
+            {
+              "name": "AzureWebJobsStorage__fileServiceUri",
+              "value": "[format('https://{0}.file.{1}/', format('stmdeauto{0}', variables('environmentid')), environment().suffixes.storage)]"
             },
             {
               "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
@@ -383,6 +1159,18 @@
               "value": "[format('stmdeauto{0}', variables('environmentid'))]"
             },
             {
+              "name": "AZURE_AI_ENDPOINT",
+              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', format('oai-mdeautomator-{0}', variables('environmentid'))), '2023-05-01').endpoint]"
+            },
+            {
+              "name": "AZURE_AI_KEY",
+              "value": "[listKeys(resourceId('Microsoft.CognitiveServices/accounts', format('oai-mdeautomator-{0}', variables('environmentid'))), '2023-05-01').key1]"
+            },
+            {
+              "name": "AZURE_AI_MODEL",
+              "value": "gpt-4-1"
+            },
+            {
               "name": "SPNID",
               "value": ""
             }
@@ -393,11 +1181,88 @@
         }
       },
       "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', format('oai-mdeautomator-{0}', variables('environmentid')))]",
         "[resourceId('Microsoft.Insights/components', format('appi-mdeauto{0}', variables('environmentid')))]",
         "[resourceId('Microsoft.Web/sites', format('ase-mdeautomator-{0}', variables('environmentid')))]",
         "[resourceId('Microsoft.Web/serverfarms', format('asp-mdeautomator-func-{0}', variables('environmentid')))]",
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid')))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]"
+        "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[format('Microsoft.Web/sites/{0}', format('funcmdeauto{0}', variables('environmentid')))]",
+      "name": "Monitor-Function",
+      "properties": {
+        "logs": [
+          {
+            "category": "FunctionAppLogs",
+            "enabled": true
+          },
+          {
+            "category": "AppServiceAuthenticationLogs",
+            "enabled": true
+          }
+        ],
+        "metrics": [
+          {
+            "category": "allMetrics",
+            "enabled": true
+          }
+        ],
+        "workspaceId": "[if(parameters('useExistingWorkspace'), parameters('existingWorkspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid'))))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', format('funcmdeauto{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2023-04-01",
+      "name": "[format('pe-func01-{0}', variables('environmentid'))]",
+      "location": "[variables('location')]",
+      "properties": {
+        "subnet": {
+          "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid'))), '2023-09-01').subnets[0].id]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "[format('psc-func01-{0}', variables('environmentid'))]",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.Web/sites', format('funcmdeauto{0}', variables('environmentid')))]",
+              "groupIds": [
+                "sites"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', format('funcmdeauto{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2023-04-01",
+      "name": "[format('{0}/{1}', format('pe-func01-{0}', variables('environmentid')), format('funcmdeauto{0}', variables('environmentid')))]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "[format('funcmdeauto{0}', variables('environmentid'))]",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.azurewebsites.net')]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.azurewebsites.net')]",
+        "[resourceId('Microsoft.Web/sites', format('funcmdeauto{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Network/privateEndpoints', format('pe-func01-{0}', variables('environmentid')))]"
       ]
     },
     {
@@ -415,14 +1280,40 @@
       "kind": "linux"
     },
     {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[format('Microsoft.Web/serverfarms/{0}', format('asp-mdeautomator-web-{0}', variables('environmentid')))]",
+      "name": "Monitor-AppServicePlan",
+      "properties": {
+        "metrics": [
+          {
+            "category": "allMetrics",
+            "enabled": true
+          }
+        ],
+        "workspaceId": "[if(parameters('useExistingWorkspace'), parameters('existingWorkspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid'))))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', format('asp-mdeautomator-web-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
       "type": "Microsoft.Web/sites",
       "apiVersion": "2022-09-01",
       "name": "[format('ase-mdeautomator-{0}', variables('environmentid'))]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid'))))]": {}
+        }
+      },
       "location": "[variables('location')]",
       "kind": "container",
       "properties": {
         "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('asp-mdeautomator-web-{0}', variables('environmentid')))]",
         "publicNetworkAccess": "Enabled",
+        "virtualNetworkSubnetId": "[reference(resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid'))), '2023-09-01').subnets[1].id]",
         "httpsOnly": true,
         "siteConfig": {
           "linuxFxVersion": "DOCKER|msdirtbag/mdeautomator:latest",
@@ -462,7 +1353,34 @@
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Web/serverfarms', format('asp-mdeautomator-web-{0}', variables('environmentid')))]"
+        "[resourceId('Microsoft.Web/serverfarms', format('asp-mdeautomator-web-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[format('Microsoft.Web/sites/{0}', format('ase-mdeautomator-{0}', variables('environmentid')))]",
+      "name": "Monitor-AppService",
+      "properties": {
+        "logs": [
+          {
+            "categoryGroup": "allLogs",
+            "enabled": true
+          }
+        ],
+        "metrics": [
+          {
+            "category": "allMetrics",
+            "enabled": true
+          }
+        ],
+        "workspaceId": "[if(parameters('useExistingWorkspace'), parameters('existingWorkspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid'))))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', format('ase-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid')))]"
       ]
     },
     {
@@ -477,6 +1395,100 @@
       "dependsOn": [
         "[resourceId('Microsoft.Web/sites', format('ase-mdeautomator-{0}', variables('environmentid')))]",
         "[resourceId('Microsoft.Web/sites', format('funcmdeauto{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "microsoft.insights/privateLinkScopes",
+      "apiVersion": "2021-07-01-preview",
+      "name": "[format('ampls-mdeautomator-{0}', variables('environmentid'))]",
+      "location": "global",
+      "properties": {
+        "accessModeSettings": {
+          "ingestionAccessMode": "PrivateOnly",
+          "queryAccessMode": "Open"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2023-04-01",
+      "name": "pe-ampls",
+      "location": "[variables('location')]",
+      "properties": {
+        "subnet": {
+          "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid'))), '2023-09-01').subnets[0].id]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "psc-ampls",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('microsoft.insights/privateLinkScopes', format('ampls-mdeautomator-{0}', variables('environmentid')))]",
+              "groupIds": [
+                "azuremonitor"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('microsoft.insights/privateLinkScopes', format('ampls-mdeautomator-{0}', variables('environmentid')))]",
+        "privatednszoneforampls",
+        "privatednszonelink",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "copy": {
+        "name": "privatednszoneforampls",
+        "count": "[length(parameters('zones'))]"
+      },
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2024-06-01",
+      "name": "[format('privatelink.{0}', parameters('zones')[copyIndex()])]",
+      "location": "global",
+      "properties": {}
+    },
+    {
+      "copy": {
+        "name": "privatednszonelink",
+        "count": "[length(parameters('zones'))]"
+      },
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', format('privatelink.{0}', parameters('zones')[copyIndex()]), format('{0}-link', parameters('zones')[copyIndex()]))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.{0}', parameters('zones')[copyIndex()]))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2023-06-01",
+      "name": "[format('{0}/{1}', 'pe-ampls', 'pvtendpointdnsgroupforampls')]",
+      "properties": {
+        "copy": [
+          {
+            "name": "privateDnsZoneConfigs",
+            "count": "[length(parameters('zones'))]",
+            "input": {
+              "name": "[format('privatelink.{0}', parameters('zones')[copyIndex('privateDnsZoneConfigs')])]",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.{0}', parameters('zones')[copyIndex('privateDnsZoneConfigs')]))]"
+              }
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateEndpoints', 'pe-ampls')]",
+        "privatednszoneforampls"
       ]
     }
   ]

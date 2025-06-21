@@ -48,6 +48,9 @@ try {
                 'GetIncidents' { 
                     Get-Incidents 
                 }
+                'GetIncident' { 
+                    Get-Incident -IncidentId $incidentId 
+                }
                 'GetIncidentAlerts' { 
                     Get-IncidentAlerts -IncidentId $incidentId 
                 }

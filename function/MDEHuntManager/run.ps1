@@ -90,6 +90,106 @@ function Get-Queries {
     }
 }
 
+function Get-Query {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$QueryName
+    )
+    try {
+        Write-Host "Starting Get-Query operation for: $QueryName"
+        
+        # Get storage account name from environment
+        $storageAccountName = [System.Environment]::GetEnvironmentVariable('STORAGE_ACCOUNT', 'Process')
+        if ([string]::IsNullOrEmpty($storageAccountName)) {
+            throw "STORAGE_ACCOUNT environment variable is required"
+        }
+        
+        $containerName = "huntquery"
+        $localTemp = [System.IO.Path]::GetTempPath()
+        
+        # Create storage context using User Managed Identity
+        try {
+            $ctx = New-AzStorageContext -StorageAccountName $storageAccountName -UseConnectedAccount
+        } catch {
+            throw "Failed to create storage context with UMI: $($_.Exception.Message)"
+        }
+        
+        # Try to find the query file with .kql or .csl extension
+        $possibleNames = @(
+            "$QueryName.kql",
+            "$QueryName.csl",
+            $QueryName  # In case the extension is already included
+        )
+        
+        $foundBlob = $null
+        foreach ($fileName in $possibleNames) {
+            try {
+                $blob = Get-AzStorageBlob -Container $containerName -Context $ctx -Blob $fileName -ErrorAction SilentlyContinue
+                if ($blob) {
+                    $foundBlob = $blob
+                    Write-Host "Found query file: $fileName"
+                    break
+                }
+            } catch {
+                # Continue to next possible name
+            }
+        }
+        
+        if (-not $foundBlob) {
+            return @{
+                Status = "Error"
+                Message = "Query file not found. Tried: $($possibleNames -join ', ')"
+                QueryName = $QueryName
+                Content = $null
+                Timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+            }
+        }
+        
+        # Download and read the query content
+        $localFile = Join-Path $localTemp $foundBlob.Name
+        try {
+            Get-AzStorageBlobContent -Blob $foundBlob.Name -Container $containerName -Destination $localFile -Context $ctx -Force | Out-Null
+            $queryContent = Get-Content -Path $localFile -Raw
+            
+            # Clean up temp file
+            if (Test-Path $localFile) {
+                Remove-Item $localFile -Force
+            }
+            
+            Write-Host "Successfully retrieved query content from: $($foundBlob.Name)"
+            
+            return @{
+                Status = "Success"
+                Message = "Successfully retrieved query content"
+                QueryName = $QueryName
+                FileName = $foundBlob.Name
+                Content = $queryContent
+                LastModified = $foundBlob.LastModified
+                Size = $foundBlob.Length
+                Timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+            }
+            
+        } catch {
+            # Clean up temp file on error
+            if (Test-Path $localFile) {
+                Remove-Item $localFile -Force
+            }
+            throw "Failed to download or read query content: $($_.Exception.Message)"
+        }
+        
+    } catch {
+        $errorMessage = "Failed to retrieve query '$QueryName': $($_.Exception.Message)"
+        Write-Error $errorMessage
+        return @{
+            Status = "Error"
+            Message = $errorMessage
+            QueryName = $QueryName
+            Content = $null
+            Timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+        }
+    }
+}
+
 function Add-Query {
     param (
         [Parameter(Mandatory = $true)]
@@ -163,6 +263,120 @@ function Add-Query {
     }
 }
 
+function Update-Query {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Query,
+        [Parameter(Mandatory = $true)]
+        [string]$QueryName
+    )
+    
+    $tempFile = $null
+    $startTime = Get-Date
+    
+    try {
+        Write-Host "Starting Update-Query operation for: $QueryName at $($startTime.ToString('yyyy-MM-ddTHH:mm:ssZ'))"
+        
+        # Get storage account name from environment
+        $storageAccountName = [System.Environment]::GetEnvironmentVariable('STORAGE_ACCOUNT', 'Process')
+        $containerName = "huntquery"
+        $ctx = New-AzStorageContext -StorageAccountName $storageAccountName -UseConnectedAccount -ErrorAction Stop
+        
+        # Smart file discovery - try multiple filename variations to find existing file
+        $possibleNames = @(
+            $QueryName,
+            "$QueryName.kql",
+            "$QueryName.csl"
+        )
+        
+        # Remove duplicates and filter out invalid names
+        $possibleNames = $possibleNames | Where-Object { $_ -and $_.Trim() } | Select-Object -Unique
+        
+        $foundBlob = $null
+        $actualFileName = $null
+        
+        # Look for existing file first
+        foreach ($fileName in $possibleNames) {
+            try {
+                $blob = Get-AzStorageBlob -Container $containerName -Context $ctx -Blob $fileName -ErrorAction SilentlyContinue
+                if ($blob) {
+                    $foundBlob = $blob
+                    $actualFileName = $fileName
+                    Write-Host "Found existing query file to update: $actualFileName"
+                    break
+                }
+            } catch {
+                # Continue to next possible name
+                Write-Host "File not found: $fileName, trying next option"
+            }
+        }
+        
+        # Create temporary file with new query content
+        $tempFile = [System.IO.Path]::GetTempFileName()
+        Set-Content -Path $tempFile -Value $Query -Encoding UTF8
+        
+        # Upload/overwrite the query file
+        $updatedBlob = Set-AzStorageBlobContent -File $tempFile -Container $containerName -Blob $actualFileName -Context $ctx -Force
+        
+        $endTime = Get-Date
+        $duration = $endTime - $startTime
+        
+        $operation = if ($foundBlob) { "Updated" } else { "Created" }
+        Write-Host "Successfully $($operation.ToLower()) query: $actualFileName (Duration: $($duration.TotalSeconds.ToString('F2'))s)"
+        
+        return @{
+            Status = "Success"
+            Operation = $operation
+            Message = "Query '$actualFileName' $($operation.ToLower()) successfully"
+            QueryName = $QueryName
+            FileName = $actualFileName
+            ContentLength = $Query.Length
+            BackupInfo = $backupInfo
+            LastModified = $updatedBlob.LastModified
+            ETag = $updatedBlob.ETag
+            Duration = "$($duration.TotalSeconds.ToString('F2'))s"
+            Timestamp = $endTime.ToString("yyyy-MM-ddTHH:mm:ssZ")
+            BlobInfo = @{
+                Name = $updatedBlob.Name
+                LastModified = $updatedBlob.LastModified
+                ETag = $updatedBlob.ETag
+            }
+        }
+        
+    } catch {
+        $endTime = Get-Date
+        $duration = $endTime - $startTime
+        $errorMessage = "Failed to update query '$QueryName': $($_.Exception.Message)"
+        
+        Write-Error $errorMessage
+        Write-Host "Operation failed after $($duration.TotalSeconds.ToString('F2'))s"
+        
+        return @{
+            Status = "Error"
+            Operation = "Update"
+            Message = $errorMessage
+            QueryName = $QueryName
+            ErrorDetails = @{
+                Exception = $_.Exception.GetType().Name
+                ErrorLine = $_.InvocationInfo.ScriptLineNumber
+                ErrorPosition = $_.InvocationInfo.OffsetInLine
+            }
+            Duration = "$($duration.TotalSeconds.ToString('F2'))s"
+            Timestamp = $endTime.ToString("yyyy-MM-ddTHH:mm:ss Z")
+        }
+        
+    } finally {
+        if ($tempFile -and (Test-Path $tempFile)) {
+            try {
+                Remove-Item $tempFile -Force -ErrorAction Stop
+                Write-Host "Cleaned up temporary file: $tempFile"
+            } catch {
+                Write-Warning "Failed to clean up temporary file: $tempFile - $($_.Exception.Message)"
+            }
+        }
+    }
+}
+
 function Undo-Query {
     param (
         [Parameter(Mandatory = $true)]
@@ -226,6 +440,7 @@ function Undo-Query {
 try {
     # Get request parameters
     $Function = Get-RequestParam -Name "Function" -Request $Request
+    $QueryName = Get-RequestParam -Name "QueryName" -Request $Request
     
     Test-NullOrEmpty $Function "Function"
     
@@ -233,8 +448,12 @@ try {
     Write-Host "Executing Function: $Function"
     
     $output = switch ($Function) {
-        'GetQueries'     { 
-            Get-Queries 
+        'GetQueries'     { Get-Queries }
+        'GetQuery'       { Get-Query -QueryName $QueryName }
+        'UpdateQuery'    { 
+            $queryContent = Get-RequestParam -Name "Query" -Request $Request
+            $queryFileName = Get-RequestParam -Name "QueryName" -Request $Request
+            Update-Query -Query $queryContent -QueryName $queryFileName
         }
         'AddQuery'       { 
             $queryContent = Get-RequestParam -Name "Query" -Request $Request
