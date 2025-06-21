@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.36.1.42791",
-      "templateHash": "14806959301834131887"
+      "templateHash": "17131698820134623866"
     }
   },
   "parameters": {
@@ -963,8 +963,8 @@
       "properties": {
         "Application_Type": "web",
         "RetentionInDays": 30,
-        "DisableLocalAuth": false,
-        "publicNetworkAccessForIngestion": "Enabled",
+        "DisableLocalAuth": true,
+        "publicNetworkAccessForIngestion": "False",
         "publicNetworkAccessForQuery": "Enabled",
         "WorkspaceResourceId": "[if(parameters('useExistingWorkspace'), parameters('existingWorkspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid'))))]"
       },
