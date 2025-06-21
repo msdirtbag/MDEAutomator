@@ -131,27 +131,29 @@ async function loadActions() {
     
     console.log('Loading actions for tenant:', tenantId);
     window.showContentLoading('Loading Actions');
-    
-    try {// Call Azure Function directly like TIManager does
-        const url = `https://${window.FUNCURL}/api/MDEAutomator?code=${window.FUNCKEY}`;
+      try {
+        // Call Flask API for actions
+        const url = '/api/actions';
         const payload = { TenantId: tenantId, Function: 'GetActions' };
-        
-        // Add timeout to handle Azure Function cold starts
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
-        
-        const res = await fetch(url, {
+          const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            signal: controller.signal
-        });
+            body: JSON.stringify(payload)
+        });        const result = await res.json();
         
-        clearTimeout(timeoutId);
-        const result = await res.json();
-        let actions = result.value || result.actions || result || [];
+        console.log('Full result from Flask:', result);
+        console.log('Result type:', typeof result);
+        console.log('Result keys:', Object.keys(result));
+        
+        // Handle the Flask response format: { message: "...", result: [...] }
+        let actions = result.result || result.value || result.actions || result || [];
+        
+        // If result.result is not an array but has a nested structure, try to extract it
         if (!Array.isArray(actions) && actions.value) {
             actions = actions.value;
+        }
+        if (!Array.isArray(actions) && actions.result) {
+            actions = actions.result;
         }
         
         // Ensure we have an array for the table rendering
@@ -374,23 +376,17 @@ async function undoAllPendingActions() {
         return;
     }
       console.log('Undoing all pending actions for tenant:', tenantId);
-    
-    try {        // Call Azure Function directly like TIManager does
-        const url = `https://${window.FUNCURL}/api/MDEAutomator?code=${window.FUNCKEY}`;
+      try {
+        // Call Flask API for undo actions
+        const url = '/api/actions';
         const payload = { TenantId: tenantId, Function: 'UndoActions' };
-        
-        // Add timeout to handle Azure Function cold starts
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
         
         const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            signal: controller.signal
+            body: JSON.stringify(payload)
         });
         
-        clearTimeout(timeoutId);
         const result = await res.json();
         
         alert(`Undo Actions completed successfully!\n\nResult: ${JSON.stringify(result, null, 2)}`);

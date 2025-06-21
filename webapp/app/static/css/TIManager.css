@@ -433,6 +433,58 @@ div[class*="summary"] {
         font-size: 0.9em;
         text-align: center !important;
     }
+    
+    /* Mobile modal adjustments */
+    .ai-analysis-modal {
+        width: 95vw !important;
+        max-width: 95vw !important;
+        height: 80vh !important;
+        max-height: 80vh !important;
+        margin: 0 !important;
+        min-width: 280px !important;
+        min-height: 300px !important;
+    }
+    
+    .ai-analysis-content {
+        padding: 1rem !important;
+        font-size: 0.9rem !important;
+    }
+    
+    .ai-analysis-modal .modal-header {
+        flex-direction: column !important;
+        gap: 10px !important;
+        align-items: flex-start !important;
+    }
+    
+    .modal-header-actions {
+        align-self: flex-end !important;
+    }
+    
+    .ai-analysis-content h1 {
+        font-size: 1.2rem;
+    }
+    
+    .ai-analysis-content h2 {
+        font-size: 1.1rem;
+    }
+    
+    .ai-analysis-content h3 {
+        font-size: 1.05rem;
+    }
+    
+    .ai-analysis-content h4 {
+        font-size: 1rem;
+    }
+}
+
+/* Tablet adjustments */
+@media (max-width: 1024px) and (min-width: 769px) {
+    .ai-analysis-modal {
+        width: 80vw !important;
+        max-width: 700px !important;
+        height: 75vh !important;
+        max-height: 75vh !important;
+    }
 }
 
 /* Responsive table containers for TIManager only */
@@ -599,4 +651,303 @@ div[class*="summary"] {
 }
 .gridjs-tr.flash {
     animation: row-flash 0.7s;
+}
+
+/* ===================
+   KQL ANALYSIS MODAL - PROFESSIONAL DESIGN
+   =================== */
+
+/* Modal Overlay */
+.kql-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+/* Modal Container */
+.kql-modal-container {
+    background: #1a2f1a;
+    border: 2px solid #00ff41;
+    border-radius: 8px;
+    width: 600px;
+    max-width: 90vw;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 10px 30px rgba(0, 255, 65, 0.3);
+    animation: modalFadeIn 0.3s ease-out;
+}
+
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Modal Header */
+.kql-modal-header {
+    padding: 20px 25px 15px 25px;
+    border-bottom: 1px solid #00ff41;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.kql-modal-header h3 {
+    margin: 0;
+    color: #00ff41;
+    font-size: 1.3rem;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-weight: 600;
+}
+
+.kql-modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.kql-download-btn {
+    background: #0f1f0f;
+    border: 1px solid #00ff41;
+    color: #00ff41;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.kql-download-btn:hover {
+    background: #00ff41;
+    color: #0f1f0f;
+}
+
+.kql-modal-close {
+    color: #00ff41;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: color 0.2s ease;
+    line-height: 1;
+}
+
+.kql-modal-close:hover {
+    color: #66ff66;
+}
+
+/* Modal Body */
+.kql-modal-body {
+    flex: 1;
+    padding: 20px 25px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Loading State */
+.kql-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    color: #7fff7f;
+}
+
+.kql-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid #333;
+    border-top: 3px solid #00ff41;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 15px;
+}
+
+.kql-loading p {
+    margin: 0;
+    font-size: 1rem;
+    color: #7fff7f;
+}
+
+/* Content Area */
+.kql-content {
+    flex: 1;
+    overflow-y: auto;
+    background: #0f1f0f;
+    border: 1px solid #00ff41;
+    border-radius: 6px;
+    padding: 20px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.6;
+    color: #ffffff;
+}
+
+.kql-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.kql-content::-webkit-scrollbar-track {
+    background: #1a2f1a;
+}
+
+.kql-content::-webkit-scrollbar-thumb {
+    background: #00ff41;
+    border-radius: 4px;
+}
+
+.kql-content::-webkit-scrollbar-thumb:hover {
+    background: #66ff66;
+}
+
+/* Content Typography */
+.kql-content h1 {
+    color: #00ff41;
+    font-size: 1.4rem;
+    margin: 0 0 15px 0;
+    border-bottom: 2px solid #00ff41;
+    padding-bottom: 8px;
+}
+
+.kql-content h2 {
+    color: #66ff66;
+    font-size: 1.2rem;
+    margin: 20px 0 10px 0;
+}
+
+.kql-content h3 {
+    color: #7fff7f;
+    font-size: 1.1rem;
+    margin: 15px 0 8px 0;
+}
+
+.kql-content p {
+    margin: 0 0 12px 0;
+    color: #ffffff;
+}
+
+.kql-content strong {
+    color: #00ff41;
+    font-weight: 600;
+}
+
+.kql-content em {
+    color: #66ff66;
+    font-style: italic;
+}
+
+.kql-content code {
+    background: #1a2f1a;
+    color: #00ff41;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 0.9em;
+}
+
+.kql-content pre {
+    background: #1a2f1a;
+    border: 1px solid #00ff41;
+    border-radius: 4px;
+    padding: 15px;
+    overflow-x: auto;
+    margin: 15px 0;
+    font-family: 'Consolas', 'Courier New', monospace;
+}
+
+.kql-content ul, .kql-content ol {
+    margin: 0 0 15px 20px;
+    padding: 0;
+}
+
+.kql-content li {
+    margin-bottom: 6px;
+    color: #e6e6e6;
+}
+
+/* Error State */
+.kql-error {
+    flex: 1;
+    overflow-y: auto;
+    background: #2a0f0f;
+    border: 1px solid #ff4444;
+    border-radius: 6px;
+    padding: 20px;
+    color: #ffcccc;
+    font-family: 'Consolas', 'Courier New', monospace;
+}
+
+/* Modal Footer */
+.kql-modal-footer {
+    padding: 15px 25px 20px 25px;
+    border-top: 1px solid #00ff41;
+    display: flex;
+    justify-content: flex-end;
+    flex-shrink: 0;
+}
+
+.kql-close-btn {
+    background: #0f1f0f;
+    border: 1px solid #00ff41;
+    color: #00ff41;
+    padding: 8px 20px;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+}
+
+.kql-close-btn:hover {
+    background: #00ff41;
+    color: #0f1f0f;
+}
+
+/* AI Robot Button for KQL */
+.ai-robot-btn {
+    background: linear-gradient(135deg, #00ff41, #1aff5c);
+    border: 1px solid #00ff41;
+    color: #101c11;
+    font-size: 1.2em;
+    padding: 0.3em 0.6em;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2em;
+    min-height: 2em;
+}
+
+.ai-robot-btn:hover {
+    background: linear-gradient(135deg, #1aff5c, #33ff66);
+    transform: scale(1.1) rotate(5deg);
+    box-shadow: 0 4px 12px rgba(0, 255, 65, 0.3);
+}
+
+.ai-robot-btn:active {
+    transform: scale(0.95) rotate(-2deg);
+}
+
+/* Spinner animation */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }

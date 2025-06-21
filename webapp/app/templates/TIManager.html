@@ -106,7 +106,7 @@
 <div id="detectionEditorModal" class="modal" style="display: none; position: fixed; z-index: 1001; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.9);">
     <div class="modal-content" style="background-color: #142a17; border: 2px solid #00ff41; margin: 1% auto; padding: 20px; width: 95%; max-width: 1200px; height: 95%; border-radius: 8px; color: #7fff7f; font-family: Consolas, monospace; display: flex; flex-direction: column;">
         <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #00ff41; padding-bottom: 10px;">
-            <h2 id="detectionEditorTitle" style="margin: 0; color: #00ff41;">Add Custom Detection Rule</h2>
+            <h2 id="detectionEditorTitle" style="margin: 0; color: #00ff41;">Add Custom Detection</h2>
             <span class="close-detection-editor" style="color: #00ff41; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
         </div>
         
@@ -176,13 +176,17 @@
                     </div>
                 </div>
             </div>
-            
-            <!-- KQL Query Section -->
+              <!-- KQL Query Section -->
             <div style="margin-bottom: 20px;">
-                <h3 style="color: #00ff41; margin: 0 0 10px 0; border-bottom: 1px solid #00ff41; padding-bottom: 5px;">Detection Query (KQL) *</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="color: #00ff41; margin: 0; border-bottom: 1px solid #00ff41; padding-bottom: 5px;">Detection Query</h3>
+                    <button id="analyzeKqlBtn" class="ai-robot-btn" title="Analyze KQL Query with AI" style="background: linear-gradient(135deg, #00ff41, #1aff5c); border: 1px solid #00ff41; color: #101c11; font-size: 1.2em; padding: 0.3em 0.6em; border-radius: 50%; cursor: pointer; margin-left: 10px;">
+                        🤖
+                    </button>
+                </div>
                 <div id="kqlEditor" style="width: 100%; height: 300px; border: 1px solid #00ff41; border-radius: 4px; overflow: hidden;"></div>
                 <div style="margin-top: 5px; color: #aaa; font-size: 0.85em;">
-                    💡 Write your KQL query here. Use Ctrl+Space for autocomplete.
+                    💡 Write your KQL query here. Use Ctrl+Space for autocomplete. Click 🤖 to get AI analysis and explanation.
                 </div>
             </div>
             
@@ -238,6 +242,31 @@
         </div>
         <div id="detectionLibraryList" style="flex: 1; overflow-y: auto;">
             <!-- Rules will be loaded here -->
+        </div>    </div>
+</div>
+
+<!-- KQL Analysis Modal -->
+<div id="kqlAnalysisModal" class="kql-modal-overlay" style="display: none;">
+    <div class="kql-modal-container">
+        <div class="kql-modal-header">
+            <h3>🤖 KQL Query Analysis</h3>
+            <div class="kql-modal-actions">
+                <button id="downloadKqlAnalysisBtn" class="kql-download-btn" style="display: none;">📥 Download</button>
+                <span class="kql-modal-close">&times;</span>
+            </div>
+        </div>
+        
+        <div class="kql-modal-body">
+            <div id="kqlAnalysisLoading" class="kql-loading">
+                <div class="kql-spinner"></div>
+                <p>Analyzing KQL query...</p>
+            </div>
+            <div id="kqlAnalysisData" class="kql-content" style="display: none;"></div>
+            <div id="kqlAnalysisError" class="kql-error" style="display: none;"></div>
+        </div>
+        
+        <div class="kql-modal-footer">
+            <button id="closeKqlAnalysisBtn" class="kql-close-btn">Close</button>
         </div>
     </div>
 </div>

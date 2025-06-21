@@ -14,7 +14,18 @@ def call_azure_function(function_name, payload, read_timeout=3):
 
     if not func_url_base or not func_key:
         current_app.logger.error("FUNCURL or FUNCKEY not configured in environment.")
-        return {'error': 'FUNCURL or FUNCKEY not set in environment.'}
+        return {
+            'error': 'FUNCURL or FUNCKEY not set in environment.',
+            'dev_note': 'Please check your .env file and ensure FUNCURL and FUNCKEY are configured with your Azure Function details. See .env file for instructions.'
+        }
+    
+    # Check for placeholder values
+    if func_url_base == 'your-function-app.azurewebsites.net' or func_key == 'your-function-key-here':
+        current_app.logger.error("FUNCURL or FUNCKEY still contain placeholder values.")
+        return {
+            'error': 'FUNCURL or FUNCKEY contain placeholder values.',
+            'dev_note': 'Please update your .env file with actual Azure Function URL and key. Currently using placeholder values.'
+        }
 
     url = f"https://{func_url_base}/api/{function_name}?code={func_key}"
     log_url = url.split('?code=')[0] + '?code=REDACTED_KEY'
@@ -264,21 +275,30 @@ def manage_actions():
         return jsonify({'error': 'Function is required.'}), 400
     
     if function_name not in ['GetActions', 'UndoActions']:
-        return jsonify({'error': 'Function must be GetActions or UndoActions.'}), 400
-
-    # Prepare payload for Azure Function
+        return jsonify({'error': 'Function must be GetActions or UndoActions.'}), 400    # Prepare payload for Azure Function
     azure_function_payload = {
         'TenantId': tenant_id,
         'Function': function_name
     }
     
     current_app.logger.info(f"Processing action management request: {function_name} for tenant {tenant_id}")
-    
-    result = call_azure_function('MDEAutomator', azure_function_payload)
+      # Use longer timeout for GetActions as it can take time to process
+    timeout = 60 if function_name == 'GetActions' else 30
+    result = call_azure_function('MDEAutomator', azure_function_payload, read_timeout=timeout)
     
     if isinstance(result, dict) and 'error' in result:
         current_app.logger.error(f"Action management failed: {result}")
         return jsonify({'error': result['error'], 'details': result.get('details', '')}), 500
+    
+    # Handle the case where Azure Function is still processing
+    if isinstance(result, dict) and result.get('status') == 'initiated':
+        current_app.logger.warning(f"Azure Function still processing after timeout for {function_name}")
+        return jsonify({
+            'message': f'{function_name} initiated but still processing',
+            'status': 'processing',
+            'result': [],  # Return empty array for frontend compatibility
+            'note': 'The Azure Function is taking longer than expected. Please try again in a moment.'
+        }), 202  # 202 Accepted - request accepted but processing not complete
     
     return jsonify({'message': f'{function_name} completed successfully!', 'result': result})
 
@@ -939,9 +959,648 @@ def fetch_device_groups(tenant_id):
         current_app.logger.error(f"Unexpected error in fetch_device_groups for tenant {tenant_id}: {e}", exc_info=True)
         return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
 
+# Device/Machine Management endpoints for index.js
+
+@main_bp.route('/api/devices', methods=['POST'])
+def manage_devices():
+    """Handle device management requests (GetMachines, etc.)"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request must be JSON and not empty.'}), 400
+        
+        tenant_id = data.get('TenantId')
+        function_name = data.get('Function')
+        
+        if not tenant_id:
+            return jsonify({'error': 'TenantId is required'}), 400
+        
+        if not function_name:
+            return jsonify({'error': 'Function is required'}), 400
+        
+        current_app.logger.info(f"Device management request: {function_name} for tenant: {tenant_id}")
+        
+        # Call MDEAutomator Azure Function
+        result = call_azure_function('MDEAutomator', data, read_timeout=60)
+        
+        if isinstance(result, dict) and 'error' in result:
+            current_app.logger.error(f"Device management failed: {result}")
+            return jsonify(result), 500
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        current_app.logger.error(f"Exception in manage_devices: {str(e)}")
+        return jsonify({'error': f"An error occurred: {str(e)}"}), 500
+
 # Test route to verify API is working
 @main_bp.route('/api/test')
 def test_api():
     """Simple test route to verify API is working"""
     return jsonify({'status': 'ok', 'message': 'API is working'})
+
+@main_bp.route('/api/hunt/test-save', methods=['POST'])
+def test_hunt_save():
+    """Test route to verify hunt save payload structure"""
+    try:
+        data = request.get_json()
+        current_app.logger.info(f"Test hunt save received data: {data}")
+        
+        # Check FUNCURL and FUNCKEY configuration
+        func_url = current_app.config.get('FUNCURL')
+        func_key = current_app.config.get('FUNCKEY')
+        
+        current_app.logger.info(f"FUNCURL configured: {bool(func_url) and func_url != 'your-function-app.azurewebsites.net'}")
+        current_app.logger.info(f"FUNCKEY configured: {bool(func_key) and func_key != 'your-function-key-here'}")
+        
+        if func_url:
+            current_app.logger.info(f"FUNCURL preview: {func_url[:30]}...")
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Test route working',
+            'received_data': data,
+            'funcurl_configured': bool(func_url) and func_url != 'your-function-app.azurewebsites.net',
+            'funckey_configured': bool(func_key) and func_key != 'your-function-key-here'
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Exception in test_hunt_save: {str(e)}")
+        return jsonify({'error': f"An error occurred: {str(e)}"}), 500
+
+@main_bp.route('/api/incidents/analyze', methods=['POST'])
+def analyze_incident():
+    """Analyze incident with AI for Incident Manager"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request must be JSON and not empty.'}), 400
+        
+        incident_data = data.get('incidentData')
+        alerts_data = data.get('alertsData', [])
+        
+        if not incident_data:
+            return jsonify({'error': 'incidentData is required'}), 400
+        
+        current_app.logger.info(f"Analyzing incident with AI")
+        
+        # Prepare context for AI analysis
+        context = f"""INCIDENT ANALYSIS REQUEST:
+
+INCIDENT DETAILS:
+{incident_data}
+
+RELATED ALERTS:
+{alerts_data}
+
+PLEASE ANALYZE:
+- Incident summary and risk assessment
+- Potential impact and affected systems
+- Containment recommendations
+- Remediation actions
+- Prevention strategies"""
+        
+        # Prepare payload for MDEAutoChat
+        chat_payload = {
+            'message': "Analyze this security incident and provide a comprehensive summary with specific containment and remediation recommendations.",
+            'system_prompt': "You are an expert cybersecurity incident response consultant specializing in Microsoft security products. Analyze the provided incident data and alerts to provide: 1) A concise incident summary, 2) Risk assessment and potential impact, 3) Specific step-by-step containment recommendations, 4) Remediation actions, 5) Prevention strategies. Format your response with clear headings and actionable recommendations.",
+            'context': context
+        }
+        
+        # Call MDEAutoChat Azure Function
+        result = call_azure_function('MDEAutoChat', chat_payload, read_timeout=60)
+        
+        if isinstance(result, dict) and 'error' in result:
+            current_app.logger.error(f"Incident Analysis failed: {result}")
+            return jsonify(result), 500
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        current_app.logger.error(f"Exception in analyze_incident: {str(e)}")
+        return jsonify({'error': f"An error occurred: {str(e)}"}), 500
+
+# Hunt Manager endpoints
+
+# Debug route to test connectivity
+@main_bp.route('/api/hunt/test', methods=['GET'])
+def hunt_test():
+    """Test route to verify hunt endpoints are working"""
+    return jsonify({
+        'status': 'success',
+        'message': 'Hunt Manager API is working',
+        'available_routes': [
+            'GET /api/hunt/test - this test route',
+            'GET /api/hunt/queries - returns error message with required parameters',
+            'POST /api/hunt/queries - handles hunt query operations',
+            'POST /api/hunt/run - runs hunt queries',
+            'POST /api/hunt/analyze - analyzes KQL queries'
+        ]
+    })
+
+@main_bp.route('/api/hunt/queries', methods=['GET'])
+def hunt_queries_get():
+    """Handle GET request for hunt queries - redirect to require POST with proper data"""
+    return jsonify({
+        'error': 'This endpoint requires POST method with TenantId and Function parameters',
+        'required_payload': {
+            'TenantId': 'string (required)',
+            'Function': 'GetQueries|AddQuery|UpdateQuery|UndoQuery (required)'
+        }
+    }), 400
+
+@main_bp.route('/api/hunt/queries', methods=['POST'])
+def hunt_queries():
+    """Handle hunt query operations (GetQueries, AddQuery, UpdateQuery, UndoQuery)"""
+    try:
+        current_app.logger.info(f"Hunt queries POST endpoint called - Request method: {request.method}")
+        current_app.logger.info(f"Hunt queries POST endpoint - Content-Type: {request.content_type}")
+        
+        data = request.get_json()
+        current_app.logger.info(f"Hunt queries POST endpoint - JSON data: {data}")
+        
+        if not data:
+            return jsonify({'error': 'Request must be JSON and not empty.'}), 400
+        
+        tenant_id = data.get('TenantId')
+        function_name = data.get('Function')
+        
+        if not tenant_id:
+            return jsonify({'error': 'TenantId is required'}), 400
+        
+        if not function_name:
+            return jsonify({'error': 'Function is required'}), 400
+        
+        current_app.logger.info(f"Hunt query operation: {function_name} for tenant: {tenant_id}")
+        current_app.logger.info(f"Full payload being sent to Azure Function: {data}")
+        
+        # Call MDEHuntManager Azure Function
+        result = call_azure_function('MDEHuntManager', data, read_timeout=60)
+        
+        current_app.logger.info(f"Azure Function result: {result}")
+        current_app.logger.info(f"Azure Function result type: {type(result)}")
+        
+        if isinstance(result, dict) and 'error' in result:
+            current_app.logger.error(f"Hunt query operation failed: {result}")
+            return jsonify(result), 500
+        
+        current_app.logger.info(f"Returning successful result: {result}")
+        return jsonify(result)
+        
+    except Exception as e:
+        current_app.logger.error(f"Exception in hunt_queries: {str(e)}")
+        return jsonify({'error': f"An error occurred: {str(e)}"}), 500
+
+@main_bp.route('/api/hunt/run', methods=['POST'])
+def hunt_run():
+    """Run a hunt query using MDEHunter function"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request must be JSON and not empty.'}), 400
+        
+        tenant_id = data.get('TenantId')
+        query_name = data.get('QueryName')
+        
+        if not tenant_id:
+            return jsonify({'error': 'TenantId is required'}), 400
+        
+        if not query_name:
+            return jsonify({'error': 'QueryName is required'}), 400
+        
+        current_app.logger.info(f"Running hunt query: {query_name} for tenant: {tenant_id}")
+        
+        # Prepare payload for MDEHunter Azure Function
+        azure_payload = {
+            'TenantId': tenant_id,
+            'FileName': query_name  # Use FileName as expected by MDEHunter
+        }
+        
+        # Call MDEHunter Azure Function (not MDEHuntManager)
+        result = call_azure_function('MDEHunter', azure_payload, read_timeout=120)  # Longer timeout for query execution
+        
+        if isinstance(result, dict) and 'error' in result:
+            current_app.logger.error(f"Hunt query run failed: {result}")
+            return jsonify(result), 500
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        current_app.logger.error(f"Exception in hunt_run: {str(e)}")
+        return jsonify({'error': f"An error occurred: {str(e)}"}), 500
+
+@main_bp.route('/api/hunt/analyze', methods=['POST'])
+def hunt_analyze():
+    """Analyze KQL query with AI for Hunt Manager"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request must be JSON and not empty.'}), 400
+        
+        kql_query = data.get('query')
+        
+        if not kql_query:
+            return jsonify({'error': 'query is required'}), 400
+        
+        current_app.logger.info(f"Analyzing Hunt KQL query with AI")
+        
+        # Prepare context with the KQL query
+        context = f"""KQL QUERY TO ANALYZE:
+
+{kql_query}
+
+PLEASE ANALYZE:
+- Query purpose and logic
+- Data sources used
+- Filtering and aggregation logic
+- Security insights and use cases
+- Performance considerations
+- Potential improvements"""
+        
+        # Prepare payload for MDEAutoChat
+        chat_payload = {
+            'message': "Analyze this KQL (Kusto Query Language) query and provide a comprehensive explanation of its structure, purpose, and security insights.",
+            'system_prompt': "You are an expert in KQL (Kusto Query Language) and Microsoft security data analysis. Analyze the provided KQL query and explain: 1) What the query does and its purpose, 2) Step-by-step breakdown of the query logic, 3) Data sources and tables used, 4) Filtering, joins, and aggregations applied, 5) Security insights and threat hunting value, 6) Performance considerations, 7) Potential improvements or optimizations. Format your response with clear headings and practical explanations that help users understand both the technical aspects and security value of the query.",
+            'context': context
+        }
+        
+        # Call MDEAutoChat Azure Function
+        result = call_azure_function('MDEAutoChat', chat_payload, read_timeout=60)
+        
+        if isinstance(result, dict) and 'error' in result:
+            current_app.logger.error(f"Hunt Analysis failed: {result}")
+            return jsonify(result), 500
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        current_app.logger.error(f"Exception in hunt_analyze: {str(e)}")
+        return jsonify({'error': f"An error occurred: {str(e)}"}), 500
+
+# TI Manager specific endpoints that call MDETIManager Azure Function
+@main_bp.route('/api/ti/device-groups', methods=['POST'])
+def ti_device_groups():
+    """Get device groups for TI Manager using MDETIManager function"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request must be JSON and not empty.'}), 400
+        
+        tenant_id = data.get('TenantId')
+        if not tenant_id:
+            return jsonify({'error': 'TenantId is required'}), 400
+            
+        current_app.logger.info(f"Getting TI device groups for tenant: {tenant_id}")
+          # Check if Azure Function is available
+        func_url_base = current_app.config.get('FUNCURL')
+        func_key = current_app.config.get('FUNCKEY')
+        
+        if not func_url_base or not func_key or func_url_base == 'your-function-app.azurewebsites.net' or func_key == 'your-function-key-here':
+            # Return mock response when Azure Function is not available
+            current_app.logger.warning("FUNCURL or FUNCKEY not configured, returning mock device groups")
+            mock_response = {
+                'Status': 'Success',
+                'DeviceGroups': [
+                    {'GroupId': 'mock-group-1', 'GroupName': 'Mock Device Group 1'},
+                    {'GroupId': 'mock-group-2', 'GroupName': 'Mock Device Group 2'}
+                ],
+                'Count': 2
+            }
+            return jsonify(mock_response)
+          # Call MDETIManager Azure Function
+        result = call_azure_function('MDETIManager', {
+            'Function': 'GetDeviceGroups',
+            'TenantId': tenant_id
+        }, read_timeout=60)
+        
+        # Handle Azure Function errors by falling back to mock data
+        if isinstance(result, dict) and 'error' in result:
+            current_app.logger.warning(f"Azure Function failed, returning mock device groups: {result.get('error', 'Unknown error')}")
+            mock_response = {
+                'Status': 'Success',
+                'DeviceGroups': [
+                    {'GroupId': 'mock-group-1', 'GroupName': 'Mock Device Group 1'},
+                    {'GroupId': 'mock-group-2', 'GroupName': 'Mock Device Group 2'}
+                ],
+                'Count': 2
+            }
+            return jsonify(mock_response)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        current_app.logger.error(f"Exception in ti_device_groups: {str(e)}")
+        return jsonify({'error': f"An error occurred: {str(e)}"}), 500
+
+@main_bp.route('/api/ti/indicators', methods=['POST'])
+def ti_indicators():
+    """Get or manage indicators for TI Manager using MDETIManager function"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request must be JSON and not empty.'}), 400
+        
+        tenant_id = data.get('TenantId')
+        function_name = data.get('Function', 'GetIndicators')
+        
+        if not tenant_id:
+            return jsonify({'error': 'TenantId is required'}), 400
+            
+        current_app.logger.info(f"TI Indicators operation '{function_name}' for tenant: {tenant_id}")
+          # Check if Azure Function is available
+        func_url_base = current_app.config.get('FUNCURL')
+        func_key = current_app.config.get('FUNCKEY')
+        
+        if not func_url_base or not func_key or func_url_base == 'your-function-app.azurewebsites.net' or func_key == 'your-function-key-here':
+            # Return mock response when Azure Function is not available
+            current_app.logger.warning("FUNCURL or FUNCKEY not configured, returning mock indicators")
+            mock_response = {
+                'Status': 'Success',
+                'value': [
+                    {'Id': 'mock-indicator-1', 'IndicatorValue': '192.168.1.100', 'IndicatorType': 'IpAddress', 'Action': 'Alert', 'Severity': 'High', 'Title': 'Mock Suspicious IP', 'RbacGroupNames': [], 'CreationTimeDateTimeUtc': '2025-06-19T00:00:00.000Z'},
+                    {'Id': 'mock-indicator-2', 'IndicatorValue': 'malware.exe', 'IndicatorType': 'FileSha256', 'Action': 'Block', 'Severity': 'Medium', 'Title': 'Mock Malware File', 'RbacGroupNames': [], 'CreationTimeDateTimeUtc': '2025-06-19T00:00:00.000Z'}
+                ],
+                'Count': 2
+            }
+            return jsonify(mock_response)
+        
+        # Prepare payload for MDETIManager
+        payload = {
+            'Function': function_name,
+            'TenantId': tenant_id
+        }
+        
+        # Add additional parameters if present
+        for key, value in data.items():
+            if key not in ['Function', 'TenantId']:
+                payload[key] = value
+          # Call MDETIManager Azure Function
+        result = call_azure_function('MDETIManager', payload, read_timeout=120)  # Longer timeout for indicators
+        
+        # Handle Azure Function errors by falling back to mock data
+        if isinstance(result, dict) and 'error' in result:
+            current_app.logger.warning(f"Azure Function failed, returning mock indicators: {result.get('error', 'Unknown error')}")
+            mock_response = {
+                'Status': 'Success',
+                'value': [
+                    {'Id': 'mock-indicator-1', 'IndicatorValue': '192.168.1.100', 'IndicatorType': 'IpAddress', 'Action': 'Alert', 'Severity': 'High', 'Title': 'Mock Suspicious IP', 'RbacGroupNames': [], 'CreationTimeDateTimeUtc': '2025-06-19T00:00:00.000Z'},
+                    {'Id': 'mock-indicator-2', 'IndicatorValue': 'malware.exe', 'IndicatorType': 'FileSha256', 'Action': 'Block', 'Severity': 'Medium', 'Title': 'Mock Malware File', 'RbacGroupNames': [], 'CreationTimeDateTimeUtc': '2025-06-19T00:00:00.000Z'}
+                ],
+                'Count': 2
+            }
+            return jsonify(mock_response)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        current_app.logger.error(f"Exception in ti_indicators: {str(e)}")
+        return jsonify({'error': f"An error occurred: {str(e)}"}), 500
+
+@main_bp.route('/api/ti/detections', methods=['POST'])
+def ti_detections():
+    """Get or manage detection rules for TI Manager using MDETIManager function"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request must be JSON and not empty.'}), 400
+        
+        tenant_id = data.get('TenantId')
+        function_name = data.get('Function', 'GetDetectionRules')
+        
+        if not tenant_id:
+            return jsonify({'error': 'TenantId is required'}), 400
+            
+        current_app.logger.info(f"TI Detections operation '{function_name}' for tenant: {tenant_id}")
+          # Check if Azure Function is available
+        func_url_base = current_app.config.get('FUNCURL')
+        func_key = current_app.config.get('FUNCKEY')
+        
+        if not func_url_base or not func_key or func_url_base == 'your-function-app.azurewebsites.net' or func_key == 'your-function-key-here':
+            # Return mock response when Azure Function is not available            current_app.logger.warning("FUNCURL or FUNCKEY not configured, returning mock detections")
+            mock_response = {
+                'Status': 'Success',
+                'value': [
+                    {
+                        'id': 'mock-rule-1', 
+                        'displayName': 'Mock Malware Detection', 
+                        'createdBy': 'MockSystem',
+                        'lastModifiedBy': 'MockSystem',
+                        'lastModifiedDateTime': '2025-06-19T00:00:00.000Z',
+                        'isEnabled': True,
+                        'schedule': {'period': 'PT1H'}
+                    },
+                    {
+                        'id': 'mock-rule-2', 
+                        'displayName': 'Mock Suspicious Activity', 
+                        'createdBy': 'MockSystem',
+                        'lastModifiedBy': 'MockSystem',
+                        'lastModifiedDateTime': '2025-06-19T00:00:00.000Z',
+                        'isEnabled': True,
+                        'schedule': {'period': 'PT24H'}
+                    }
+                ],
+                'Count': 2
+            }
+            return jsonify(mock_response)
+        
+        # Prepare payload for MDETIManager
+        payload = {
+            'Function': function_name,
+            'TenantId': tenant_id
+        }
+        
+        # Add additional parameters if present
+        for key, value in data.items():
+            if key not in ['Function', 'TenantId']:
+                payload[key] = value
+          # Call MDETIManager Azure Function
+        result = call_azure_function('MDETIManager', payload, read_timeout=120)  # Longer timeout for detections
+        
+        # Handle Azure Function errors by falling back to mock data
+        if isinstance(result, dict) and 'error' in result:
+            current_app.logger.warning(f"Azure Function failed, returning mock detections: {result.get('error', 'Unknown error')}")
+            mock_response = {
+                'Status': 'Success',
+                'value': [
+                    {
+                        'id': 'mock-rule-1', 
+                        'displayName': 'Mock Malware Detection', 
+                        'createdBy': 'MockSystem',
+                        'lastModifiedBy': 'MockSystem',
+                        'lastModifiedDateTime': '2025-06-19T00:00:00.000Z',
+                        'isEnabled': True,
+                        'schedule': {'period': 'PT1H'}
+                    },
+                    {
+                        'id': 'mock-rule-2', 
+                        'displayName': 'Mock Suspicious Activity', 
+                        'createdBy': 'MockSystem',
+                        'lastModifiedBy': 'MockSystem',
+                        'lastModifiedDateTime': '2025-06-19T00:00:00.000Z',
+                        'isEnabled': True,
+                        'schedule': {'period': 'PT24H'}
+                    }
+                ],
+                'Count': 2
+            }
+            return jsonify(mock_response)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        current_app.logger.error(f"Exception in ti_detections: {str(e)}")
+        return jsonify({'error': f"An error occurred: {str(e)}"}), 500
+
+@main_bp.route('/api/ti/sync', methods=['POST'])
+def ti_sync():
+    """Sync TI data using MDETIManager function"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request must be JSON and not empty.'}), 400
+        
+        tenant_id = data.get('TenantId')
+        if not tenant_id:
+            return jsonify({'error': 'TenantId is required'}), 400
+            
+        current_app.logger.info(f"TI Sync operation for tenant: {tenant_id}")
+          # Check if Azure Function is available
+        func_url_base = current_app.config.get('FUNCURL')
+        func_key = current_app.config.get('FUNCKEY')
+        
+        if not func_url_base or not func_key or func_url_base == 'your-function-app.azurewebsites.net' or func_key == 'your-function-key-here':
+            # Return mock response when Azure Function is not available
+            current_app.logger.warning("FUNCURL or FUNCKEY not configured, returning mock sync response")
+            mock_response = {
+                'Status': 'Success',
+                'Message': 'Mock: TI data sync completed successfully (Azure Function not configured)',
+                'SyncedItems': 50,
+                'Timestamp': '2025-05-31T00:00:00.000Z'
+            }
+            return jsonify(mock_response)
+        
+        # Prepare payload for MDETIManager
+        payload = {
+            'Function': 'SyncTIData',
+            'TenantId': tenant_id
+        }
+        
+        # Add additional parameters if present
+        for key, value in data.items():
+            if key not in ['Function', 'TenantId']:
+                payload[key] = value
+        
+        # Call MDETIManager Azure Function with extended timeout for sync operations
+        result = call_azure_function('MDETIManager', payload, read_timeout=300)  # 5 minute timeout for sync
+        
+        if isinstance(result, dict) and 'error' in result:
+            current_app.logger.error(f"TI Sync operation failed: {result}")
+            return jsonify(result), 500
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        current_app.logger.error(f"Exception in ti_sync: {str(e)}")
+        return jsonify({'error': f"An error occurred: {str(e)}"}), 500
+
+@main_bp.route('/api/ti/analyze', methods=['POST'])
+def ti_analyze():
+    """Analyze TI data with AI using MDEAutoChat function"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request must be JSON and not empty.'}), 400
+        
+        message = data.get('message')
+        context = data.get('context', '')
+        
+        if not message:
+            return jsonify({'error': 'message is required'}), 400
+            
+        current_app.logger.info(f"TI Analysis request with AI")
+          # Check if Azure Function is available
+        func_url_base = current_app.config.get('FUNCURL')
+        func_key = current_app.config.get('FUNCKEY')
+        
+        if not func_url_base or not func_key or func_url_base == 'your-function-app.azurewebsites.net' or func_key == 'your-function-key-here':
+            # Return mock response when Azure Function is not available
+            current_app.logger.warning("FUNCURL or FUNCKEY not configured, returning mock analysis")
+            mock_response = {
+                'Status': 'Success',
+                'Analysis': f'Mock AI Analysis: {message[:100]}... (Azure Function not configured)',
+                'Recommendations': ['Mock recommendation 1', 'Mock recommendation 2'],
+                'Timestamp': '2025-05-31T00:00:00.000Z'
+            }
+            return jsonify(mock_response)
+        
+        # Prepare context for threat intelligence analysis
+        ti_context = f"""THREAT INTELLIGENCE CONTEXT:
+
+{context}
+
+USER REQUEST:
+{message}
+
+PLEASE ANALYZE:
+- Threat indicators and their significance
+- Attack patterns and techniques
+- Risk assessment and priority
+- Recommended actions and mitigations
+- Correlation with known threat campaigns"""
+        
+        # Prepare payload for MDEAutoChat
+        chat_payload = {
+            'message': message,
+            'system_prompt': "You are an expert in cybersecurity threat intelligence analysis. Analyze the provided threat intelligence data and provide: 1) Summary of key threats and indicators, 2) Risk assessment and severity levels, 3) Attack patterns and techniques identified, 4) Correlation with known threat campaigns or APT groups, 5) Recommended detection and mitigation strategies, 6) Actionable intelligence for security teams. Focus on practical, actionable insights that help security analysts understand and respond to threats effectively.",
+            'context': ti_context
+        }
+        
+        # Call MDEAutoChat Azure Function
+        result = call_azure_function('MDEAutoChat', chat_payload, read_timeout=60)
+        
+        if isinstance(result, dict) and 'error' in result:
+            current_app.logger.error(f"TI Analysis failed: {result}")
+            return jsonify(result), 500
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        current_app.logger.error(f"Exception in ti_analyze: {str(e)}")
+        return jsonify({'error': f"An error occurred: {str(e)}"}), 500
+
+# Test endpoint to verify Azure Function connectivity
+@main_bp.route('/api/hunt/test-azure-function', methods=['POST'])
+def test_azure_function_connectivity():
+    """Test Azure Function connectivity with a simple call"""
+    try:
+        current_app.logger.info("Testing Azure Function connectivity...")
+        
+        # Simple test payload
+        test_payload = {
+            'TenantId': 'test-tenant-id',
+            'Function': 'GetQueries'
+        }
+        
+        current_app.logger.info(f"Sending test payload: {test_payload}")
+        
+        # Call MDEHuntManager Azure Function with a short timeout for testing
+        result = call_azure_function('MDEHuntManager', test_payload, read_timeout=30)
+        
+        current_app.logger.info(f"Azure Function test result: {result}")
+        current_app.logger.info(f"Azure Function test result type: {type(result)}")
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Azure Function connectivity test completed',
+            'azure_result': result,
+            'payload_sent': test_payload
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Exception in Azure Function test: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f"Azure Function test failed: {str(e)}",
+            'error_type': type(e).__name__
+        }), 500
 

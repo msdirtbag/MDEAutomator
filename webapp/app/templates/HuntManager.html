@@ -48,10 +48,17 @@
       <label style="color:#7fff7f; display: block; margin-bottom: 0.5rem;">Query Name:</label>
       <input id="newQueryName" type="text" style="width:100%; padding: 0.5rem; background: #101c11; color: #7fff7f; border: 1px solid #00ff41; border-radius: 4px;" />
     </div>
-    
-    <div style="margin-bottom: 1rem; flex: 1; display: flex; flex-direction: column;">
-      <label style="color:#7fff7f; display: block; margin-bottom: 0.5rem;">Query (KQL):</label>
+      <div style="margin-bottom: 1rem; flex: 1; display: flex; flex-direction: column;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+        <label style="color:#7fff7f;">Query (KQL):</label>
+        <button id="analyzeHuntKqlBtn" class="ai-robot-btn" title="Analyze KQL Query with AI" style="background: linear-gradient(135deg, #00ff41, #1aff5c); border: 1px solid #00ff41; color: #101c11; font-size: 1.2em; padding: 0.3em 0.6em; border-radius: 50%; cursor: pointer;">
+          🤖
+        </button>
+      </div>
       <div id="kqlEditor" style="width:100%; height:300px; border:1px solid #00ff41; border-radius:4px; overflow: hidden;"></div>
+      <div style="margin-top: 5px; color: #aaa; font-size: 0.85em;">
+        💡 Write your KQL hunt query here. Use Ctrl+Space for autocomplete. Click 🤖 to get AI analysis and explanation.
+      </div>
     </div>
     
     <div style="text-align:right; margin-top: 1rem; flex-shrink: 0;">
@@ -86,7 +93,7 @@ window.FUNCURL = "{{ FUNCURL }}";
 window.FUNCKEY = "{{ FUNCKEY }}";
 </script>
 {% endif %}
-<script src="{{ url_for('static', filename='js/HuntManager.js') }}"></script>
+<script src="{{ url_for('static', filename='js/HuntManager.js') }}?v=20250620173500&t={{ range(1000, 9999) | random }}"></script>
 <script>
 // CodeMirror Editor integration for KQL
 window.codeMirrorKqlEditor = null;
@@ -345,8 +352,7 @@ window.showAddQueryModal = function() {
     const saveText = document.getElementById('saveQueryBtnText');
     if (saveText) saveText.textContent = 'Loading Editor...';
   }
-  
-  // Wait for modal to be visible before initializing CodeMirror
+    // Wait for modal to be visible before initializing CodeMirror
   setTimeout(() => {
     console.log('Initializing CodeMirror...');
     const editor = initCodeMirrorKqlEditor();
@@ -360,6 +366,26 @@ window.showAddQueryModal = function() {
         saveBtn.disabled = false;
         const saveText = document.getElementById('saveQueryBtnText');
         if (saveText) saveText.textContent = 'Save';
+      }
+        // Set up AI robot button event listener
+      const robotBtn = document.getElementById('analyzeHuntKqlBtn');
+      if (robotBtn) {
+        // Remove any existing event listeners first
+        robotBtn.onclick = null;
+        
+        robotBtn.onclick = function(e) {
+          console.log('Robot button clicked in add mode!');
+          e.preventDefault();
+          e.stopPropagation();
+          if (typeof window.analyzeHuntKqlQuery === 'function') {
+            window.analyzeHuntKqlQuery();
+          } else {
+            console.error('analyzeHuntKqlQuery function not available');
+          }
+        };
+        console.log('Hunt AI robot button event listener attached');
+      } else {
+        console.warn('Hunt AI robot button not found');
       }
     } else {
       console.error('Failed to initialize CodeMirror');

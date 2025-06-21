@@ -1,0 +1,84 @@
+# Python Virtual Environment
+venv/
+env/
+.env/
+.venv/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Operating System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Flask specific
+instance/
+.webassets-cache
+
+# Databases
+*.sqlite3
+*.db
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+.flaskenv
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Large media files
+*.mp4
+*.tiff
+*.avi
+*.flv
+*.mov
+*.wmv
+
+# Temporary files
+*.bak
+*.gho
+*.ori
+*.orig
+*.tmp
+
+# Secrets and sensitive information
+secrets.json
+*.pem
+*.key

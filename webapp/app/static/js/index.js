@@ -121,11 +121,6 @@ function waitForTenantDropdownAndAutoLoad() {
 // Use centralized loading system from base.js
 
 async function loadMachines() {
-    if (!window.FUNCURL || !window.FUNCKEY) {
-        alert('FUNCURL and FUNCKEY are not set. Please contact your administrator.');
-        return;
-    }
-    
     const tenantId = getTenantId();
     if (!tenantId) {
         console.log('No tenant ID available for auto-loading machines');
@@ -136,24 +131,18 @@ async function loadMachines() {
     window.showContentLoading('Loading machines...');
     
     try {
-        const url = `https://${window.FUNCURL}/api/MDEAutomator?code=${window.FUNCKEY}`;
+        const url = '/api/devices';
         const payload = {
             TenantId: tenantId,
             Function: 'GetMachines'
         };
         
-        // Increased timeout to handle Azure Function cold starts
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
-        
         const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            signal: controller.signal
+            body: JSON.stringify(payload)
         });
         
-        clearTimeout(timeoutId);
         window.hideContentLoading();
         
         const data = await res.json();
@@ -175,13 +164,8 @@ async function loadMachines() {
         
     } catch (error) {
         window.hideContentLoading();
-        if (error.name === 'AbortError') {
-            console.error('Load machines request timed out');
-            alert('Loading machines timed out. The operation may still be processing. Please try again.');
-        } else {
-            console.error('Error loading machines:', error);
-            alert('Error loading machines. Please check console for details.');
-        }
+        console.error('Error loading machines:', error);
+        alert('Error loading machines. Please check console for details.');
     }
 }
 

@@ -98,6 +98,23 @@
     background-color: #cc3300 !important;
 }
 
+/* Special styling for "Edit" button */
+.edit-button {
+    background-color: #0066cc !important;
+    border-color: #0066cc !important;
+    color: #ffffff !important;
+}
+
+.edit-button:hover {
+    background-color: #0080ff !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(0, 102, 204, 0.3) !important;
+}
+
+.edit-button:active {
+    background-color: #0052a3 !important;
+}
+
 /* Action count styling */
 #actionCount {
     font-family: 'Consolas', monospace;
@@ -389,4 +406,51 @@ div[class*="summary"] {
 }
 .gridjs-tr.flash {
     animation: row-flash 0.7s;
+}
+
+/* AI Robot Button for Hunt Manager */
+.ai-robot-btn {
+    background: linear-gradient(135deg, #00ff41, #1aff5c);
+    border: 1px solid #00ff41;
+    color: #101c11;
+    font-size: 1.2em;
+    padding: 0.3em 0.6em;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 255, 65, 0.3);
+    font-family: 'Segoe UI', sans-serif;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.5em;
+    min-height: 2.5em;
+}
+
+.ai-robot-btn:hover {
+    background: linear-gradient(135deg, #1aff5c, #00ff41);
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 4px 16px rgba(0, 255, 65, 0.5);
+}
+
+.ai-robot-btn:active {
+    transform: translateY(0) scale(0.98);
+    box-shadow: 0 2px 8px rgba(0, 255, 65, 0.3);
+}
+
+.ai-robot-btn:focus {
+    outline: 2px solid #00ff41;
+    outline-offset: 2px;
+}
+
+/* Edit mode styling for modal */
+.edit-mode h3 {
+    color: #ffa500 !important;
+}
+
+.edit-mode input[readonly] {
+    background-color: #333 !important;
+    color: #ccc !important;
+    cursor: not-allowed;
 }

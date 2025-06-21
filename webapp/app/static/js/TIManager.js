@@ -61,7 +61,7 @@ window.addEventListener('DOMContentLoaded', () => {
             
             try {
                 // Fetch current detection rule details from backend
-                const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
+                const url = '/api/ti/detections';
                 const payload = { 
                     TenantId: tenantId, 
                     Function: 'GetDetectionRule',
@@ -100,20 +100,16 @@ window.addEventListener('DOMContentLoaded', () => {
             if (selected.length === 0) return;
             if (!confirm(`Are you sure you want to delete ${selected.length} detection rule(s)?`)) return;
             const tenantId = getTenantId();
-            const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
+            const url = '/api/ti/detections';
             let deletedCount = 0;
             for (const ruleId of selected) {
                 const payload = { TenantId: tenantId, Function: 'UndoDetectionRule', RuleId: ruleId };
                 try {
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 30000);
                     await fetch(url, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload),
-                        signal: controller.signal
+                        body: JSON.stringify(payload)
                     });
-                    clearTimeout(timeoutId);
                     deletedCount++;
                 } catch (err) {
                     console.error('Error deleting detection rule:', err);
@@ -136,18 +132,14 @@ window.addEventListener('DOMContentLoaded', () => {
             libraryModal.style.display = 'flex';
             libraryList.innerHTML = '<div style="color:#7fff7f;">Loading...</div>';
             const tenantId = getTenantId();
-            const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
+            const url = '/api/ti/detections';
             const payload = { TenantId: tenantId, Function: 'GetDetectionRulesfromStorage' };
             try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 30000);
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                    signal: controller.signal
+                    body: JSON.stringify(payload)
                 });
-                clearTimeout(timeoutId);
                 const result = await res.json();
                 const rules = Array.isArray(result) ? result : (result.value || result.rules || []);
                 if (!rules.length) {
@@ -243,20 +235,16 @@ window.addEventListener('DOMContentLoaded', () => {
                     if (!title) return;
                     if (!confirm(`Install detection rule: ${title}?`)) return;
                     const tenantId = getTenantId();
-                    const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
+                    const url = '/api/ti/detections';
                     const payload = { TenantId: tenantId, Function: 'InstallDetectionRulefromStorage', RuleTitle: title };
                     try {
                         e.target.disabled = true;
                         e.target.textContent = 'Installing...';
-                        const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), 30000);
                         await fetch(url, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(payload),
-                            signal: controller.signal
+                            body: JSON.stringify(payload)
                         });
-                        clearTimeout(timeoutId);
                         e.target.textContent = 'Installed!';
                         setTimeout(() => { libraryModal.style.display = 'none'; loadAllThreatIntelligenceData(); }, 1200);
                     } catch (err) {
@@ -266,6 +254,35 @@ window.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             });
+        }
+    }
+
+    // KQL Analysis Modal event listeners
+    const kqlAnalysisModal = document.getElementById('kqlAnalysisModal');
+    if (kqlAnalysisModal) {
+        // Close modal when clicking outside
+        kqlAnalysisModal.addEventListener('click', (e) => {
+            if (e.target === kqlAnalysisModal) {
+                closeKqlAnalysisModal();
+            }
+        });
+
+        // Close button (X)
+        const closeBtn = kqlAnalysisModal.querySelector('.kql-modal-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', closeKqlAnalysisModal);
+        }
+
+        // Close button (bottom)
+        const closeBtnBottom = document.getElementById('closeKqlAnalysisBtn');
+        if (closeBtnBottom) {
+            closeBtnBottom.addEventListener('click', closeKqlAnalysisModal);
+        }
+
+        // Download button
+        const downloadBtn = document.getElementById('downloadKqlAnalysisBtn');
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', downloadKqlAnalysis);
         }
     }
 });
@@ -345,15 +362,15 @@ async function loadAllThreatIntelligenceData() {
 
 // Step 1: Load Device Groups using MDETIManager
 async function loadDeviceGroupsForTenant(tenantId) {
-    const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
+    const url = '/api/ti/device-groups';
     const payload = { 
         TenantId: tenantId, 
         Function: 'GetDeviceGroups' 
     };
     
-    console.log('Calling MDETIManager GetDeviceGroups with payload:', payload);
+    console.log('Calling TI device groups API with payload:', payload);
     
-    // Add timeout to handle Azure Function cold starts
+    // Add timeout to handle cold starts
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
     
@@ -466,13 +483,13 @@ async function loadDeviceGroupsForTenant(tenantId) {
 
 // Step 2: Load Indicators using MDETIManager
 async function loadIndicatorsForTenant(tenantId) {
-    const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
+    const url = '/api/ti/indicators';
     const payload = { 
         TenantId: tenantId, 
         Function: 'GetIndicators' 
     };
     
-    console.log('Calling MDETIManager GetIndicators with payload:', payload);
+    console.log('Calling TI indicators API with payload:', payload);
     
     // Add timeout to handle Azure Function cold starts
     const controller = new AbortController();
@@ -526,13 +543,13 @@ async function loadIndicatorsForTenant(tenantId) {
 
 // Step 3: Load Detection Rules using MDETIManager  
 async function loadDetectionRulesForTenant(tenantId) {
-    const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
+    const url = '/api/ti/detections';
     const payload = { 
         TenantId: tenantId, 
         Function: 'GetDetectionRules' 
     };
     
-    console.log('Calling MDETIManager GetDetectionRules with payload:', payload);
+    console.log('Calling TI detections API with payload:', payload);
     
     // Add timeout to handle Azure Function cold starts
     const controller = new AbortController();
@@ -685,7 +702,7 @@ async function tiManualFormSubmit(e) {
         alert(`Invalid type selected. Type text: "${typeText}"`); 
         return; 
     }
-    const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
+    const url = '/api/ti/indicators';
     const payload = { TenantId: tenantId, Function: mapping.func };
     payload[mapping.param] = [value];
     if (indicatorName) {
@@ -705,18 +722,11 @@ async function tiManualFormSubmit(e) {
     console.log('DeviceGroups in payload:', payload.DeviceGroups);
     
     try {
-        // Add timeout to handle Azure Function cold starts
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-        
         const response = await fetch(url, { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify(payload),
-            signal: controller.signal
+            body: JSON.stringify(payload)
         });
-        
-        clearTimeout(timeoutId);
         
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -834,7 +844,7 @@ async function deleteSelectedIOCs() {
         groupedByType[mappedType].push(ioc.value);
     });
 
-    const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
+    const url = '/api/ti/indicators';
     let deletedCount = 0;
 
     // Process each type group
@@ -882,7 +892,7 @@ async function tiCsvImportBtnClick() {
     
     console.log('CSV Import - Selected device groups:', deviceGroups);
     
-    const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
+    const url = '/api/ti/indicators';
     const file = fileInput.files[0];
     const reader = new FileReader();
     reader.onload = async function(e) {
@@ -997,21 +1007,14 @@ async function tiCsvExportBtnClick() {
         console.log('CSV Export: Fetching indicators...');
         
         // Get the current indicators data
-        const apiUrl = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
+        const apiUrl = '/api/ti/indicators';
         const payload = { TenantId: tenantId, Function: 'GetIndicators' };
-        
-        // Add timeout to handle Azure Function cold starts
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
         
         const res = await fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            signal: controller.signal
+            body: JSON.stringify(payload)
         });
-        
-        clearTimeout(timeoutId);
         const result = await res.json();
         let indicators = result.value || result.machines || result || [];
         if (!Array.isArray(indicators) && indicators.value) indicators = indicators.value;
@@ -1222,26 +1225,19 @@ async function syncDetections() {
     try {
         window.showContentLoading('Syncing Detections...');
         
-        const url = `https://${window.FUNCURL}/api/MDECDManager?code=${window.FUNCKEY}`;
+        const url = '/api/ti/sync';
         const payload = { 
             TenantId: tenantId,
             Function: 'Sync'  // Assuming the function parameter for sync
         };
         
-        console.log('Calling MDECDManager Sync with payload:', payload);
-        
-        // Add timeout to handle Azure Function cold starts
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+        console.log('Calling TI sync API with payload:', payload);
         
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            signal: controller.signal
+            body: JSON.stringify(payload)
         });
-        
-        clearTimeout(timeoutId);
         
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -1302,6 +1298,15 @@ function setupEventListeners() {
         });
     } else {
         console.log('Tenant dropdown not found');
+    }
+
+    // KQL Analysis button event listener
+    const analyzeKqlBtn = document.getElementById('analyzeKqlBtn');
+    if (analyzeKqlBtn) {
+        console.log('Found KQL analysis button, adding click listener');
+        analyzeKqlBtn.addEventListener('click', analyzeKqlQuery);
+    } else {
+        console.log('KQL analysis button not found');
     }
 }
 
@@ -1496,7 +1501,7 @@ function openDetectionEditorModal(mode, detectionId = '', jsonContent = '') {
             return;
         }
         
-        const url = `https://${window.FUNCURL}/api/MDETIManager?code=${window.FUNCKEY}`;
+        const url = '/api/ti/detections';
         const payload = { 
             TenantId: tenantId, 
             Function: mode === 'add' ? 'InstallDetectionRule' : 'UpdateDetectionRule', 
@@ -1521,15 +1526,11 @@ function openDetectionEditorModal(mode, detectionId = '', jsonContent = '') {
         }
         
         try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000);
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-                signal: controller.signal
+                body: JSON.stringify(payload)
             });
-            clearTimeout(timeoutId);
             
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -2431,5 +2432,461 @@ function validateAndPrepareKqlQuery(queryText) {
     // Return the original query text - JSON.stringify will handle escaping
     // We're just validating and logging here
     return queryText;
+}
+
+// =================
+// KQL AI ANALYSIS FUNCTIONS
+// =================
+
+// Global variables for KQL analysis
+let currentKqlAnalysisData = null;
+
+// Function to analyze KQL query with AI
+async function analyzeKqlQuery() {
+    console.log('=== analyzeKqlQuery called ===');
+    
+    // Clear any existing analysis data first
+    currentKqlAnalysisData = null;
+    console.log('Cleared existing analysis data');
+    
+    // Get KQL query from CodeMirror editor
+    let kqlQuery = '';
+    if (window.codeMirrorKqlEditor && typeof window.codeMirrorKqlEditor.getValue === 'function') {
+        kqlQuery = window.codeMirrorKqlEditor.getValue().trim();
+    } else {
+        console.error('CodeMirror KQL editor not available');
+        alert('KQL editor not available. Please try again.');
+        return;
+    }
+    
+    if (!kqlQuery) {
+        alert('Please enter a KQL query to analyze.');
+        return;
+    }
+    
+    console.log('Analyzing KQL query:', kqlQuery.substring(0, 100) + '...');
+    
+    // Show KQL analysis modal
+    console.log('About to call showKqlAnalysisModal()...');
+    try {
+        showKqlAnalysisModal();
+        console.log('showKqlAnalysisModal() call completed successfully');
+    } catch (modalError) {
+        console.error('Error calling showKqlAnalysisModal():', modalError);
+    }
+    
+    try {
+        // Use Flask API for KQL analysis
+        const chatUrl = '/api/ti/analyze';
+        
+        // Prepare payload for the Flask API
+        const chatPayload = {
+            query: kqlQuery
+        };
+
+        console.log('Calling TI analyze API for KQL analysis...');
+        const chatResponse = await fetch(chatUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(chatPayload)
+        });
+
+        if (!chatResponse.ok) {
+            throw new Error(`KQL analysis failed: ${chatResponse.status} ${chatResponse.statusText}`);
+        }
+
+        const chatResult = await chatResponse.json();
+        console.log('KQL analysis completed');
+        console.log('Chat result:', chatResult);
+
+        // Extract analysis text - focus on "Response" field only
+        let analysisText = '';
+        
+        console.log('Processing chatResult for KQL:', typeof chatResult, chatResult);
+        
+        // If the result is a string that looks like JSON, try to parse it
+        if (typeof chatResult === 'string') {
+            try {
+                const parsedResult = JSON.parse(chatResult);
+                console.log('Parsed JSON from string:', parsedResult);
+                chatResult = parsedResult;
+            } catch (e) {
+                console.log('String is not valid JSON, using as-is');
+                analysisText = chatResult;
+            }
+        }
+        
+        // Now extract the Response field specifically
+        if (chatResult && typeof chatResult === 'object') {
+            if (chatResult.Response && typeof chatResult.Response === 'string') {
+                analysisText = chatResult.Response;
+                console.log('Extracted Response field from KQL chatResult');
+            } else if (chatResult.response && typeof chatResult.response === 'string') {
+                analysisText = chatResult.response;
+                console.log('Extracted response field from KQL chatResult');
+            } else if (chatResult.message && typeof chatResult.message === 'string') {
+                analysisText = chatResult.message;
+                console.log('Extracted message field from KQL chatResult');
+            } else if (chatResult.analysis && typeof chatResult.analysis === 'string') {
+                analysisText = chatResult.analysis;
+                console.log('Extracted analysis field from KQL chatResult');
+            } else {
+                console.warn('No recognizable response field found in KQL chatResult:', chatResult);
+                console.warn('Available fields:', Object.keys(chatResult || {}));
+                analysisText = 'Analysis completed but no readable response field was found. Please check the console for details.';
+            }
+        } else if (typeof chatResult === 'string' && analysisText === '') {
+            analysisText = chatResult;
+            console.log('Using KQL chatResult as string directly');
+        } else {
+            console.warn('Unexpected KQL chatResult type:', typeof chatResult, chatResult);
+            analysisText = 'Analysis completed but response format was unexpected. Please check the console for details.';
+        }
+
+        // Store the analysis data
+        currentKqlAnalysisData = {
+            query: kqlQuery,
+            analysis: analysisText,
+            timestamp: new Date().toISOString()
+        };
+
+        // Display the results
+        displayKqlAnalysisResults(currentKqlAnalysisData);
+
+    } catch (error) {
+        console.error('Error performing KQL analysis:', error);
+        displayKqlAnalysisError(error.message);
+    }
+}
+
+// Function to show KQL analysis modal - NEW SIMPLE APPROACH
+function showKqlAnalysisModal() {
+    console.log('=== showKqlAnalysisModal called - SIMPLE APPROACH ===');
+    
+    // Remove any existing modal
+    const existingModal = document.getElementById('dynamicKqlModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Create modal dynamically
+    const modal = document.createElement('div');
+    modal.id = 'dynamicKqlModal';
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.8);
+        z-index: 999999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        box-sizing: border-box;
+    `;
+    
+    const container = document.createElement('div');
+    container.style.cssText = `
+        background: #1a2f1a;
+        border: 2px solid #00ff41;
+        border-radius: 8px;
+        width: 1200px;
+        max-width: 95vw;
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 10px 30px rgba(0, 255, 65, 0.3);
+        color: #7fff7f;
+        font-family: Consolas, monospace;
+    `;
+    
+    container.innerHTML = `
+        <div style="padding: 20px 25px 15px 25px; border-bottom: 1px solid #00ff41; display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin: 0; color: #00ff41; font-size: 1.3rem;">🤖 KQL Query Analysis</h3>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <button id="dynamicDownloadBtn" style="display: none; background: #00ff41; color: #101c11; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">📥 Download</button>
+                <span id="dynamicCloseBtn" style="color: #00ff41; font-size: 28px; font-weight: bold; cursor: pointer; padding: 0 5px;">&times;</span>
+            </div>
+        </div>
+        <div style="flex: 1; overflow-y: auto; padding: 20px 25px;">
+            <div id="dynamicLoadingDiv" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px;">
+                <div style="border: 3px solid #00ff41; border-radius: 50%; border-top: 3px solid transparent; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
+                <p style="margin-top: 20px; color: #7fff7f;">Analyzing KQL query...</p>
+            </div>
+            <div id="dynamicDataDiv" style="display: none; line-height: 1.6;"></div>
+            <div id="dynamicErrorDiv" style="display: none; color: #ff6b6b; padding: 20px; background: rgba(255, 0, 0, 0.1); border-radius: 4px;"></div>
+        </div>
+        <div style="padding: 15px 25px; border-top: 1px solid #00ff41; text-align: right;">
+            <button id="dynamicCloseBtn2" style="background: #666; color: #fff; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Close</button>
+        </div>
+    `;
+    
+    // Add spinner animation
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    modal.appendChild(container);
+    document.body.appendChild(modal);
+    
+    // Add event listeners
+    const closeModal = () => {
+        modal.remove();
+        document.body.style.overflow = '';
+    };
+    
+    document.getElementById('dynamicCloseBtn').onclick = closeModal;
+    document.getElementById('dynamicCloseBtn2').onclick = closeModal;
+    modal.onclick = (e) => {
+        if (e.target === modal) closeModal();
+    };
+    
+    // Prevent body scroll
+    document.body.style.overflow = 'hidden';
+    
+    console.log('Dynamic modal created and displayed');
+    return modal;
+}
+
+// Function to display KQL analysis results - UPDATED FOR DYNAMIC MODAL
+function displayKqlAnalysisResults(analysisData) {
+    console.log('=== displayKqlAnalysisResults called - DYNAMIC MODAL ===');
+    console.log('Analysis data:', analysisData);
+    
+    const loadingDiv = document.getElementById('dynamicLoadingDiv');
+    const dataDiv = document.getElementById('dynamicDataDiv');
+    const errorDiv = document.getElementById('dynamicErrorDiv');
+    const downloadBtn = document.getElementById('dynamicDownloadBtn');
+    
+    console.log('Dynamic modal elements found:', {
+        loadingDiv: !!loadingDiv,
+        dataDiv: !!dataDiv,
+        errorDiv: !!errorDiv,
+        downloadBtn: !!downloadBtn
+    });
+    
+    if (loadingDiv) {
+        loadingDiv.style.display = 'none';
+        console.log('Hidden loading div');
+    }
+    if (errorDiv) {
+        errorDiv.style.display = 'none';
+        console.log('Hidden error div');
+    }
+    
+    if (dataDiv) {
+        console.log('Formatting analysis text...');
+        // Format the analysis text with better structure
+        const formattedAnalysis = formatKqlAnalysisText(analysisData.analysis, analysisData.query);
+        console.log('Formatted analysis length:', formattedAnalysis.length);
+        dataDiv.innerHTML = formattedAnalysis;
+        dataDiv.style.display = 'block';
+        console.log('Displayed analysis in data div');
+    } else {
+        console.error('Data div not found!');
+    }
+    
+    if (downloadBtn) {
+        downloadBtn.style.display = 'inline-block';
+        downloadBtn.onclick = () => downloadKqlAnalysis();
+        console.log('Showed download button');
+    }
+    
+    console.log('=== displayKqlAnalysisResults completed ===');
+}
+
+// Function to format KQL analysis text with better HTML structure
+function formatKqlAnalysisText(analysisText, originalQuery) {
+    // Ensure analysisText is a string
+    if (typeof analysisText !== 'string') {
+        console.warn('formatKqlAnalysisText received non-string input:', typeof analysisText, analysisText);
+        analysisText = String(analysisText || 'No analysis content available');
+    }
+    
+    // Clean up any escape characters first
+    analysisText = analysisText.replace(/\\n/g, '\n').replace(/\\"/g, '"');
+    
+    // Enhanced Markdown-style formatting for better readability
+    let formatted = analysisText
+        // Convert Markdown headers to HTML headers with styling
+        .replace(/^# (.*$)/gm, '<h1 style="color: #00ff41; font-size: 1.5rem; margin: 1.5rem 0 1rem 0; padding-bottom: 0.5rem; border-bottom: 2px solid #00ff41;">$1</h1>')
+        .replace(/^## (.*$)/gm, '<h2 style="color: #1aff5c; font-size: 1.3rem; margin: 1.5rem 0 1rem 0; padding-bottom: 0.3rem; border-bottom: 1px solid #1aff5c;">$1</h2>')
+        .replace(/^### (.*$)/gm, '<h3 style="color: #7fff7f; font-size: 1.2rem; margin: 1.2rem 0 0.8rem 0;">$1</h3>')
+        .replace(/^#### (.*$)/gm, '<h4 style="color: #7fff7f; font-size: 1.1rem; margin: 1rem 0 0.6rem 0;">$1</h4>')
+        
+        // Convert Markdown horizontal rules
+        .replace(/^---+$/gm, '<hr style="border: none; border-top: 1px solid #00ff41; margin: 1.5rem 0; opacity: 0.6;">')
+        
+        // Convert Markdown bold and italic
+        .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #00ff41; font-weight: 600;">$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em style="color: #1aff5c; font-style: italic;">$1</em>')
+        
+        // Convert Markdown code blocks
+        .replace(/```([\s\S]*?)```/g, '<pre style="background: #142a17; padding: 1rem; border-radius: 5px; border: 1px solid #00ff41; overflow-x: auto; margin: 1rem 0;"><code style="color: #00ff41; font-family: \'Consolas\', \'Courier New\', monospace;">$1</code></pre>')
+        
+        // Convert inline code
+        .replace(/`([^`]+)`/g, '<code style="background: #142a17; padding: 0.2em 0.4em; border-radius: 3px; color: #00ff41; font-family: \'Consolas\', \'Courier New\', monospace;">$1</code>')
+        
+        // Handle numbered lists with better styling
+        .replace(/^(\d+)\.\s+(.*)$/gm, '<div style="margin: 0.5rem 0; padding: 0.5rem 0 0.5rem 2rem; border-left: 3px solid #00ff41; background: rgba(0, 255, 65, 0.05); position: relative;"><span style="position: absolute; left: 0.5rem; color: #00ff41; font-weight: bold;">$1.</span>$2</div>')
+        
+        // Handle bullet points with better styling
+        .replace(/^-\s+(.*)$/gm, '<div style="margin: 0.3rem 0; padding: 0.3rem 0 0.3rem 2rem; color: #e0e0e0; position: relative;"><span style="position: absolute; left: 1rem; color: #00ff41; font-weight: bold;">•</span>$1</div>')
+        
+        // Convert double line breaks to paragraph breaks
+        .replace(/\n\n+/g, '</p><p style="margin-bottom: 1rem; line-height: 1.6; color: #ffffff;">')
+        
+        // Convert single line breaks to <br>
+        .replace(/\n/g, '<br>')
+        
+        // Clean up any remaining formatting issues
+        .replace(/<\/p><p[^>]*><br>/g, '</p><p style="margin-bottom: 1rem; line-height: 1.6; color: #ffffff;">')
+        .replace(/<br><\/p>/g, '</p>');
+    
+    // Wrap content in paragraphs if not already formatted
+    if (!formatted.includes('<h1>') && !formatted.includes('<h2>') && !formatted.includes('<div>')) {
+        formatted = `<p style="margin-bottom: 1rem; line-height: 1.6; color: #ffffff;">${formatted}</p>`;
+    } else {
+        // Ensure content starts with a paragraph if it doesn't start with a header
+        if (!formatted.startsWith('<h') && !formatted.startsWith('<div>') && !formatted.startsWith('<p>')) {
+            formatted = `<p style="margin-bottom: 1rem; line-height: 1.6; color: #ffffff;">${formatted}`;
+        }
+        // Ensure content ends with a closing paragraph
+        if (!formatted.endsWith('</p>') && !formatted.endsWith('</div>')) {
+            formatted += '</p>';
+        }
+    }
+    
+    // Add KQL query header with enhanced styling
+    const header = `
+        <div style="background: linear-gradient(135deg, #142a17 0%, #0a1f0e 100%); padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; border: 2px solid #00ff41; box-shadow: 0 4px 12px rgba(0, 255, 65, 0.1);">
+            <h3 style="margin: 0 0 1rem 0; color: #00ff41; font-size: 1.3rem; display: flex; align-items: center;">
+                <span style="margin-right: 0.5rem;">📊</span>
+                KQL Query Analysis
+            </h3>
+            <div style="background: rgba(0, 255, 65, 0.1); padding: 1rem; border-radius: 5px; border: 1px solid rgba(0, 255, 65, 0.3); margin-bottom: 1rem;">
+                <div style="color: #7fff7f; font-size: 0.9rem; margin-bottom: 0.5rem; font-weight: bold;">Analyzed Query:</div>
+                <div style="background: #0a1a0a; padding: 1rem; border-radius: 4px; border: 1px solid #00ff41; overflow-x: auto;">
+                    <code style="color: #00ff41; font-family: 'Consolas', 'Courier New', monospace; white-space: pre-wrap; word-break: break-all;">${escapeHtml(originalQuery)}</code>
+                </div>
+            </div>
+            <div style="color: #7fff7f; font-size: 0.9rem; display: flex; align-items: center;">
+                <span style="margin-right: 0.5rem;">🤖</span>
+                <strong>Analysis Generated:</strong> 
+                <span style="margin-left: 0.5rem; color: #00ff41;">${new Date(currentKqlAnalysisData.timestamp).toLocaleString()}</span>
+            </div>
+        </div>
+    `;
+    
+    // Wrap everything in a container with improved styling
+    return `
+        <div style="line-height: 1.7; font-size: 1rem;">
+            ${header}
+            ${formatted}
+        </div>
+    `;
+}
+
+// Function to display KQL analysis error
+function displayKqlAnalysisError(errorMessage) {
+    const loadingDiv = document.getElementById('kqlAnalysisLoading');
+    const dataDiv = document.getElementById('kqlAnalysisData');
+    const errorDiv = document.getElementById('kqlAnalysisError');
+    const downloadBtn = document.getElementById('downloadKqlAnalysisBtn');
+    
+    if (loadingDiv) loadingDiv.style.display = 'none';
+    if (dataDiv) dataDiv.style.display = 'none';
+    if (downloadBtn) downloadBtn.style.display = 'none';
+    
+    if (errorDiv) {
+        errorDiv.innerHTML = `
+            <h3 style="color: #ff4444; margin-bottom: 1rem;">⚠️ KQL Analysis Failed</h3>
+            <p style="margin-bottom: 1rem;">${escapeHtml(errorMessage)}</p>
+            <p style="color: #ff8888; font-size: 0.9em;">
+                Please check your KQL query syntax and try again, or contact your administrator if the problem persists.
+            </p>
+        `;
+        errorDiv.style.display = 'block';
+    }
+}
+
+// Function to close KQL analysis modal
+function closeKqlAnalysisModal() {
+    const modal = document.getElementById('kqlAnalysisModal');
+    if (modal) {
+        modal.style.display = 'none';
+        // Restore page scrolling
+        document.body.style.overflow = '';
+    }
+}
+
+// Function to download KQL analysis results
+function downloadKqlAnalysis() {
+    if (!currentKqlAnalysisData) {
+        alert('No KQL analysis data available to download.');
+        return;
+    }
+    
+    const content = `KQL QUERY ANALYSIS REPORT
+================================================================================
+
+ANALYZED QUERY:
+${currentKqlAnalysisData.query}
+
+ANALYSIS GENERATED: ${new Date(currentKqlAnalysisData.timestamp).toLocaleString()}
+
+================================================================================
+
+KQL ANALYSIS & EXPLANATION:
+
+${currentKqlAnalysisData.analysis}
+
+================================================================================
+Generated by MDEAutomator KQL Analysis
+Timestamp: ${currentKqlAnalysisData.timestamp}
+`;
+
+    // Create and download the file
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' });
+    const link = document.createElement('a');
+    
+    if (link.download !== undefined) {
+        const now = new Date();
+        const timestamp = now.getFullYear() + 
+                         ('0' + (now.getMonth() + 1)).slice(-2) + 
+                         ('0' + now.getDate()).slice(-2) + '_' +
+                         ('0' + now.getHours()).slice(-2) + 
+                         ('0' + now.getMinutes()).slice(-2);
+        const filename = `kql_analysis_${timestamp}.txt`;
+        
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        console.log(`Downloaded KQL analysis as ${filename}`);
+    } else {
+        alert('Your browser does not support file downloads.');
+    }
+}
+
+// Helper function to escape HTML (if not already present)
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 

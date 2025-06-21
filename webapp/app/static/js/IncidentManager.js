@@ -4,6 +4,10 @@ let selectedIncidentIds = [];
 let incidentsGrid = null;
 let allIncidents = [];
 
+// AI Analysis state
+let currentAnalysisData = null;
+let currentIncidentForAnalysis = null;
+
 window.addEventListener('DOMContentLoaded', () => {
     console.log('Incident Manager page JavaScript loaded');
     
@@ -712,6 +716,9 @@ async function viewIncidentAlerts(incidentId, button) {
 
 // Function to show the alerts modal
 function showAlertsModal(incidentId) {
+    // Store incident ID for AI analysis
+    currentIncidentForAnalysis = incidentId;
+    
     const modal = document.getElementById('relatedAlertsModal');
     if (modal) {
         // Update modal title
@@ -1142,6 +1149,33 @@ function setupEventListeners() {
         });
     }
 
+    // AI Analysis modal event listeners
+    const aiAnalysisBtn = document.getElementById('aiAnalysisBtn');
+    if (aiAnalysisBtn) {
+        aiAnalysisBtn.addEventListener('click', () => {
+            if (currentIncidentForAnalysis) {
+                performAIAnalysis(currentIncidentForAnalysis);
+            } else {
+                alert('No incident selected for AI analysis');
+            }
+        });
+    }
+
+    const closeAiAnalysis = document.querySelector('.close-ai-analysis');
+    if (closeAiAnalysis) {
+        closeAiAnalysis.addEventListener('click', closeAiAnalysisModal);
+    }
+
+    const closeAiAnalysisBtn = document.getElementById('closeAiAnalysisBtn');
+    if (closeAiAnalysisBtn) {
+        closeAiAnalysisBtn.addEventListener('click', closeAiAnalysisModal);
+    }
+
+    const downloadAnalysisBtn = document.getElementById('downloadAnalysisBtn');
+    if (downloadAnalysisBtn) {
+        downloadAnalysisBtn.addEventListener('click', downloadAiAnalysis);
+    }
+
     // Modal confirm buttons
     const confirmUpdateBtn = document.getElementById('confirmUpdateBtn');
     if (confirmUpdateBtn) {
@@ -1158,6 +1192,7 @@ function setupEventListeners() {
         const updateModal = document.getElementById('updateIncidentModal');
         const commentModal = document.getElementById('addCommentModal');
         const alertsModal = document.getElementById('relatedAlertsModal');
+        const aiAnalysisModal = document.getElementById('aiAnalysisModal');
         
         if (event.target === updateModal) {
             closeModal('updateIncidentModal');
@@ -1167,6 +1202,9 @@ function setupEventListeners() {
         }
         if (event.target === alertsModal) {
             closeModal('relatedAlertsModal');
+        }
+        if (event.target === aiAnalysisModal) {
+            closeAiAnalysisModal();
         }
     });
     
@@ -1422,5 +1460,456 @@ function formatDateTime(dateTimeString) {
         minute: '2-digit',
         second: '2-digit'
     });
+}
+
+// =================
+// AI ANALYSIS FUNCTIONS
+// =================
+
+// Function to initiate AI analysis for the current incident
+async function performAIAnalysis(incidentId) {
+    console.log('=== performAIAnalysis called ===');
+    console.log('Incident ID:', incidentId);
+    
+    const tenantId = getTenantId();
+    if (!tenantId) {
+        alert('No tenant selected for AI analysis');
+        return;
+    }
+
+    // Store current incident for reference
+    currentIncidentForAnalysis = incidentId;
+    
+    // Show AI analysis modal
+    showAiAnalysisModal();
+    
+    try {
+        // First, get the incident details and alerts
+        console.log('Fetching incident alerts for AI analysis...');
+        const alertsResponse = await fetch('/api/incidents/alerts', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                tenantId: tenantId,
+                incidentId: incidentId
+            })
+        });
+
+        if (!alertsResponse.ok) {
+            throw new Error(`Failed to fetch incident alerts: ${alertsResponse.status}`);
+        }
+
+        const alertsResult = await alertsResponse.json();
+        if (!alertsResult.success) {
+            throw new Error('Failed to retrieve incident alerts for analysis');
+        }
+
+        const alerts = alertsResult.alerts || [];
+        console.log('Retrieved alerts for AI analysis:', alerts.length);
+
+        // Find the incident details from our current data
+        const incident = allIncidents.find(inc => (inc.Id || inc.id) === incidentId);
+        if (!incident) {
+            throw new Error('Incident details not found');
+        }
+
+        // Prepare context for AI analysis
+        const context = prepareIncidentContextForAI(incident, alerts);
+        console.log('Prepared context for AI:', context.substring(0, 200) + '...');
+
+        // Use Flask API for incident AI analysis
+        const chatUrl = '/api/incidents/analyze';
+        
+        // Call Flask API with incident and alerts data
+        const chatPayload = {
+            incidentData: incident,
+            alertsData: alerts
+        };
+
+        console.log('Calling Incident Analysis API...');
+        const chatResponse = await fetch(chatUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(chatPayload)
+        });
+
+        if (!chatResponse.ok) {
+            throw new Error(`AI analysis failed: ${chatResponse.status} ${chatResponse.statusText}`);
+        }
+
+        const chatResult = await chatResponse.json();
+        console.log('AI analysis completed');
+        console.log('Chat result:', chatResult);
+
+        // Extract analysis text - focus on "Response" field only
+        let analysisText = '';
+        
+        console.log('Processing chatResult:', typeof chatResult, chatResult);
+        
+        // If the result is a string that looks like JSON, try to parse it
+        if (typeof chatResult === 'string') {
+            try {
+                const parsedResult = JSON.parse(chatResult);
+                console.log('Parsed JSON from string:', parsedResult);
+                chatResult = parsedResult;
+            } catch (e) {
+                console.log('String is not valid JSON, using as-is');
+                analysisText = chatResult;
+            }
+        }
+        
+        // Now extract the Response field specifically
+        if (chatResult && typeof chatResult === 'object') {
+            if (chatResult.Response && typeof chatResult.Response === 'string') {
+                analysisText = chatResult.Response;
+                console.log('Extracted Response field from chatResult');
+            } else if (chatResult.response && typeof chatResult.response === 'string') {
+                analysisText = chatResult.response;
+                console.log('Extracted response field from chatResult');
+            } else if (chatResult.message && typeof chatResult.message === 'string') {
+                analysisText = chatResult.message;
+                console.log('Extracted message field from chatResult');
+            } else if (chatResult.analysis && typeof chatResult.analysis === 'string') {
+                analysisText = chatResult.analysis;
+                console.log('Extracted analysis field from chatResult');
+            } else {
+                // Log the full structure for debugging but show an error
+                console.warn('No recognizable response field found in chatResult:', chatResult);
+                console.warn('Available fields:', Object.keys(chatResult || {}));
+                analysisText = 'Analysis completed but no readable response field was found. Please check the console for details.';
+            }
+        } else if (typeof chatResult === 'string' && analysisText === '') {
+            // Fallback for direct string response
+            analysisText = chatResult;
+            console.log('Using chatResult as string directly');
+        } else {
+            console.warn('Unexpected chatResult type:', typeof chatResult, chatResult);
+            analysisText = 'Analysis completed but response format was unexpected. Please check the console for details.';
+        }
+
+        // Store the analysis data
+        currentAnalysisData = {
+            incidentId: incidentId,
+            analysis: analysisText,
+            timestamp: new Date().toISOString(),
+            incident: incident
+        };
+
+        // Display the results
+        displayAiAnalysisResults(currentAnalysisData);
+
+    } catch (error) {
+        console.error('Error performing AI analysis:', error);
+        displayAiAnalysisError(error.message);
+    }
+}
+
+// Function to prepare incident context for AI analysis
+function prepareIncidentContextForAI(incident, alerts) {
+    let context = `INCIDENT DETAILS:\n`;
+    context += `- Incident ID: ${incident.Id || incident.id}\n`;
+    context += `- Display Name: ${incident.DisplayName || incident.displayName || 'N/A'}\n`;
+    context += `- Severity: ${incident.Severity || incident.severity || 'Unknown'}\n`;
+    context += `- Status: ${incident.Status || incident.status || 'Unknown'}\n`;
+    context += `- Classification: ${incident.Classification || incident.classification || 'Unknown'}\n`;
+    context += `- Created: ${incident.CreatedDateTime || incident.createdDateTime || 'Unknown'}\n`;
+    context += `- Last Updated: ${incident.LastUpdateDateTime || incident.lastUpdateDateTime || incident.LastUpdateTime || incident.lastUpdateTime || 'Unknown'}\n`;
+    context += `- Assigned To: ${incident.AssignedTo || incident.assignedTo || 'Unassigned'}\n\n`;
+
+    context += `RELATED ALERTS (${alerts.length} total):\n`;
+    
+    alerts.forEach((alert, index) => {
+        context += `\nAlert ${index + 1}:\n`;
+        context += `- Alert ID: ${alert.Id || alert.id || 'Unknown'}\n`;
+        context += `- Title: ${alert.Title || alert.title || alert.DisplayName || alert.displayName || 'Untitled'}\n`;
+        context += `- Severity: ${alert.Severity || alert.severity || 'Unknown'}\n`;
+        context += `- Status: ${alert.Status || alert.status || 'Unknown'}\n`;
+        context += `- Category: ${alert.Category || alert.category || 'Unknown'}\n`;
+        context += `- Description: ${alert.Description || alert.description || 'No description'}\n`;
+        
+        // Add evidence if available
+        const evidence = alert.Evidence || alert.evidence || [];
+        if (evidence.length > 0) {
+            context += `- Evidence (${evidence.length} items):\n`;
+            evidence.slice(0, 5).forEach((item, evidenceIndex) => { // Limit to first 5 evidence items
+                context += `  ${evidenceIndex + 1}. Type: ${item.EntityType || item.entityType || 'Unknown'}\n`;
+                if (item.FileName || item.fileName) context += `     File: ${item.FileName || item.fileName}\n`;
+                if (item.FilePath || item.filePath) context += `     Path: ${item.FilePath || item.filePath}\n`;
+                if (item.Sha1 || item.sha1) context += `     SHA1: ${item.Sha1 || item.sha1}\n`;
+                if (item.ProcessCommandLine || item.processCommandLine) context += `     Command: ${item.ProcessCommandLine || item.processCommandLine}\n`;
+                if (item.AccountName || item.accountName) context += `     Account: ${item.AccountName || item.accountName}\n`;
+                if (item.IpAddress || item.ipAddress) context += `     IP: ${item.IpAddress || item.ipAddress}\n`;
+                if (item.Url || item.url) context += `     URL: ${item.Url || item.url}\n`;
+            });
+            if (evidence.length > 5) {
+                context += `  ... and ${evidence.length - 5} more evidence items\n`;
+            }
+        }
+    });
+
+    return context;
+}
+
+// Function to show AI analysis modal
+function showAiAnalysisModal() {
+    const modal = document.getElementById('aiAnalysisModal');
+    if (modal) {
+        modal.style.display = 'block';
+        
+        // Reset modal state
+        const loadingDiv = document.getElementById('aiAnalysisLoading');
+        const dataDiv = document.getElementById('aiAnalysisData');
+        const errorDiv = document.getElementById('aiAnalysisError');
+        const downloadBtn = document.getElementById('downloadAnalysisBtn');
+        
+        if (loadingDiv) loadingDiv.style.display = 'block';
+        if (dataDiv) {
+            dataDiv.style.display = 'none';
+            dataDiv.innerHTML = '';
+        }
+        if (errorDiv) {
+            errorDiv.style.display = 'none';
+            errorDiv.innerHTML = '';
+        }
+        if (downloadBtn) downloadBtn.style.display = 'none';
+    }
+}
+
+// Function to display AI analysis results
+function displayAiAnalysisResults(analysisData) {
+    const loadingDiv = document.getElementById('aiAnalysisLoading');
+    const dataDiv = document.getElementById('aiAnalysisData');
+    const errorDiv = document.getElementById('aiAnalysisError');
+    const downloadBtn = document.getElementById('downloadAnalysisBtn');
+    
+    if (loadingDiv) loadingDiv.style.display = 'none';
+    if (errorDiv) errorDiv.style.display = 'none';
+    
+    if (dataDiv) {
+        // Format the analysis text with better structure
+        const formattedAnalysis = formatAiAnalysisText(analysisData.analysis);
+        dataDiv.innerHTML = formattedAnalysis;
+        dataDiv.style.display = 'block';
+    }
+    
+    if (downloadBtn) downloadBtn.style.display = 'inline-flex';
+}
+
+// Function to format AI analysis text with better HTML structure
+function formatAiAnalysisText(analysisText) {
+    // Ensure analysisText is a string
+    if (typeof analysisText !== 'string') {
+        console.warn('formatAiAnalysisText received non-string input:', typeof analysisText, analysisText);
+        analysisText = String(analysisText || 'No analysis content available');
+    }
+    
+    // Clean up any escape characters first
+    analysisText = analysisText.replace(/\\n/g, '\n').replace(/\\"/g, '"');
+    
+    // Enhanced Markdown-style formatting for better readability
+    let formatted = analysisText
+        // Convert Markdown headers to HTML headers with styling
+        .replace(/^# (.*$)/gm, '<h1 style="color: #00ff41; font-size: 1.5rem; margin: 1.5rem 0 1rem 0; padding-bottom: 0.5rem; border-bottom: 2px solid #00ff41;">$1</h1>')
+        .replace(/^## (.*$)/gm, '<h2 style="color: #1aff5c; font-size: 1.3rem; margin: 1.5rem 0 1rem 0; padding-bottom: 0.3rem; border-bottom: 1px solid #1aff5c;">$1</h2>')
+        .replace(/^### (.*$)/gm, '<h3 style="color: #7fff7f; font-size: 1.2rem; margin: 1.2rem 0 0.8rem 0;">$1</h3>')
+        .replace(/^#### (.*$)/gm, '<h4 style="color: #7fff7f; font-size: 1.1rem; margin: 1rem 0 0.6rem 0;">$1</h4>')
+        
+        // Convert Markdown horizontal rules
+        .replace(/^---+$/gm, '<hr style="border: none; border-top: 1px solid #00ff41; margin: 1.5rem 0; opacity: 0.6;">')
+        
+        // Convert Markdown bold and italic
+        .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #00ff41; font-weight: 600;">$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em style="color: #1aff5c; font-style: italic;">$1</em>')
+        
+        // Convert Markdown code blocks
+        .replace(/```([\s\S]*?)```/g, '<pre style="background: #142a17; padding: 1rem; border-radius: 5px; border: 1px solid #00ff41; overflow-x: auto; margin: 1rem 0;"><code style="color: #00ff41; font-family: \'Consolas\', \'Courier New\', monospace;">$1</code></pre>')
+        
+        // Convert inline code
+        .replace(/`([^`]+)`/g, '<code style="background: #142a17; padding: 0.2em 0.4em; border-radius: 3px; color: #00ff41; font-family: \'Consolas\', \'Courier New\', monospace;">$1</code>')
+        
+        // Handle numbered lists with better styling
+        .replace(/^(\d+)\.\s+(.*)$/gm, '<div style="margin: 0.5rem 0; padding: 0.5rem 0 0.5rem 2rem; border-left: 3px solid #00ff41; background: rgba(0, 255, 65, 0.05); position: relative;"><span style="position: absolute; left: 0.5rem; color: #00ff41; font-weight: bold;">$1.</span>$2</div>')
+        
+        // Handle bullet points with better styling
+        .replace(/^-\s+(.*)$/gm, '<div style="margin: 0.3rem 0; padding: 0.3rem 0 0.3rem 2rem; color: #e0e0e0; position: relative;"><span style="position: absolute; left: 1rem; color: #00ff41; font-weight: bold;">•</span>$1</div>')
+        
+        // Convert double line breaks to paragraph breaks
+        .replace(/\n\n+/g, '</p><p style="margin-bottom: 1rem; line-height: 1.6; color: #ffffff;">')
+        
+        // Convert single line breaks to <br>
+        .replace(/\n/g, '<br>')
+        
+        // Clean up any remaining formatting issues
+        .replace(/<\/p><p[^>]*><br>/g, '</p><p style="margin-bottom: 1rem; line-height: 1.6; color: #ffffff;">')
+        .replace(/<br><\/p>/g, '</p>');
+    
+    // Wrap content in paragraphs if not already formatted
+    if (!formatted.includes('<h1>') && !formatted.includes('<h2>') && !formatted.includes('<div>')) {
+        formatted = `<p style="margin-bottom: 1rem; line-height: 1.6; color: #ffffff;">${formatted}</p>`;
+    } else {
+        // Ensure content starts with a paragraph if it doesn't start with a header
+        if (!formatted.startsWith('<h') && !formatted.startsWith('<div>') && !formatted.startsWith('<p>')) {
+            formatted = `<p style="margin-bottom: 1rem; line-height: 1.6; color: #ffffff;">${formatted}`;
+        }
+        // Ensure content ends with a closing paragraph
+        if (!formatted.endsWith('</p>') && !formatted.endsWith('</div>')) {
+            formatted += '</p>';
+        }
+    }
+    
+    // Add incident header with enhanced styling
+    if (currentAnalysisData && currentAnalysisData.incident) {
+        const incident = currentAnalysisData.incident;
+        const severityColor = getSeverityColor(incident.Severity || incident.severity || 'Unknown');
+        const header = `
+            <div style="background: linear-gradient(135deg, #142a17 0%, #0a1f0e 100%); padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; border: 2px solid #00ff41; box-shadow: 0 4px 12px rgba(0, 255, 65, 0.1);">
+                <h3 style="margin: 0 0 1rem 0; color: #00ff41; font-size: 1.3rem; display: flex; align-items: center;">
+                    <span style="margin-right: 0.5rem;">🛡️</span>
+                    ${escapeHtml(incident.DisplayName || incident.displayName || 'Unknown Incident')}
+                </h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                    <div style="background: rgba(0, 255, 65, 0.1); padding: 0.8rem; border-radius: 5px; border: 1px solid rgba(0, 255, 65, 0.3);">
+                        <div style="color: #7fff7f; font-size: 0.85rem; margin-bottom: 0.3rem;">Incident ID</div>
+                        <div style="color: #ffffff; font-weight: 500;">${incident.Id || incident.id}</div>
+                    </div>
+                    <div style="background: ${severityColor}15; padding: 0.8rem; border-radius: 5px; border: 1px solid ${severityColor}50;">
+                        <div style="color: #7fff7f; font-size: 0.85rem; margin-bottom: 0.3rem;">Severity</div>
+                        <div style="color: ${severityColor}; font-weight: 600; text-transform: uppercase;">${incident.Severity || incident.severity || 'Unknown'}</div>
+                    </div>
+                    <div style="background: rgba(0, 255, 65, 0.1); padding: 0.8rem; border-radius: 5px; border: 1px solid rgba(0, 255, 65, 0.3);">
+                        <div style="color: #7fff7f; font-size: 0.85rem; margin-bottom: 0.3rem;">Status</div>
+                        <div style="color: #ffffff; font-weight: 500; text-transform: capitalize;">${incident.Status || incident.status || 'Unknown'}</div>
+                    </div>
+                </div>
+                <div style="color: #7fff7f; font-size: 0.9rem; display: flex; align-items: center;">
+                    <span style="margin-right: 0.5rem;">🤖</span>
+                    <strong>MDEAutomator Analysis Generated:</strong> 
+                    <span style="margin-left: 0.5rem; color: #00ff41;">${new Date(currentAnalysisData.timestamp).toLocaleString()}</span>
+                </div>
+            </div>
+        `;
+        formatted = header + formatted;
+    }
+    
+    // Wrap everything in a container with improved styling
+    return `
+        <div style="line-height: 1.7; font-size: 1rem;">
+            ${formatted}
+        </div>
+    `;
+}
+
+// Helper function to get severity-appropriate colors
+function getSeverityColor(severity) {
+    const severityLower = severity.toLowerCase();
+    switch (severityLower) {
+        case 'high':
+        case 'critical':
+            return '#ff4444';
+        case 'medium':
+            return '#ffaa00';
+        case 'low':
+            return '#00ff41';
+        case 'informational':
+            return '#4444ff';
+        default:
+            return '#7fff7f';
+    }
+}
+
+// Function to display AI analysis error
+function displayAiAnalysisError(errorMessage) {
+    const loadingDiv = document.getElementById('aiAnalysisLoading');
+    const dataDiv = document.getElementById('aiAnalysisData');
+    const errorDiv = document.getElementById('aiAnalysisError');
+    const downloadBtn = document.getElementById('downloadAnalysisBtn');
+    
+    if (loadingDiv) loadingDiv.style.display = 'none';
+    if (dataDiv) dataDiv.style.display = 'none';
+    if (downloadBtn) downloadBtn.style.display = 'none';
+    
+    if (errorDiv) {
+        errorDiv.innerHTML = `
+            <h3 style="color: #ff4444; margin-bottom: 1rem;">⚠️ Analysis Failed</h3>
+            <p style="margin-bottom: 1rem;">${escapeHtml(errorMessage)}</p>
+            <p style="color: #ff8888; font-size: 0.9em;">
+                Please try again or contact your administrator if the problem persists.
+            </p>
+        `;
+        errorDiv.style.display = 'block';
+    }
+}
+
+// Function to close AI analysis modal
+function closeAiAnalysisModal() {
+    const modal = document.getElementById('aiAnalysisModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Function to download AI analysis results
+function downloadAiAnalysis() {
+    if (!currentAnalysisData) {
+        alert('No analysis data available to download.');
+        return;
+    }
+    
+    const incident = currentAnalysisData.incident;
+    const content = `MDEAUTOMATOR ANALYSIS REPORT
+================================================================================
+
+INCIDENT INFORMATION:
+- Incident ID: ${incident.Id || incident.id}
+- Display Name: ${incident.DisplayName || incident.displayName || 'Unknown'}
+- Severity: ${incident.Severity || incident.severity || 'Unknown'}
+- Status: ${incident.Status || incident.status || 'Unknown'}
+- Classification: ${incident.Classification || incident.classification || 'Unknown'}
+- Created: ${incident.CreatedDateTime || incident.createdDateTime || 'Unknown'}
+- Last Updated: ${incident.LastUpdateDateTime || incident.lastUpdateDateTime || incident.LastUpdateTime || incident.lastUpdateTime || 'Unknown'}
+- Assigned To: ${incident.AssignedTo || incident.assignedTo || 'Unassigned'}
+
+ANALYSIS GENERATED: ${new Date(currentAnalysisData.timestamp).toLocaleString()}
+
+================================================================================
+
+MDEAUTOMATOR AI ANALYSIS:
+
+${currentAnalysisData.analysis}
+
+================================================================================
+Generated by MDEAutomator AI Analysis
+Timestamp: ${currentAnalysisData.timestamp}
+`;
+
+    // Create and download the file
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' });
+    const link = document.createElement('a');
+    
+    if (link.download !== undefined) {
+        const now = new Date();
+        const timestamp = now.getFullYear() + 
+                         ('0' + (now.getMonth() + 1)).slice(-2) + 
+                         ('0' + now.getDate()).slice(-2) + '_' +
+                         ('0' + now.getHours()).slice(-2) + 
+                         ('0' + now.getMinutes()).slice(-2);
+        const filename = `incident_${currentIncidentForAnalysis}_ai_analysis_${timestamp}.txt`;
+        
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        console.log(`Downloaded AI analysis as ${filename}`);
+    } else {
+        alert('Your browser does not support file downloads.');
+    }
 }
 

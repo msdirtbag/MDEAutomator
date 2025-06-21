@@ -89,8 +89,6 @@ const functionCommands = {
     'MDEDispatcher': [
         { label: 'Isolate Device', value: 'InvokeMachineIsolation' },
         { label: 'Release from Isolation', value: 'UndoMachineIsolation' },
-        { label: 'Contain Unmanaged Device', value: 'InvokeContainDevice' , extra: 'DeviceId'},
-        { label: 'Release from Containment', value: 'UndoContainDevice', extra: 'DeviceId' },
         { label: 'Collect Investigation Package', value: 'InvokeCollectInvestigationPackage' },
         { label: 'Run Antivirus Scan', value: 'InvokeFullDiskScan' },
         { label: 'Restrict App Execution', value: 'InvokeRestrictAppExecution' },
@@ -110,10 +108,10 @@ window.addEventListener('DOMContentLoaded', () => {
     // Legacy tenant input/save button functionality removed - now using dropdown + Manage Tenants modal
 });
 
-function updateToolbarButtonsVisibility(isUpload = false, isContain = false) {
+function updateToolbarButtonsVisibility(isUpload = false) {
     const sendBtn = document.getElementById('sendCommandBtn');
     const refreshBtn = document.getElementById('refreshMachines');
-    if (isUpload || isContain) {
+    if (isUpload) {
         sendBtn.style.display = 'none';
         refreshBtn.style.display = 'none';
     } else {
@@ -153,9 +151,9 @@ function updateExtraParams() {
     paramInputContainer.innerHTML = '';
     paramLabel.textContent = '';
     secondaryParamsBar.style.display = 'none';
-    
-    let isUpload = false;
-    let isContain = false;    if (func === 'MDEProfiles') {
+      let isUpload = false;
+
+    if (func === 'MDEProfiles') {
         paramLabel.textContent = 'Mode:';
         const select = document.createElement('select');
         select.id = 'extraParamInput';
@@ -193,68 +191,14 @@ function updateExtraParams() {
         updateDescription(); // Set initial description
         
         paramInputContainer.appendChild(description);
-        secondaryParamsBar.style.display = 'flex';} else {
+        secondaryParamsBar.style.display = 'flex';
+    } else {
         const cmdDropdown = document.getElementById('commandDropdown');
         const selected = cmdDropdown.options[cmdDropdown.selectedIndex];
         const extra = selected ? selected.getAttribute('data-extra') : '';
-        const funcConfig = functionCommands[func] && functionCommands[func][cmdDropdown.selectedIndex] ? functionCommands[func][cmdDropdown.selectedIndex] : null;        if (selected && selected.value === 'InvokeContainDevice') {            paramLabel.textContent = 'Contain Device:';
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.id = 'containDeviceIdInput';
-            input.placeholder = 'Device ID';
-            input.style.cssText = 'background: #101c11; color: #00ff41; border: 1px solid #00ff41; padding: 0.5rem; font-family: Consolas, monospace; width: 300px;';
-            paramInputContainer.appendChild(input);
-            
-            const containBtn = document.createElement('button');
-            containBtn.id = 'containBtn';
-            containBtn.className = 'cta-button';
-            containBtn.textContent = 'Contain';
-            containBtn.style.marginLeft = '1rem';
-            paramInputContainer.appendChild(containBtn);
-              // Add description
-            const description = document.createElement('span');
-            description.style.cssText = 'color: #7fff7f; font-size: 0.9em; margin-left: 1rem;';
-            description.textContent = 'This is the DeviceId of the unmanaged device that MDE endpoints will stop communicating with. (This must be found in Advanced Hunting or Device Inventory)';
-            paramInputContainer.appendChild(description);
-            
-            containBtn.onclick = async function() {
-                const deviceId = input.value.trim();
-                if (!deviceId) {
-                    alert('Please enter a DeviceId.');
-                    return;
-                }
-                await sendContainCommand('InvokeContainDevice', deviceId);
-            };
-            secondaryParamsBar.style.display = 'flex';
-            isContain = true;        } else if (selected && selected.value === 'UndoContainDevice') {            paramLabel.textContent = 'Release from Containment:';
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.id = 'containDeviceIdInput';
-            input.placeholder = 'Device ID';
-            input.style.cssText = 'background: #101c11; color: #00ff41; border: 1px solid #00ff41; padding: 0.5rem; font-family: Consolas, monospace; width: 300px;';
-            paramInputContainer.appendChild(input);
-              const releaseBtn = document.createElement('button');
-            releaseBtn.id = 'releaseContainBtn';
-            releaseBtn.className = 'cta-button';
-            releaseBtn.textContent = 'Release';
-            releaseBtn.style.marginLeft = '1rem';
-            paramInputContainer.appendChild(releaseBtn);
-              // Add description
-            const description = document.createElement('span');
-            description.style.cssText = 'color: #7fff7f; font-size: 0.9em; margin-left: 1rem;';
-            description.textContent = 'This is the DeviceId of the unmanaged device that that will be re-enabled for normal network communications.';
-            paramInputContainer.appendChild(description);
-            
-            releaseBtn.onclick = async function() {
-                const deviceId = input.value.trim();
-                if (!deviceId) {
-                    alert('Please enter a DeviceId.');
-                    return;
-                }
-                await sendContainCommand('UndoContainDevice', deviceId);
-            };
-            secondaryParamsBar.style.display = 'flex';
-            isContain = true;        } else if (selected && selected.value === 'InvokeUploadLR') {
+        const funcConfig = functionCommands[func] && functionCommands[func][cmdDropdown.selectedIndex] ? functionCommands[func][cmdDropdown.selectedIndex] : null;
+
+        if (selected && selected.value === 'InvokeUploadLR') {
             paramLabel.textContent = 'Upload File:';
             const prevUploadBtn = document.getElementById('uploadFileBtn');
             if (prevUploadBtn && prevUploadBtn.parentNode) {
@@ -366,7 +310,7 @@ function updateExtraParams() {
             secondaryParamsBar.style.display = 'flex';
         }
     }
-    updateToolbarButtonsVisibility(isUpload, isContain);
+    updateToolbarButtonsVisibility(isUpload);
 }
 
 // Debug function to verify secondary parameter bar behavior
@@ -387,31 +331,8 @@ document.getElementById('functionDropdown').onchange = function() {
 };
 
 document.getElementById('commandDropdown').onchange = function() {
-    originalCommandChange.call(this);
-    setTimeout(debugSecondaryBar, 100);
+    originalCommandChange.call(this);    setTimeout(debugSecondaryBar, 100);
 };
-
-async function sendContainCommand(specificCommandName, deviceId) {
-    const tenantId = getTenantId();
-    if (!tenantId) {
-        alert('Tenant ID is required for sending command.');
-        return;
-    }
-    const payload = {
-        function_name: 'MDEDispatcher',
-        command: specificCommandName, 
-        DeviceIds: [deviceId],
-        TenantId: tenantId
-    };
-    console.log('Sending contain command payload:', JSON.stringify(payload, null, 2));
-    const res = await fetch('/api/send_command', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    });
-    const result = await res.json();
-    alert(result.message || JSON.stringify(result));
-}
 
 document.getElementById('functionDropdown').onchange = updateCommandDropdown;
 document.getElementById('commandDropdown').onchange = function() {
