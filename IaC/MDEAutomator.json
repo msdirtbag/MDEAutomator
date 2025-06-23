@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.36.1.42791",
-      "templateHash": "17354707476692472351"
+      "templateHash": "6238162245975003258"
     }
   },
   "parameters": {
@@ -1322,26 +1322,9 @@
           "webSocketsEnabled": true,
           "alwaysOn": true,
           "autoHealEnabled": true,
-          "ipSecurityRestrictions": [
-            {
-              "ipAddress": "Any",
-              "action": "Allow",
-              "priority": 2147483647,
-              "name": "Allow all",
-              "description": "Allow all access"
-            }
-          ],
-          "scmIpSecurityRestrictions": [
-            {
-              "ipAddress": "Any",
-              "action": "Deny",
-              "priority": 2147483647,
-              "name": "Block all",
-              "description": "Block all access"
-            }
-          ],
-          "scmIpSecurityRestrictionsUseMain": false,
-          "http20Enabled": false,
+          "ipSecurityRestrictionsDefaultAction": "Allow",
+          "scmIpSecurityRestrictionsDefaultAction": "Deny",
+          "http20Enabled": true,
           "minTlsVersion": "1.2",
           "scmMinTlsVersion": "1.2",
           "ftpsState": "Disabled",

@@ -1136,26 +1136,9 @@ resource appservice 'Microsoft.Web/sites@2022-09-01' = {
       webSocketsEnabled: true
       alwaysOn: true
       autoHealEnabled: true
-      ipSecurityRestrictions: [
-        {
-          ipAddress: 'Any'
-          action: 'Allow'
-          priority: 2147483647
-          name: 'Allow all'
-          description: 'Allow all access'
-        }
-      ]
-      scmIpSecurityRestrictions: [
-        {
-          ipAddress: 'Any'
-          action: 'Deny'
-          priority: 2147483647
-          name: 'Block all'
-          description: 'Block all access'
-        }
-      ]
-      scmIpSecurityRestrictionsUseMain: false
-      http20Enabled: false
+      ipSecurityRestrictionsDefaultAction:'Allow'
+      scmIpSecurityRestrictionsDefaultAction: 'Deny'
+      http20Enabled: true
       minTlsVersion: '1.2'
       scmMinTlsVersion: '1.2'
       ftpsState: 'Disabled'

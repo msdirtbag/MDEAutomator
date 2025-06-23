@@ -437,10 +437,386 @@ function Undo-Query {
     }
 }
 
+function Save-HuntSchedule {
+    param (
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$TenantId,
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$ClientName,
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$ScheduleName,
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$ScheduleTime,
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [object]$HuntSchedule
+    )
+    
+    try {
+        Write-Host "Saving hunt schedule for TenantId: $TenantId, ClientName: $ClientName"
+        
+        # Get storage account name from environment
+        $storageAccountName = [System.Environment]::GetEnvironmentVariable('STORAGE_ACCOUNT', 'Process')
+        if ([string]::IsNullOrEmpty($storageAccountName)) {
+            throw "STORAGE_ACCOUNT environment variable is required"
+        }
+        
+        # Create context for AzBobbyTables
+        try {
+            $connectionString = [System.Environment]::GetEnvironmentVariable('WEBSITE_AZUREFILESCONNECTIONSTRING', 'Process')
+            $context = New-AzDataTableContext -TableName "HuntSchedules" -ConnectionString $connectionString
+        } catch {
+            Write-Host "Failed to create context: $($_.Exception.Message)"
+            throw "Unable to create storage context: $($_.Exception.Message)"
+        }
+          # Generate a unique ID for this hunt schedule
+        $scheduleId = [System.Guid]::NewGuid().ToString()
+        
+        # Serialize the hunt schedule object to JSON string
+        if ($HuntSchedule -is [string]) {
+            # Already a JSON string
+            $huntScheduleJson = $HuntSchedule
+        } else {
+            # Convert object to JSON string
+            $huntScheduleJson = $HuntSchedule | ConvertTo-Json -Depth 10 -Compress
+        }
+        
+        # Create new entity with proper data types
+        $entity = @{
+            "PartitionKey" = [string]"HuntSchedule"
+            "RowKey" = [string]$scheduleId
+            "ScheduleName" = [string]$ScheduleName
+            "ScheduleTime" = [string]$ScheduleTime
+            "TenantId" = [string]$TenantId
+            "ClientName" = [string]$ClientName
+            "HuntSchedule" = [string]$huntScheduleJson
+            "Enabled" = [bool]$true
+            "CreatedDate" = [string](Get-Date).ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+            "CreatedBy" = [string]"MDEAutomator"
+        }
+        
+        # Add entity to table
+        try {
+            Write-Host "Adding hunt schedule to table..."
+            Add-AzDataTableEntity -Context $context -Entity $entity -CreateTableIfNotExists | Out-Null
+            Write-Host "Hunt schedule saved successfully with ID: $scheduleId"
+        } catch {
+            Write-Host "Failed to add hunt schedule to table: $($_.Exception.Message)"
+            throw "Failed to add hunt schedule to storage table: $($_.Exception.Message)"
+        }
+        
+        return @{
+            Status = "Success"
+            Message = "Hunt schedule saved successfully"
+            ScheduleId = $scheduleId
+            TenantId = $TenantId
+            ClientName = $ClientName
+            Timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+        }
+        
+    } catch {
+        $errorMessage = "Failed to save hunt schedule: $($_.Exception.Message)"
+        Write-Error $errorMessage
+        
+        return @{
+            Status = "Error"
+            Message = $errorMessage
+            TenantId = $TenantId
+            ClientName = $ClientName
+            Timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+        }
+    }
+}
+
+function Remove-HuntSchedule {
+    param (
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$ScheduleId
+    )
+    
+    try {
+        Write-Host "Starting Remove-HuntSchedule for schedule ID: $ScheduleId"
+        
+        # Get storage account name from environment
+        $storageAccountName = [System.Environment]::GetEnvironmentVariable('STORAGE_ACCOUNT', 'Process')
+        if ([string]::IsNullOrEmpty($storageAccountName)) {
+            throw "STORAGE_ACCOUNT environment variable is required"
+        }
+        
+        # Create context for AzBobbyTables
+        try {
+            $connectionString = [System.Environment]::GetEnvironmentVariable('WEBSITE_AZUREFILESCONNECTIONSTRING', 'Process')
+            $context = New-AzDataTableContext -TableName "HuntSchedules" -ConnectionString $connectionString
+        } catch {
+            Write-Host "Failed to create context: $($_.Exception.Message)"
+            throw "Unable to create storage context: $($_.Exception.Message)"
+        }
+        
+        # Check if schedule exists before trying to remove
+        $existingEntity = Get-AzDataTableEntity -Context $context -Filter "PartitionKey eq 'HuntSchedule' and RowKey eq '$ScheduleId'" -ErrorAction SilentlyContinue
+        
+        if (-not $existingEntity) {
+            return @{
+                Status = "Warning"
+                Message = "Hunt schedule with ID '$ScheduleId' not found in storage table"
+                ScheduleId = $ScheduleId
+                Timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+            }
+        }
+        
+        # Remove the schedule entity
+        Remove-AzDataTableEntity -Context $context -Entity $existingEntity -ErrorAction Stop
+        Write-Host "Hunt schedule '$ScheduleId' removed successfully"
+        
+        return @{
+            Status = "Success"
+            Message = "Hunt schedule '$ScheduleId' removed from storage table"
+            ScheduleId = $ScheduleId
+            Timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+        }
+        
+    } catch {
+        $errorMessage = "Failed to remove hunt schedule: $($_.Exception.Message)"
+        Write-Error $errorMessage
+        return @{
+            Status = "Error"
+            Message = $errorMessage
+            ScheduleId = $ScheduleId
+            Timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+        }
+    }
+}
+
+function Disable-HuntSchedule {
+    param (
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$ScheduleId
+    )
+    try {
+        Write-Host "Disabling hunt schedule for ID: $ScheduleId"
+
+        # Get storage account name from environment
+        $storageAccountName = [System.Environment]::GetEnvironmentVariable('STORAGE_ACCOUNT', 'Process')
+        if ([string]::IsNullOrEmpty($storageAccountName)) {
+            throw "STORAGE_ACCOUNT environment variable is required"
+        }
+
+        # Create context for AzBobbyTables
+        try {
+            $connectionString = [System.Environment]::GetEnvironmentVariable('WEBSITE_AZUREFILESCONNECTIONSTRING', 'Process')
+            $context = New-AzDataTableContext -TableName "HuntSchedules" -ConnectionString $connectionString
+        } catch {
+            Write-Host "Failed to create context: $($_.Exception.Message)"
+            throw "Unable to create storage context: $($_.Exception.Message)"
+        }
+
+        # Check if schedule exists
+        $existingEntity = Get-AzDataTableEntity -Context $context -Filter "PartitionKey eq 'HuntSchedule' and RowKey eq '$ScheduleId'" -ErrorAction SilentlyContinue
+
+        if (-not $existingEntity) {
+            return @{
+                Status = "Warning"
+                Message = "Hunt schedule with ID '$ScheduleId' not found in storage table"
+                ScheduleId = $ScheduleId
+                Timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+            }
+        }
+
+        # Update the Enabled property to false
+        $existingEntity.Enabled = $false
+
+        # Update the entity in the table
+        Update-AzDataTableEntity -Context $context -Entity $existingEntity -ErrorAction Stop | Out-Null
+
+        Write-Host "Hunt schedule '$ScheduleId' disabled successfully"
+
+        return @{
+            Status = "Success"
+            Message = "Hunt schedule '$ScheduleId' disabled in storage table"
+            ScheduleId = $ScheduleId
+            Timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+        }
+    } catch {
+        $errorMessage = "Failed to disable hunt schedule: $($_.Exception.Message)"
+        Write-Error $errorMessage
+        return @{
+            Status = "Error"
+            Message = $errorMessage
+            ScheduleId = $ScheduleId
+            Timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+        }
+    }
+}
+
+function Enable-HuntSchedule {
+    param (
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$ScheduleId
+    )
+    try {
+        Write-Host "Enabling hunt schedule for ID: $ScheduleId"
+
+        # Get storage account name from environment
+        $storageAccountName = [System.Environment]::GetEnvironmentVariable('STORAGE_ACCOUNT', 'Process')
+        if ([string]::IsNullOrEmpty($storageAccountName)) {
+            throw "STORAGE_ACCOUNT environment variable is required"
+        }
+
+        # Create context for AzBobbyTables
+        try {
+            $connectionString = [System.Environment]::GetEnvironmentVariable('WEBSITE_AZUREFILESCONNECTIONSTRING', 'Process')
+            $context = New-AzDataTableContext -TableName "HuntSchedules" -ConnectionString $connectionString
+        } catch {
+            Write-Host "Failed to create context: $($_.Exception.Message)"
+            throw "Unable to create storage context: $($_.Exception.Message)"
+        }
+
+        # Check if schedule exists
+        $existingEntity = Get-AzDataTableEntity -Context $context -Filter "PartitionKey eq 'HuntSchedule' and RowKey eq '$ScheduleId'" -ErrorAction SilentlyContinue
+
+        if (-not $existingEntity) {
+            return @{
+                Status = "Warning"
+                Message = "Hunt schedule with ID '$ScheduleId' not found in storage table"
+                ScheduleId = $ScheduleId
+                Timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+            }
+        }
+
+        # Update the Enabled property to true
+        $existingEntity.Enabled = $true
+
+        # Update the entity in the table
+        Update-AzDataTableEntity -Context $context -Entity $existingEntity -ErrorAction Stop | Out-Null
+
+        Write-Host "Hunt schedule '$ScheduleId' enabled successfully"
+
+        return @{
+            Status = "Success"
+            Message = "Hunt schedule '$ScheduleId' enabled in storage table"
+            ScheduleId = $ScheduleId
+            Timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+        }
+    } catch {
+        $errorMessage = "Failed to enable hunt schedule: $($_.Exception.Message)"
+        Write-Error $errorMessage
+        return @{
+            Status = "Error"
+            Message = $errorMessage
+            ScheduleId = $ScheduleId
+            Timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+        }
+    }
+}
+
+function Get-HuntSchedules {
+    param (
+        [Parameter(Mandatory = $false)]
+        [bool]$EnabledOnly = $true
+    )
+    
+    try {
+        Write-Host "Starting Get-HuntSchedules"
+        
+        # Get storage account name from environment
+        $storageAccountName = [System.Environment]::GetEnvironmentVariable('STORAGE_ACCOUNT', 'Process')
+        if ([string]::IsNullOrEmpty($storageAccountName)) {
+            throw "STORAGE_ACCOUNT environment variable is required"
+        }
+        
+        # Create context for AzBobbyTables
+        try {
+            $connectionString = [System.Environment]::GetEnvironmentVariable('WEBSITE_AZUREFILESCONNECTIONSTRING', 'Process')
+            $context = New-AzDataTableContext -TableName "HuntSchedules" -ConnectionString $connectionString
+        } catch {
+            Write-Host "Failed to create context: $($_.Exception.Message)"
+            throw "Unable to create storage context: $($_.Exception.Message)"
+        }
+        
+        # Build filter based on parameters
+        $filter = "PartitionKey eq 'HuntSchedule'"
+        
+        if ($EnabledOnly) {
+            $filter += " and Enabled eq true"
+        }
+        
+        # Get hunt schedule entities from the table
+        $entities = Get-AzDataTableEntity -Context $context -Filter $filter -ErrorAction SilentlyContinue
+        
+        if (-not $entities) {
+            return @{
+                Status = "Success"
+                Message = "No hunt schedules found in storage table"
+                Schedules = @()
+                Count = 0
+                Timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+            }
+        }
+        
+        # Convert entities to a clean array of schedule information
+        $scheduleList = @()
+        foreach ($entity in $entities) {
+            try {                
+                $huntScheduleObj = $entity.HuntSchedule | ConvertFrom-Json
+                $scheduleInfo = @{
+                    ScheduleId = $entity.RowKey
+                    ScheduleTime = $entity.ScheduleTime
+                    ScheduleName = $entity.ScheduleName
+                    TenantId = $entity.TenantId
+                    ClientName = $entity.ClientName
+                    HuntSchedule = $huntScheduleObj
+                    Enabled = $entity.Enabled
+                    CreatedDate = $entity.CreatedDate
+                    CreatedBy = $entity.CreatedBy
+                }
+                $scheduleList += $scheduleInfo
+            } catch {
+                Write-Warning "Failed to parse hunt schedule for entity $($entity.RowKey): $($_.Exception.Message)"
+                continue
+            }
+        }
+        
+        Write-Host "Retrieved $($scheduleList.Count) hunt schedules successfully"
+        
+        return @{
+            Status = "Success"
+            Message = "Retrieved $($scheduleList.Count) hunt schedule(s) from storage table"
+            Schedules = $scheduleList
+            Count = $scheduleList.Count
+            Timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+        }
+        
+    } catch {
+        $errorMessage = "Failed to retrieve hunt schedules: $($_.Exception.Message)"
+        Write-Error $errorMessage
+        return @{
+            Status = "Error"
+            Message = $errorMessage
+            Schedules = @()
+            Count = 0
+            Timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+        }
+    }
+}
+
 try {
     # Get request parameters
     $Function = Get-RequestParam -Name "Function" -Request $Request
     $QueryName = Get-RequestParam -Name "QueryName" -Request $Request
+    $HuntSchedule = Get-RequestParam -Name "HuntSchedule" -Request $Request
+    $TenantId = Get-RequestParam -Name "TenantId" -Request $Request
+    $ClientName = Get-RequestParam -Name "ClientName" -Request $Request
+    $ScheduleName = Get-RequestParam -Name "ScheduleName" -Request $Request
+    $ScheduleTime = Get-RequestParam -Name "ScheduleTime" -Request $Request
+    $ScheduleId = Get-RequestParam -Name "ScheduleId" -Request $Request
+    $EnabledOnly = Get-RequestParam -Name "EnabledOnly" -Request $Request -DefaultValue $true
     
     Test-NullOrEmpty $Function "Function"
     
@@ -463,7 +839,31 @@ try {
         'UndoQuery'      { 
             $queryFileName = Get-RequestParam -Name "QueryName" -Request $Request
             Undo-Query -QueryName $queryFileName
-        }         
+        } 
+        'SaveHuntSchedule' { 
+            Test-NullOrEmpty $TenantId "TenantId"
+            Test-NullOrEmpty $ClientName "ClientName"
+            Test-NullOrEmpty $HuntSchedule "HuntSchedule"
+            Test-NullOrEmpty $ScheduleName "ScheduleName"
+            Test-NullOrEmpty $ScheduleTime "ScheduleTime"
+            Save-HuntSchedule -TenantId $TenantId -ClientName $ClientName -HuntSchedule $HuntSchedule -ScheduleName $ScheduleName -ScheduleTime $ScheduleTime
+        }
+        'RemoveHuntSchedule' { 
+            Test-NullOrEmpty $ScheduleId "ScheduleId" 
+            Remove-HuntSchedule -ScheduleId $ScheduleId
+        }
+        'DisableHuntSchedule' { 
+            Test-NullOrEmpty $ScheduleId "ScheduleId"
+            Disable-HuntSchedule -ScheduleId $ScheduleId 
+        }
+        'EnableHuntSchedule' { 
+            Test-NullOrEmpty $ScheduleId "ScheduleId" 
+            Enable-HuntSchedule -ScheduleId $ScheduleId
+        }
+        'GetHuntSchedules' { 
+            $EnabledOnly = Get-RequestParam -Name "EnabledOnly" -Request $Request -DefaultValue $true
+            Get-HuntSchedules -EnabledOnly $EnabledOnly 
+        }        
         default { throw "Invalid function specified: $Function" }
     }
 

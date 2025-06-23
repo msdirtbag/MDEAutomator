@@ -32,9 +32,8 @@ function Save-TenantIdToTable {
         if ([string]::IsNullOrEmpty($storageAccountName)) {
             throw "STORAGE_ACCOUNT environment variable is required"
         }
-          # Create context for AzBobbyTables - prioritize connection string authentication
+          # Create context for AzBobbyTables
         try {
-            # Prioritize connection string from AzureWebJobsStorage
             $connectionString = [System.Environment]::GetEnvironmentVariable('WEBSITE_AZUREFILESCONNECTIONSTRING', 'Process')
             $context = New-AzDataTableContext -TableName "TenantIds" -ConnectionString $connectionString
         } catch {
@@ -118,7 +117,6 @@ function Remove-TenantIdFromTable {
         
         # Create context for AzBobbyTables
         try {
-            # Prioritize connection string from AzureWebJobsStorage
             $connectionString = [System.Environment]::GetEnvironmentVariable('WEBSITE_AZUREFILESCONNECTIONSTRING', 'Process')
             $context = New-AzDataTableContext -TableName "TenantIds" -ConnectionString $connectionString
         } catch {
@@ -170,9 +168,8 @@ function Get-TenantIdsFromTable {
             throw "STORAGE_ACCOUNT environment variable is required"
         }
         
-        # Create context for AzBobbyTables - prioritize connection string authentication
+        # Create context for AzBobbyTables 
         try {
-            # Prioritize connection string from AzureWebJobsStorage
             $connectionString = [System.Environment]::GetEnvironmentVariable('WEBSITE_AZUREFILESCONNECTIONSTRING', 'Process')
             $context = New-AzDataTableContext -TableName "TenantIds" -ConnectionString $connectionString
         } catch {
@@ -232,14 +229,21 @@ try {
     # Get request parameters
     $TenantId = Get-RequestParam -Name "TenantId" -Request $Request
     $Function = Get-RequestParam -Name "Function" -Request $Request
-    $ClientName = Get-RequestParam -Name "ClientName" -Request $Request
+    $ClientName = Get-RequestParam -Name "ClientName" -Request $Request  
     
     # Validate required Function parameter
     Test-NullOrEmpty $Function "Function"
     
-    # Validate TenantId for functions that require it
-    if ($Function -in @("SaveTenantId", "RemoveTenantId")) {
-        Test-NullOrEmpty $TenantId "TenantId"
+    # Validate parameters based on function type
+    switch ($Function) {
+        'SaveTenantId' { 
+            Test-NullOrEmpty $TenantId "TenantId"
+            Test-NullOrEmpty $ClientName "ClientName"
+        }
+        'RemoveTenantId' { 
+            Test-NullOrEmpty $TenantId "TenantId" 
+        }
+
     }
 
     $Result = [HttpStatusCode]::OK
@@ -250,7 +254,7 @@ try {
         'RemoveTenantId' { Remove-TenantIdFromTable -TenantId $TenantId }
         'GetTenantIds'   { Get-TenantIdsFromTable }
         default          { 
-            throw "Invalid function specified: $Function. Valid functions are: SaveTenantId, RemoveTenantId, GetTenantIds" 
+            throw "Invalid function specified: $Function. Valid functions are: SaveTenantId, RemoveTenantId, GetTenantIds, SaveHuntSchedule, RemoveHuntSchedule, GetHuntSchedules" 
         }
     }
 
