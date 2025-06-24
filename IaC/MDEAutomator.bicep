@@ -818,7 +818,7 @@ resource appinsights01 'Microsoft.Insights/components@2020-02-02' = {
     Application_Type: 'web'
     RetentionInDays: 30
     DisableLocalAuth: true
-    publicNetworkAccessForIngestion: 'False'
+    publicNetworkAccessForIngestion: 'Disabled'
     publicNetworkAccessForQuery: 'Enabled'
     WorkspaceResourceId: useExistingWorkspace ? existingWorkspaceResourceId : logAnalyticsWorkspace.id
   }
