@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.36.1.42791",
-      "templateHash": "15582376665203026779"
+      "templateHash": "1575080006668264214"
     }
   },
   "parameters": {
@@ -1349,10 +1349,7 @@
           "scmMinTlsVersion": "1.2",
           "ftpsState": "Disabled",
           "minimumElasticInstanceCount": 1
-        },
-        "inFlightFeatures": [
-          "SiteContainers"
-        ]
+        }
       },
       "dependsOn": [
         "[resourceId('Microsoft.Web/serverfarms', format('asp-mdeautomator-web-{0}', variables('environmentid')))]",
@@ -1455,7 +1452,7 @@
     {
       "type": "Microsoft.Insights/diagnosticSettings",
       "apiVersion": "2021-05-01-preview",
-      "scope": "[format('Microsoft.Web/sites/{0}', format('ase-mdeautomator-{0}', variables('environmentid')))]",
+      "scope": "[format('Microsoft.Web/sites/{0}', format('ase-openwebui-{0}', variables('environmentid')))]",
       "name": "Monitor-AppService-OpenWebUI",
       "properties": {
         "logs": [
@@ -1473,8 +1470,8 @@
         "workspaceId": "[if(parameters('useExistingWorkspace'), parameters('existingWorkspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid'))))]"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Web/sites', format('ase-mdeautomator-{0}', variables('environmentid')))]",
-        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid')))]"
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Web/sites', format('ase-openwebui-{0}', variables('environmentid')))]"
       ]
     },
     {
