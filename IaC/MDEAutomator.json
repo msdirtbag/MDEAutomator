@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.36.1.42791",
-      "templateHash": "3459748599212038154"
+      "templateHash": "15582376665203026779"
     }
   },
   "parameters": {
@@ -735,6 +735,26 @@
       ]
     },
     {
+      "type": "Microsoft.Storage/storageAccounts/fileServices",
+      "apiVersion": "2024-01-01",
+      "name": "[format('{0}/{1}', format('stmdeauto{0}', variables('environmentid')), 'default')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/fileServices/shares",
+      "apiVersion": "2024-01-01",
+      "name": "[format('{0}/{1}/{2}', format('stmdeauto{0}', variables('environmentid')), 'default', 'openwebui')]",
+      "properties": {
+        "shareQuota": 10240,
+        "enabledProtocols": "SMB"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/fileServices', format('stmdeauto{0}', variables('environmentid')), 'default')]"
+      ]
+    },
+    {
       "condition": "[not(parameters('useExistingWorkspace'))]",
       "type": "Microsoft.OperationalInsights/workspaces",
       "apiVersion": "2023-09-01",
@@ -1329,7 +1349,10 @@
           "scmMinTlsVersion": "1.2",
           "ftpsState": "Disabled",
           "minimumElasticInstanceCount": 1
-        }
+        },
+        "inFlightFeatures": [
+          "SiteContainers"
+        ]
       },
       "dependsOn": [
         "[resourceId('Microsoft.Web/serverfarms', format('asp-mdeautomator-web-{0}', variables('environmentid')))]",
@@ -1368,12 +1391,90 @@
       "name": "[format('{0}/{1}', format('ase-mdeautomator-{0}', variables('environmentid')), 'appsettings')]",
       "kind": "calappsettings",
       "properties": {
-        "FUNCKEY": "[listKeys(resourceId('Microsoft.Web/sites/host', format('funcmdeauto{0}', variables('environmentid')), 'default'), '2022-03-01').functionKeys.default]",
-        "FUNCURL": "[reference(resourceId('Microsoft.Web/sites', format('funcmdeauto{0}', variables('environmentid'))), '2023-12-01').defaultHostName]"
+        "FUNCTION_KEY": "[listKeys(resourceId('Microsoft.Web/sites/host', format('funcmdeauto{0}', variables('environmentid')), 'default'), '2022-03-01').functionKeys.default]",
+        "FUNCTION_APP_BASE_URL": "[reference(resourceId('Microsoft.Web/sites', format('funcmdeauto{0}', variables('environmentid'))), '2023-12-01').defaultHostName]"
       },
       "dependsOn": [
         "[resourceId('Microsoft.Web/sites', format('ase-mdeautomator-{0}', variables('environmentid')))]",
         "[resourceId('Microsoft.Web/sites', format('funcmdeauto{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2022-09-01",
+      "name": "[format('ase-openwebui-{0}', variables('environmentid'))]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid'))))]": {}
+        }
+      },
+      "location": "[variables('location')]",
+      "kind": "container",
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('asp-mdeautomator-web-{0}', variables('environmentid')))]",
+        "publicNetworkAccess": "Enabled",
+        "virtualNetworkSubnetId": "[reference(resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid'))), '2023-09-01').subnets[1].id]",
+        "httpsOnly": true,
+        "siteConfig": {
+          "linuxFxVersion": "DOCKER|ghcr.io/open-webui/open-webui:main",
+          "numberOfWorkers": 1,
+          "requestTracingEnabled": false,
+          "remoteDebuggingEnabled": false,
+          "httpLoggingEnabled": true,
+          "logsDirectorySizeLimit": 35,
+          "detailedErrorLoggingEnabled": true,
+          "webSocketsEnabled": true,
+          "alwaysOn": true,
+          "autoHealEnabled": true,
+          "ipSecurityRestrictionsDefaultAction": "Allow",
+          "scmIpSecurityRestrictionsDefaultAction": "Deny",
+          "http20Enabled": true,
+          "minTlsVersion": "1.2",
+          "scmMinTlsVersion": "1.2",
+          "ftpsState": "Disabled",
+          "minimumElasticInstanceCount": 1,
+          "azureStorageAccounts": {
+            "openwebui": {
+              "type": "AzureFiles",
+              "accountName": "[format('stmdeauto{0}', variables('environmentid'))]",
+              "shareName": "openwebui",
+              "mountPath": "/app/backend/data",
+              "accessKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid'))), '2024-01-01').keys[0].value]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', format('asp-mdeautomator-web-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('umi-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', format('stmdeauto{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-mdeauto-{0}', variables('environmentid')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[format('Microsoft.Web/sites/{0}', format('ase-mdeautomator-{0}', variables('environmentid')))]",
+      "name": "Monitor-AppService-OpenWebUI",
+      "properties": {
+        "logs": [
+          {
+            "categoryGroup": "allLogs",
+            "enabled": true
+          }
+        ],
+        "metrics": [
+          {
+            "category": "allMetrics",
+            "enabled": true
+          }
+        ],
+        "workspaceId": "[if(parameters('useExistingWorkspace'), parameters('existingWorkspaceResourceId'), resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid'))))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', format('ase-mdeautomator-{0}', variables('environmentid')))]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-mdeautomator-{0}', variables('environmentid')))]"
       ]
     },
     {
