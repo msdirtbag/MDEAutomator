@@ -1,4 +1,49 @@
-Flask==2.3.2
-Werkzeug==2.3.4
+# Core Flask and web framework
+Flask
+Werkzeug
 requests
 python-dotenv
+Jinja2
+MarkupSafe
+click
+itsdangerous
+
+# Azure and Microsoft integrations
+azure-identity
+azure-core
+azure-storage-blob
+azure-functions
+azure-keyvault
+openai>=1.92.0
+
+# MCP (Model Context Protocol) dependencies
+mcp>=1.10.0
+pydantic>=2.11.7
+typing-extensions>=4.11.0
+
+# HTTP and async libraries
+httpx
+aiohttp==3.9.1
+asyncio-helpers==0.0.2
+asyncio-throttle
+
+# Data processing and utilities
+structlog==23.2.0
+colorama==0.4.6
+tenacity
+
+# Production server
+gunicorn==21.2.0
+
+# Additional dependencies for Azure App Service
+certifi==2023.11.17
+charset-normalizer==3.3.2
+idna==3.6
+urllib3==2.1.0
+six==1.16.0
+setuptools==69.0.0
+wheel==0.42.0
+
+# MCP core types (ensure compatibility)
+pydantic-settings>=2.1.0
+annotated-types==0.6.0

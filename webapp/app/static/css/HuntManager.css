@@ -1,4 +1,9 @@
 /* HuntManager Styles */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
 .index-container {
     margin: 2rem;
     background: var(--background-color);
@@ -50,12 +55,14 @@
 }
 
 .cta-button {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background-color: var(--secondary-color);
     color: #101c11;
     font-size: 0.85em;
     padding: 0.35em 1.1em;
-    height: 2em;
+    min-height: 2em;
     text-decoration: none;
     border-radius: 5px;
     transition: background-color 0.3s, box-shadow 0.3s, transform 0.12s cubic-bezier(0.4,0,0.2,1);
@@ -65,6 +72,9 @@
     cursor: pointer;
     text-transform: none;
     font-weight: normal;
+    line-height: 1;
+    vertical-align: middle;
+    text-align: center;
 }
 
 .cta-button:hover {
@@ -113,6 +123,38 @@
 
 .edit-button:active {
     background-color: #0052a3 !important;
+}
+
+/* Remove special blue styling for #refreshScheduledHuntsBtn so it uses the default green .cta-button style */
+/* .cta-button already provides the green look for all batch action buttons */
+/* #refreshScheduledHuntsBtn {
+    background-color: #0066cc !important;
+    border-color: #0066cc !important;
+    color: #ffffff !important;
+}
+
+#refreshScheduledHuntsBtn:hover {
+    background-color: #0080ff !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(0, 102, 204, 0.3) !important;
+}
+
+#refreshScheduledHuntsBtn:active {
+    background-color: #0052a3 !important;
+}
+
+/* Loading state for refresh button */
+#refreshScheduledHuntsBtn.loading,
+#refreshScheduledHuntsBtn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+#refreshScheduledHuntsBtn.loading:hover,
+#refreshScheduledHuntsBtn:disabled:hover {
+    transform: none !important;
+    background-color: #0066cc !important;
+    box-shadow: 0 2px 8px rgba(0,255,65,0.08) !important;
 }
 
 /* Action count styling */
@@ -408,42 +450,6 @@ div[class*="summary"] {
     animation: row-flash 0.7s;
 }
 
-/* AI Robot Button for Hunt Manager */
-.ai-robot-btn {
-    background: linear-gradient(135deg, #00ff41, #1aff5c);
-    border: 1px solid #00ff41;
-    color: #101c11;
-    font-size: 1.2em;
-    padding: 0.3em 0.6em;
-    border-radius: 50%;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 8px rgba(0, 255, 65, 0.3);
-    font-family: 'Segoe UI', sans-serif;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 2.5em;
-    min-height: 2.5em;
-}
-
-.ai-robot-btn:hover {
-    background: linear-gradient(135deg, #1aff5c, #00ff41);
-    transform: translateY(-2px) scale(1.05);
-    box-shadow: 0 4px 16px rgba(0, 255, 65, 0.5);
-}
-
-.ai-robot-btn:active {
-    transform: translateY(0) scale(0.98);
-    box-shadow: 0 2px 8px rgba(0, 255, 65, 0.3);
-}
-
-.ai-robot-btn:focus {
-    outline: 2px solid #00ff41;
-    outline-offset: 2px;
-}
-
 /* Edit mode styling for modal */
 .edit-mode h3 {
     color: #ffa500 !important;
@@ -454,3 +460,394 @@ div[class*="summary"] {
     color: #ccc !important;
     cursor: not-allowed;
 }
+
+/* Expandable Query Names Cell Styling */
+.query-names-cell {
+    position: relative;
+    max-width: 300px;
+    min-width: 200px;
+}
+
+.query-names-content {
+    max-height: 60px;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    line-height: 1.4;
+}
+
+.query-names-content.expanded {
+    max-height: 500px;
+    overflow-y: auto;
+    border: 1px solid #00ff41;
+    border-radius: 4px;
+    padding: 8px;
+    background: #0a1a0b;
+    box-shadow: 0 2px 8px rgba(0, 255, 65, 0.3);
+}
+
+.query-name-tag {
+    display: inline-block;
+    background: #142a17;
+    color: #7fff7f;
+    padding: 2px 6px;
+    margin: 1px 2px;
+    border-radius: 3px;
+    border: 1px solid #00ff41;
+    font-size: 0.75em;
+    white-space: nowrap;
+}
+
+.query-names-more {
+    display: inline-block;
+    background: #00ff41;
+    color: #101c11;
+    padding: 2px 6px;
+    margin: 1px 2px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.7em;
+    font-weight: bold;
+    transition: all 0.2s;
+}
+
+.query-names-more:hover {
+    background: #1aff5c;
+    box-shadow: 0 1px 4px rgba(0, 255, 65, 0.5);
+    transform: translateY(-1px);
+}
+
+/* Tooltip for query names */
+.query-names-tooltip {
+    position: fixed;
+    background: #1a2f1a;
+    border: 2px solid #00ff41;
+    border-radius: 6px;
+    padding: 12px;
+    color: #7fff7f;
+    font-size: 0.85em;
+    max-width: 400px;
+    z-index: 10000;
+    box-shadow: 0 4px 16px rgba(0, 255, 65, 0.4);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    font-family: 'Consolas', monospace;
+    line-height: 1.4;
+}
+
+.query-names-tooltip.visible {
+    opacity: 1;
+}
+
+.query-names-tooltip .query-name-tag {
+    background: #101c11;
+    border: 1px solid #00ff41;
+    padding: 3px 6px;
+    font-size: 0.8em;
+    margin: 2px;
+}
+
+/* Modal for very long query lists */
+.query-names-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 10000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+}
+
+.query-names-modal-content {
+    background: #142a17;
+    border: 2px solid #00ff41;
+    border-radius: 8px;
+    padding: 1.5rem;
+    max-width: 80vw;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0, 255, 65, 0.3);
+}
+
+.query-names-modal h3 {
+    color: #7fff7f;
+    margin: 0 0 1rem 0;
+    text-align: center;
+}
+
+.query-names-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 1rem;
+}
+
+.query-names-list .query-name-tag {
+    background: #101c11;
+    border: 1px solid #00ff41;
+    padding: 4px 8px;
+    font-size: 0.9em;
+}
+
+.query-names-modal-close {
+    background: #ff4400;
+    color: white;
+    border: 1px solid #ff4400;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'Consolas', monospace;
+    float: right;
+    transition: background 0.2s;
+}
+
+.query-names-modal-close:hover {
+    background: #ff6600;
+}
+
+/* Disable hover effects for scheduled hunts table to avoid confusion with checkboxes */
+#scheduled-hunts-table .gridjs-tr:hover .gridjs-td {
+    background: inherit !important;
+    box-shadow: none !important;
+    cursor: default !important;
+}
+
+#scheduled-hunts-table .gridjs-tr:nth-child(even):hover .gridjs-td {
+    background: #0f1b10 !important;
+    box-shadow: none !important;
+    cursor: default !important;
+}
+
+/* Ensure checkbox cells maintain their background without hover effects */
+#scheduled-hunts-table .gridjs-td:first-child:hover {
+    background: inherit !important;
+    box-shadow: none !important;
+    cursor: default !important;
+}
+
+/* Keep hover effects only for action buttons within the scheduled hunts table */
+#scheduled-hunts-table .cta-button:hover {
+    background: #00ff41 !important;
+    color: #000 !important;
+    box-shadow: 0 0 10px #00ff41 !important;
+    transform: scale(1.05) !important;
+    cursor: pointer !important;
+}
+
+/* Uniform table container styling for all 3 tables */
+#queries-container,
+#scheduled-hunts-container {
+    margin-bottom: 2rem;
+}
+
+#queries-container > div,
+#scheduled-hunts-container > div,
+#results-container > div {
+    background: #142a17;
+    border: 1px solid #00ff41;
+    border-radius: 8px;
+    padding: 1.5rem;
+}
+
+/* Uniform header styling for all tables */
+#queries-container h2,
+#scheduled-hunts-container h2,
+#results-container h2 {
+    color: #7fff7f;
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+/* Uniform action button styling for table headers */
+#queries-container div[style*="justify-content: space-between"] > div,
+#scheduled-hunts-container div[style*="justify-content: space-between"] > div {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* Ensure all GridJS tables have consistent styling */
+#queries-table .gridjs-wrapper,
+#scheduled-hunts-table .gridjs-wrapper,
+#results-table .gridjs-wrapper {
+    background: var(--background-color);
+    border: 1px solid #00ff41;
+    border-radius: 4px;
+}
+
+/* Make all table headers consistent */
+#queries-table .gridjs-th,
+#scheduled-hunts-table .gridjs-th,
+#results-table .gridjs-th {
+    background: #142a17 !important;
+    color: #00ff41 !important;
+    border: 1px solid #00ff41 !important;
+    border-bottom: 2px solid #00ff41 !important;
+    font-family: 'Consolas', monospace !important;
+    text-align: center !important;
+    font-weight: bold !important;
+}
+
+/* Make all table cells consistent */
+#queries-table .gridjs-td,
+#scheduled-hunts-table .gridjs-td,
+#results-table .gridjs-td {
+    background: #101c11 !important;
+    color: #7fff7f !important;
+    border: 1px solid #444 !important;
+    font-family: 'Consolas', monospace !important;
+    text-align: center !important;
+    font-size: 0.85rem !important;
+}
+
+/* Modern Add Schedule Modal Styles */
+.day-checkbox:hover {
+    background: rgba(0, 255, 65, 0.1) !important;
+    transform: translateY(-1px);
+}
+
+.day-checkbox input:checked + span {
+    color: #00ff41 !important;
+    font-weight: 600;
+}
+
+#addScheduleModal input[type="text"]:focus,
+#addScheduleModal input[type="time"]:focus,
+#addScheduleModal select:focus {
+    outline: none;
+    border-color: #1aff5c;
+    box-shadow: 0 0 15px rgba(0, 255, 65, 0.4);
+    background: linear-gradient(135deg, #0a140b, #101c11);
+}
+
+#addScheduleModal .cta-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 255, 65, 0.4);
+}
+
+#addScheduleModal .undo-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 68, 68, 0.3);
+}
+
+#closeScheduleModalBtn:hover {
+    background: rgba(255, 68, 68, 0.1);
+    transform: scale(1.1);
+}
+
+/* Query selection checkbox styles */
+.query-checkbox {
+    display: flex;
+    align-items: center;
+    padding: 0.8rem;
+    margin: 0.3rem 0;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
+}
+
+.query-checkbox:hover {
+    background: rgba(0, 255, 65, 0.1);
+    border-color: rgba(0, 255, 65, 0.3);
+    transform: translateX(5px);
+}
+
+.query-checkbox input[type="checkbox"] {
+    margin-right: 0.8rem;
+    accent-color: #00ff41;
+    transform: scale(1.3);
+}
+
+.query-checkbox.selected {
+    background: rgba(0, 255, 65, 0.15);
+    border-color: #00ff41;
+}
+
+.query-checkbox .query-name {
+    font-weight: 600;
+    color: #7fff7f;
+    margin-bottom: 0.2rem;
+}
+
+.query-checkbox .query-preview {
+    font-size: 0.85rem;
+    color: #aaa;
+    font-style: italic;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 400px;
+}
+
+/* Animation for modal entrance */
+#addScheduleModal {
+    animation: modalFadeIn 0.3s ease-out;
+}
+
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Validation message styles */
+#scheduleValidationMessage {
+    font-size: 0.9rem;
+    padding: 0.5rem;
+    border-radius: 4px;
+    background: rgba(255, 68, 68, 0.1);
+    border: 1px solid #ff4444;
+}
+
+/* Loading spinner for save button */
+@keyframes buttonSpin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+#saveScheduleSpinner {
+    display: inline-block;
+    animation: buttonSpin 1s linear infinite;
+}
+
+/* Schedule Modal Action Buttons - Fix vertical text centering */
+#addScheduleModal .cta-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    vertical-align: middle;
+    text-align: center;
+    height: auto;
+    min-height: 2.5em;
+}
+
+#addScheduleModal .cta-button span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#addScheduleModal .undo-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    vertical-align: middle;
+    text-align: center;
+    height: auto;
+    min-height: 2.5em;
+}
+

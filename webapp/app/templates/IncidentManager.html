@@ -144,12 +144,7 @@
     <div class="modal-content">
         <div class="modal-header">
             <h2>Related Alerts</h2>
-            <div class="modal-header-actions">
-                <button id="aiAnalysisBtn" class="ai-robot-btn" title="AI Analysis & Containment Recommendations">
-                    🤖
-                </button>
-                <span class="close-alerts">&times;</span>
-            </div>
+            <span class="close-alerts">&times;</span>
         </div>
         
         <div id="alertsContent">
@@ -162,36 +157,6 @@
         </div>
           <div class="modal-footer flex-shrink">
             <button id="closeAlertsBtn" class="cta-button">Close</button>
-        </div>
-    </div>
-</div>
-
-<!-- AI Analysis Results Modal -->
-<div id="aiAnalysisModal" class="modal">
-    <div class="modal-content ai-analysis-modal">        <div class="modal-header">
-            <h2>🤖 MDEAutomator Analysis</h2>
-            <div class="modal-header-actions">
-                <button id="downloadAnalysisBtn" class="download-btn" title="Download Analysis" style="display: none;">
-                    📥 Download
-                </button>
-                <span class="close-ai-analysis">&times;</span>
-            </div>
-        </div>
-        
-        <div id="aiAnalysisContent">
-            <div id="aiAnalysisLoading">
-                <div style="font-size: 1.2em; margin-bottom: 15px;">🤖 Analyzing incident and generating recommendations...</div>
-                <div class="spinner"></div>
-                <div style="margin-top: 15px; color: #7fff7f; font-size: 0.9em;">
-                    This may take 30-60 seconds for complex incidents
-                </div>
-            </div>
-            <div id="aiAnalysisData" class="ai-analysis-content"></div>
-            <div id="aiAnalysisError" class="error-content"></div>
-        </div>
-        
-        <div class="modal-footer flex-shrink">
-            <button id="closeAiAnalysisBtn" class="cta-button">Close</button>
         </div>
     </div>
 </div>
@@ -233,8 +198,8 @@
 
 {% block extra_js %}
 <script>
-window.FUNCURL = "{{ FUNCURL|default('') }}";
-window.FUNCKEY = "{{ FUNCKEY|default('') }}";
+window.FUNCTION_APP_BASE_URL = "{{ FUNCTION_APP_BASE_URL|default('') }}";
+window.FUNCTION_KEY = "{{ FUNCTION_KEY|default('') }}";
 </script>
 <script src="https://cdn.jsdelivr.net/npm/gridjs/dist/gridjs.umd.js"></script>
 <script src="{{ url_for('static', filename='js/IncidentManager.js') }}"></script>

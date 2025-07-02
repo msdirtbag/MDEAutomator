@@ -1,8 +1,235 @@
+// Initialize CodeMirror function - must be defined at the very top before any use
+if (typeof window.initializeCodeMirror !== 'function') {
+    window.initializeCodeMirror = function() {
+        // Robust CodeMirror initialization for Add/Edit Query modal
+        // Requires CodeMirror library to be loaded globally
+        const modal = document.getElementById('addQueryModal');
+        if (!modal) {
+            console.warn('initializeCodeMirror: addQueryModal not found');
+            return;
+        }
+        // Try to find the editor container (div or textarea)
+        let editorContainer = modal.querySelector('#kqlEditor, #codeMirrorKqlEditor, .kql-editor');
+        if (!editorContainer) {
+            // Create a div for CodeMirror if not present
+            editorContainer = document.createElement('div');
+            editorContainer.id = 'kqlEditor';
+            editorContainer.className = 'kql-editor';
+            editorContainer.style = 'height: 200px; border: 1px solid #444; background: #181818; margin: 10px 0;';
+            // Insert after the query name input if possible
+            const queryNameInput = modal.querySelector('#newQueryName');
+            if (queryNameInput && queryNameInput.parentNode) {
+                queryNameInput.parentNode.insertBefore(editorContainer, queryNameInput.nextSibling);
+            } else {
+                modal.appendChild(editorContainer);
+            }
+        }
+        // If CodeMirror is already initialized, do nothing
+        if (window.codeMirrorKqlEditor && typeof window.codeMirrorKqlEditor.setValue === 'function') {
+            window.codeMirrorKqlEditor.refresh();
+            return;
+        }
+        // Check if CodeMirror is available
+        if (typeof window.CodeMirror !== 'function') {
+            console.error('CodeMirror library is not loaded.');
+            return;
+        }
+        // Remove any previous instance
+        if (editorContainer.CodeMirrorInstance) {
+            try { editorContainer.CodeMirrorInstance.toTextArea && editorContainer.CodeMirrorInstance.toTextArea(); } catch (e) {}
+        }
+        // Create a new CodeMirror instance
+        window.codeMirrorKqlEditor = window.CodeMirror(editorContainer, {
+            value: '',
+            mode: 'kusto', // or 'text/x-sql' or 'text/plain' if kusto not available
+            theme: 'material-darker',
+            lineNumbers: true,
+            autofocus: true,
+            indentUnit: 4,
+            tabSize: 4,
+            lineWrapping: true,
+            extraKeys: { 'Ctrl-Space': 'autocomplete' }
+        });
+        editorContainer.CodeMirrorInstance = window.codeMirrorKqlEditor;
+        setTimeout(() => window.codeMirrorKqlEditor.refresh(), 100);
+    };
+}
+
+// Ensure the global editQuery function is defined at the very top of the file
+window.editQuery = async function(queryName) {
+    if (!queryName) return;
+
+    // Fetch the query object from the Flask backend
+    let queryObj = null;
+    try {
+        const tenantId = getTenantId();
+        if (!tenantId) {
+            alert('Please select a tenant first.');
+            return;
+        }
+
+        const res = await fetch('/api/hunt/queries', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ Function: 'GetQuery', QueryName: queryName, TenantId: tenantId })
+        });
+
+        if (!res.ok) {
+            throw new Error(`Failed to fetch query: ${res.statusText}`);
+        }
+
+        queryObj = await res.json();
+        console.log('Fetched query object from Flask backend:', queryObj);
+    } catch (error) {
+        console.error('Error fetching query from Flask backend:', error);
+        alert('Failed to fetch query details. Please try again.');
+        return;
+    }    // Show the modal FIRST
+    const modal = document.getElementById('addQueryModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        modal.classList.add('edit-mode');
+    }
+
+    // Set modal title to Edit mode
+    const title = modal ? modal.querySelector('h3') : null;
+    if (title) {
+        title.textContent = 'Edit Query';
+        title.classList.add('edit-mode');
+    }
+
+    // Set query name input (readonly in edit mode)
+    const queryNameInput = document.getElementById('newQueryName');
+    if (queryNameInput) {
+        queryNameInput.value = queryName;
+        queryNameInput.readOnly = true;
+        queryNameInput.style.backgroundColor = '#333';
+        queryNameInput.style.color = '#ccc';
+    }
+
+    // Set save button text
+    const saveText = document.getElementById('saveQueryBtnText');
+    if (saveText) {
+        saveText.textContent = 'Update Query';
+    }
+
+    // Set edit mode flags
+    window.isEditMode = true;
+    window.editingQueryName = queryName;
+
+    // Wait for modal to be fully rendered before initializing CodeMirror
+    await new Promise(resolve => setTimeout(resolve, 100));// Ensure CodeMirror editor is initialized before setting its value
+    function ensureCodeMirrorInitialized(callback) {
+        let retryCount = 0;
+        const maxRetries = 10;
+        
+        function checkAndRetry() {
+            if (window.codeMirrorKqlEditor && typeof window.codeMirrorKqlEditor.setValue === 'function') {
+                console.log('CodeMirror editor is ready.');
+                callback();
+            } else if (retryCount < maxRetries) {
+                retryCount++;
+                console.warn(`CodeMirror editor is not ready. Retry ${retryCount}/${maxRetries} in 300ms...`);
+                setTimeout(checkAndRetry, 300);
+            } else {
+                console.error('CodeMirror editor failed to initialize after maximum retries.');
+                // Try to force initialization one more time
+                try {
+                    initializeCodeMirror();
+                    if (window.codeMirrorKqlEditor && typeof window.codeMirrorKqlEditor.setValue === 'function') {
+                        console.log('CodeMirror editor initialized on final attempt.');
+                        callback();
+                    } else {
+                        console.error('CodeMirror editor could not be initialized.');
+                    }
+                } catch (error) {
+                    console.error('Error in final CodeMirror initialization attempt:', error);
+                }
+            }
+        }
+        
+        checkAndRetry();
+    }    // Debug CodeMirror initialization
+    if (!window.codeMirrorKqlEditor) {
+        console.warn('CodeMirror editor is not initialized, will initialize now...');
+    } else {
+        console.log('CodeMirror editor is already initialized.');
+    }
+
+    // Force initialization now that modal is visible
+    console.log('Forcing CodeMirror initialization for edit mode...');
+    initializeCodeMirror();
+
+    // Use a more robust approach to set the editor value
+    ensureCodeMirrorInitialized(() => {
+        if (queryObj && queryObj.Content) {
+            console.log('Setting CodeMirror value to:', queryObj.Content.substring(0, 100) + '...');
+            try {
+                window.codeMirrorKqlEditor.setValue(queryObj.Content);
+                window.codeMirrorKqlEditor.refresh();
+                console.log('CodeMirror value set successfully');
+            } catch (error) {
+                console.error('Error setting CodeMirror value:', error);
+            }
+        } else {
+            console.log('Setting CodeMirror value to empty string');
+            try {
+                window.codeMirrorKqlEditor.setValue('');
+                window.codeMirrorKqlEditor.refresh();
+            } catch (error) {
+                console.error('Error setting CodeMirror to empty:', error);
+            }
+        }
+    });
+};
+
+// --- TIManager-style Scheduled Hunts Table ---
+let scheduledHuntsSelection = new Set();
+
 // Global variables for query management
 // Last updated: 2025-06-20 17:30 - Cache busting update - no showLoadingIndicator references should exist
 console.log('=== HuntManager.js loaded ===', new Date().toISOString());
 let queriesGrid = null;
 let allQueries = [];
+
+// Debounce mechanism to prevent rapid successive grid operations
+let isGridOperationInProgress = false;
+let gridOperationTimeout = null;
+
+function debounceGridOperation(operation, delay = 100) {
+    return async function(...args) {
+        // Clear any pending operation
+        if (gridOperationTimeout) {
+            clearTimeout(gridOperationTimeout);
+        }
+        
+        // If an operation is already in progress, wait for it to complete
+        if (isGridOperationInProgress) {
+            console.log('Grid operation already in progress, queueing...');
+            return new Promise((resolve, reject) => {
+                gridOperationTimeout = setTimeout(async () => {
+                    try {
+                        const result = await operation.apply(this, args);
+                        resolve(result);
+                    } catch (error) {
+                        reject(error);
+                    }
+                }, delay);
+            });
+        }
+        
+        // Mark operation as in progress
+        isGridOperationInProgress = true;
+        
+        try {
+            const result = await operation.apply(this, args);
+            return result;
+        } finally {
+            // Always clear the flag when done
+            isGridOperationInProgress = false;
+        }
+    };
+}
 
 // Test function to debug API responses
 window.testActionAPI = async function() {
@@ -48,6 +275,93 @@ window.testActionAPI = async function() {
     }
 };
 
+// Tenant management functions
+async function loadTenants() {
+    try {
+        console.log('Loading tenants from backend...');
+        
+        // Update platform loading progress
+        if (typeof window.updatePlatformLoadingProgress === 'function') {
+            window.updatePlatformLoadingProgress('Loading tenants for Hunt Manager...', 30);
+        }
+        
+        // Add timeout to handle Azure Function cold starts
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+        
+        const response = await fetch('/api/tenants', {
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            console.error('HTTP error response:', response.status, response.statusText);
+            // Mark tenants as loaded even on error
+            if (typeof window.markTenantsLoaded === 'function') {
+                window.markTenantsLoaded();
+            }
+            return;
+        }
+        
+        const data = await response.json();
+        console.log('Tenant API response data:', data);
+        
+        // Handle both response formats for backward compatibility
+        let tenants = [];
+        if (data.Status === 'Success') {
+            tenants = data.TenantIds || [];
+            console.log(`Loaded ${data.Count || 0} tenants`);
+        } else if (Array.isArray(data)) {
+            tenants = data;
+            console.log(`Loaded ${data.length} tenants`);
+        } else {
+            const errorMessage = data.Message || data.error || 'Unknown error occurred';
+            console.error('Error loading tenants:', errorMessage);
+            // Mark tenants as loaded even on error
+            if (typeof window.markTenantsLoaded === 'function') {
+                window.markTenantsLoaded();
+            }
+            return;
+        }
+        
+        populateTenantDropdown(tenants);
+        
+        // Mark tenants as loaded for platform loading system
+        if (typeof window.markTenantsLoaded === 'function') {
+            window.markTenantsLoaded();
+        }
+        
+    } catch (error) {
+        console.error('Error fetching tenants:', error);
+        // Mark tenants as loaded even on error
+        if (typeof window.markTenantsLoaded === 'function') {
+            window.markTenantsLoaded();
+        }
+    }
+}
+
+function populateTenantDropdown(tenants) {
+    const tenantDropdown = document.getElementById('tenantDropdown');
+    if (!tenantDropdown) {
+        console.error('Tenant dropdown not found');
+        return;
+    }
+    
+    // Clear existing options
+    tenantDropdown.innerHTML = '';
+    
+    // Add tenant options - Client Name first, then Tenant ID in parentheses
+    tenants.forEach(tenant => {
+        const option = document.createElement('option');
+        option.value = tenant.TenantId;
+        option.textContent = `${tenant.ClientName} (${tenant.TenantId})`;
+        tenantDropdown.appendChild(option);
+    });
+    
+    console.log(`Populated tenant dropdown with ${tenants.length} tenants`);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     console.log('HuntManager page JavaScript loaded');
 
@@ -60,16 +374,85 @@ document.addEventListener('DOMContentLoaded', () => {
         setupEventListeners();
     }, 100);
 
-    // Wait for tenant dropdown to be populated, then auto-load queries
-    waitForTenantDropdownAndLoadQueries();
+    // Wait for tenant dropdown to be populated, then auto-load all data
+    waitForTenantDropdownAndLoadAll();
 
-    // Attach event handlers to query buttons
+    // Always load queries on page load
+    loadQueries();
+    
+    // Auto-load scheduled hunts on page load
+    loadScheduledHunts();
+});
+
+// Set up Scheduled Hunts UI - initialize all components and load data
+function setupScheduledHuntsUI() {
+    console.log('Setting up Scheduled Hunts UI...');
+    // Load scheduled hunts data
+    if (typeof window.loadScheduledHunts === 'function') {
+        window.loadScheduledHunts();
+    }
+    // Ensure batch action buttons are set up
+    if (typeof setupScheduledHuntsBatchActionButtons === 'function') {
+        setupScheduledHuntsBatchActionButtons();
+    }
+}
+
+// Event listeners setup function
+function setupEventListeners() {
+    // Tenant dropdown change handler
+    const tenantDropdown = document.getElementById('tenantDropdown');
+    if (tenantDropdown) {
+        tenantDropdown.addEventListener('change', function() {
+            const tenantId = this.value;
+            if (tenantId) {
+                sessionStorage.setItem('TenantId', tenantId);
+                // Auto-reload all data when tenant changes
+                loadQueries();
+                loadScheduledHunts();
+            }
+        });
+    } else {
+        console.warn('setupEventListeners: tenantDropdown not found');
+    }    // Updated button event listeners for new layout
+    const refreshAllBtn = document.getElementById('refreshAllBtn');
     const refreshQueriesBtn = document.getElementById('refreshQueriesBtn');
+    const refreshScheduledHuntsBtn = document.getElementById('refreshScheduledHuntsBtn');
     const addQueryBtn = document.getElementById('addQueryBtn');
-    if (refreshQueriesBtn) refreshQueriesBtn.onclick = loadQueries;
-    if (addQueryBtn) addQueryBtn.onclick = showAddQueryModal;    // Modal buttons - with defensive event handler setup
+    const addQueryBtn2 = document.getElementById('addQueryBtn2');
+    const addScheduleBtn = document.getElementById('addScheduleBtn');
+    const addScheduleBtn2 = document.getElementById('addScheduleBtn2');
+    
+    if (refreshAllBtn) {
+        refreshAllBtn.onclick = function() {
+            loadQueries();
+            loadScheduledHunts();
+        };
+    } else { console.warn('setupEventListeners: refreshAllBtn not found'); }
+    if (refreshQueriesBtn) refreshQueriesBtn.onclick = loadQueries; else { console.warn('setupEventListeners: refreshQueriesBtn not found'); }
+    if (refreshScheduledHuntsBtn) refreshScheduledHuntsBtn.onclick = window.loadScheduledHunts; else { console.warn('setupEventListeners: refreshScheduledHuntsBtn not found'); }
+    if (addQueryBtn) addQueryBtn.onclick = showAddQueryModal; else { console.warn('setupEventListeners: addQueryBtn not found'); }
+    if (addQueryBtn2) addQueryBtn2.onclick = showAddQueryModal; else { console.warn('setupEventListeners: addQueryBtn2 not found'); }
+    if (addScheduleBtn) addScheduleBtn.onclick = showAddScheduleModal; else { console.warn('setupEventListeners: addScheduleBtn not found'); }
+    if (addScheduleBtn2) addScheduleBtn2.onclick = showAddScheduleModal; else { console.warn('setupEventListeners: addScheduleBtn2 not found'); }
+
+    // Modal buttons - with defensive event handler setup
     const saveQueryBtn = document.getElementById('saveQueryBtn');
     const cancelQueryBtn = document.getElementById('cancelQueryBtn');
+    
+    // Add Schedule Modal buttons
+    const saveScheduleBtn = document.getElementById('saveScheduleBtn');
+    const cancelScheduleBtn = document.getElementById('cancelScheduleBtn');
+    const closeScheduleModalBtn = document.getElementById('closeScheduleModalBtn');
+    
+    // Query selection helper buttons
+    const selectAllQueriesBtn = document.getElementById('selectAllQueriesBtn');
+    const clearAllQueriesBtn = document.getElementById('clearAllQueriesBtn');
+    
+    // Day selection helper buttons
+    const selectWeekdaysBtn = document.getElementById('selectWeekdaysBtn');
+    const selectWeekendsBtn = document.getElementById('selectWeekendsBtn');
+    const selectAllDaysBtn = document.getElementById('selectAllDaysBtn');
+    const clearAllDaysBtn = document.getElementById('clearAllDaysBtn');
     
     // Remove any existing event listeners to prevent conflicts
     if (saveQueryBtn) {
@@ -82,27 +465,119 @@ document.addEventListener('DOMContentLoaded', () => {
             saveNewQuery();
         });
         console.log('Save button event listener attached');
-    }
+    } else { console.warn('setupEventListeners: saveQueryBtn not found'); }
     
     if (cancelQueryBtn) {
         cancelQueryBtn.onclick = hideAddQueryModal;
+    } else { console.warn('setupEventListeners: cancelQueryBtn not found'); }
+
+    // Add Schedule Modal event handlers
+    if (saveScheduleBtn) {
+        saveScheduleBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('Save Schedule button clicked');
+            saveNewSchedule();
+        });
+        console.log('Save Schedule button event listener attached');
+    } else { console.warn('setupEventListeners: saveScheduleBtn not found'); }
+    
+    if (cancelScheduleBtn) {
+        cancelScheduleBtn.addEventListener('click', hideAddScheduleModal);
+        console.log('Cancel Schedule button event listener attached');
+    } else { console.warn('setupEventListeners: cancelScheduleBtn not found'); }
+    
+    if (closeScheduleModalBtn) {
+        closeScheduleModalBtn.addEventListener('click', hideAddScheduleModal);
+        console.log('Close Schedule modal button event listener attached');
+    } else { console.warn('setupEventListeners: closeScheduleModalBtn not found'); }
+
+    // Query selection helper event handlers
+    if (selectAllQueriesBtn) {
+        selectAllQueriesBtn.addEventListener('click', function() {
+            const checkboxes = document.querySelectorAll('#queryList input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = true;
+                updateQueryCheckboxStyle(checkbox.closest('.query-checkbox'), true);
+            });
+        });
     }
+    
+    if (clearAllQueriesBtn) {
+        clearAllQueriesBtn.addEventListener('click', function() {
+            const checkboxes = document.querySelectorAll('#queryList input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = false;
+                updateQueryCheckboxStyle(checkbox.closest('.query-checkbox'), false);
+            });
+        });
+    }
+    
+    // Day selection helper event handlers
+    if (selectWeekdaysBtn) {
+        selectWeekdaysBtn.addEventListener('click', function() {
+            const weekdays = ['scheduleMonday', 'scheduleTuesday', 'scheduleWednesday', 'scheduleThursday', 'scheduleFriday'];
+            weekdays.forEach(id => {
+                const checkbox = document.getElementById(id);
+                if (checkbox) {
+                    checkbox.checked = true;
+                    checkbox.dispatchEvent(new Event('change'));
+                }
+            });
+        });
+    }
+    
+    if (selectWeekendsBtn) {
+        selectWeekendsBtn.addEventListener('click', function() {
+            const weekends = ['scheduleSaturday', 'scheduleSunday'];
+            weekends.forEach(id => {
+                const checkbox = document.getElementById(id);
+                if (checkbox) {
+                    checkbox.checked = true;
+                    checkbox.dispatchEvent(new Event('change'));
+                }
+            });
+        });
+    }
+    
+    if (selectAllDaysBtn) {
+        selectAllDaysBtn.addEventListener('click', function() {
+            const allDays = ['scheduleMonday', 'scheduleTuesday', 'scheduleWednesday', 'scheduleThursday', 'scheduleFriday', 'scheduleSaturday', 'scheduleSunday'];
+            allDays.forEach(id => {
+                const checkbox = document.getElementById(id);
+                if (checkbox) {
+                    checkbox.checked = true;
+                    checkbox.dispatchEvent(new Event('change'));
+                }
+            });
+        });
+    }
+    
+    if (clearAllDaysBtn) {
+        clearAllDaysBtn.addEventListener('click', function() {
+            const allDays = ['scheduleMonday', 'scheduleTuesday', 'scheduleWednesday', 'scheduleThursday', 'scheduleFriday', 'scheduleSaturday', 'scheduleSunday'];
+            allDays.forEach(id => {
+                const checkbox = document.getElementById(id);
+                if (checkbox) {
+                    checkbox.checked = false;
+                    checkbox.dispatchEvent(new Event('change'));
+                }
+            });
+        });
+    }
+}
 
-    // Always load queries on page load
-    loadQueries();
-});
-
-// Helper: Wait for tenant dropdown to be populated, then auto-load queries
-function waitForTenantDropdownAndLoadQueries() {
+// Helper: Wait for tenant dropdown to be populated, then auto-load all data
+function waitForTenantDropdownAndLoadAll() {
     const savedTenant = sessionStorage.getItem('TenantId');
     const dropdown = document.getElementById('tenantDropdown');
     if (!dropdown) {
-        setTimeout(waitForTenantDropdownAndLoadQueries, 100);
+        setTimeout(waitForTenantDropdownAndLoadAll, 100);
         return;
     }
     // Wait until dropdown has at least one option
     if (dropdown.options.length === 0) {
-        setTimeout(waitForTenantDropdownAndLoadQueries, 100);
+        setTimeout(waitForTenantDropdownAndLoadAll, 100);
         return;
     }
     // If saved tenant, select it
@@ -114,15 +589,18 @@ function waitForTenantDropdownAndLoadQueries() {
             }
         }
     }
-    // Auto-load queries for selected tenant
+    // Auto-load all data for selected tenant
     if (dropdown.value && dropdown.value.trim() !== '') {
-        loadQueries().then(() => {
+        Promise.all([
+            loadQueries(),
+            loadScheduledHunts()
+        ]).then(() => {
             // Mark auto-load as completed
             if (typeof window.markAutoLoadCompleted === 'function') {
                 window.markAutoLoadCompleted();
             }
         }).catch((error) => {
-            console.error('Error in queries auto-load:', error);
+            console.error('Error in auto-load:', error);
             // Mark auto-load as completed even on error
             if (typeof window.markAutoLoadCompleted === 'function') {
                 window.markAutoLoadCompleted();
@@ -178,22 +656,38 @@ function renderQueriesTable(queriesRaw) {
     // If backend response is an object with a 'Queries' array, use that
     if (queriesRaw && !Array.isArray(queriesRaw) && queriesRaw.Queries) {
         queriesRaw = queriesRaw.Queries;
-    }    // Only show FileName, LastModified, and Size columns
+    }
+
+    // Show FileName, LastModified, Size, and Actions columns
     const columns = [
-        { id: 'FileName', name: 'File Name', width: '35%', sort: true },
-        { id: 'LastModified', name: 'Last Modified', width: '30%', sort: true },
+        { id: 'FileName', name: 'File Name', width: '30%', sort: true },
+        { id: 'LastModified', name: 'Last Modified', width: '25%', sort: true },
         { id: 'Size', name: 'Size (bytes)', width: '15%', sort: true },
-        { name: 'Actions', width: '20%',
-          formatter: (_, row) => {
-            const fileName = row.cells[0].data;            return gridjs.html(`
-                <button class='cta-button' onclick='window.runQueryNow("${fileName}")' style='margin-right: 0.5rem;'>Run Now</button>
-                <button class='cta-button edit-button' onclick='window.editQuery("${fileName}")' style='margin-right: 0.5rem;'>Edit</button>
-                <button class='cta-button undo-button' onclick='window.removeQuery("${fileName}")'>Remove</button>
-            `);
-          }
+        { 
+            id: 'Actions', 
+            name: 'Actions', 
+            width: '30%', 
+            sort: false,
+            formatter: (cell, row) => {
+                const fileName = row.cells[0].data;
+                return gridjs.html(`
+                    <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
+                        <button class="cta-button" style="font-size: 0.75em; padding: 0.25em 0.5em;" onclick="window.runQueryNow('${fileName}')">Run Now</button>
+                        <button class="cta-button edit-button" style="font-size: 0.75em; padding: 0.25em 0.5em;" onclick="window.editQuery('${fileName}')">Edit</button>
+                        <button class="cta-button undo-button" style="font-size: 0.75em; padding: 0.25em 0.5em;" onclick="window.removeQuery('${fileName}')">Delete</button>
+                    </div>
+                `);
+            }
         }
     ];
-    const queries = (queriesRaw || []).map(row => [row.FileName || '', row.LastModified || '', row.Size || '']);
+
+    const queries = (queriesRaw || []).map(row => [
+        row.FileName || '', 
+        row.LastModified || '', 
+        row.Size || '',
+        '' // Actions column will be handled by formatter
+    ]);
+
     if (queriesGrid) queriesGrid.destroy();
     const queriesTableContainer = document.getElementById('queries-table');
     queriesGrid = new gridjs.Grid({
@@ -214,6 +708,8 @@ function showAddQueryModal() {
     const modal = document.getElementById('addQueryModal');
     if (modal) {
         modal.style.display = 'flex';
+        console.log('Opening Add Query Modal. Reinitializing CodeMirror editor if necessary.');
+        initializeCodeMirror();
     }
 }
 
@@ -223,9 +719,39 @@ function hideAddQueryModal() {
         modal.style.display = 'none';
     }
     
+    // Reset form fields
     const queryNameInput = document.getElementById('newQueryName');
     if (queryNameInput) {
         queryNameInput.value = '';
+        queryNameInput.readOnly = false;
+        queryNameInput.style.backgroundColor = '#101c11';
+        queryNameInput.style.color = '#7fff7f';
+    }
+    
+    // Reset modal title
+    const title = modal ? modal.querySelector('h3') : null;
+    if (title) {
+        title.textContent = 'Add New Query';
+        title.classList.remove('edit-mode');
+    }
+    
+    // Reset save button
+    const saveText = document.getElementById('saveQueryBtnText');
+    if (saveText) {
+        saveText.textContent = 'Save';
+    }
+    
+    // Clear edit mode flags
+    window.isEditMode = false;
+    window.editingQueryName = null;
+    
+    // Clear CodeMirror editor
+    if (window.codeMirrorKqlEditor && typeof window.codeMirrorKqlEditor.setValue === 'function') {
+        try {
+            window.codeMirrorKqlEditor.setValue('');
+        } catch (error) {
+            console.error('Error clearing CodeMirror:', error);
+        }
     }
 }
 async function saveNewQuery() {
@@ -249,12 +775,10 @@ async function saveNewQuery() {
     
     const saveBtn = document.getElementById('saveQueryBtn');
     const saveText = document.getElementById('saveQueryBtnText');
-    const spinner = document.getElementById('saveQuerySpinner');
-
-    if (saveBtn && spinner && saveText) {
+    const spinner = document.getElementById('saveQuerySpinner');    if (saveBtn && spinner && saveText) {
         saveBtn.disabled = true;
         spinner.style.display = 'inline-block';
-        saveText.textContent = isEditMode ? 'Updating...' : 'Saving...';
+        saveText.textContent = window.isEditMode ? 'Updating...' : 'Saving...';
     }
     
     try {
@@ -288,19 +812,17 @@ async function saveNewQuery() {
                 isReadyFuncExists: typeof window.isCodeMirrorReady === 'function'
             });
             alert('Query editor is not ready. Please wait a moment and try again.');
-            return;
-        }        // Debug logging
-        const actionVerb = isEditMode ? 'updating' : 'saving';
+            return;        }        // Debug logging
+        const actionVerb = window.isEditMode ? 'updating' : 'saving';
         console.log(`${actionVerb} query:`, { tenantId, queryName, queryText });
         
         if (!tenantId || !queryName || !queryText) {
             alert('Please fill in all fields.');
-            return;
-        }        
-        showContentLoading(isEditMode ? 'Updating Query...' : 'Saving Query...');
+            return;        }        
+        showContentLoading(window.isEditMode ? 'Updating Query...' : 'Saving Query...');
         
         const url = '/api/hunt/queries';
-        const functionName = isEditMode ? 'UpdateQuery' : 'AddQuery';
+        const functionName = window.isEditMode ? 'UpdateQuery' : 'AddQuery';
         const payload = { TenantId: tenantId, Function: functionName, QueryName: queryName, Query: queryText };
         
         console.log('Save payload:', payload);
@@ -332,9 +854,8 @@ async function saveNewQuery() {
             // Only hide modal and reload queries if successful
             hideAddQueryModal();
             loadQueries();
-            
-            // Show success message
-            const action = isEditMode ? 'updated' : 'saved';
+              // Show success message
+            const action = window.isEditMode ? 'updated' : 'saved';
             console.log(`Query "${queryName}" ${action} successfully`);
             
             // Show user-friendly success notification
@@ -348,17 +869,15 @@ async function saveNewQuery() {
             const errorMsg = result.Message || result.error || 'Unknown error occurred';
             throw new Error(errorMsg);
         }
-        
-    } catch (error) {
+          } catch (error) {
         console.error('Error saving query:', error);
-        const actionVerb = isEditMode ? 'updating' : 'saving';
-        alert(`Error ${actionVerb} query: ${error.message}`);    } finally {
+        const actionVerb = window.isEditMode ? 'updating' : 'saving';
+        alert(`Error ${actionVerb} query: ${error.message}`);} finally {
         hideContentLoading();
-        
-        if (saveBtn && spinner && saveText) {
+          if (saveBtn && spinner && saveText) {
             saveBtn.disabled = false;
             spinner.style.display = 'none';
-            saveText.textContent = isEditMode ? 'Update Query' : 'Save';
+            saveText.textContent = window.isEditMode ? 'Update Query' : 'Save';
         }
     }
 }
@@ -518,848 +1037,776 @@ window.runQueryNow = async function(queryName) {
     }
 }
 
-// Utility function to format dates consistently
-function formatDateTime(dateString) {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
-}
-
-// Tenant Management Functions (copied from index.js)
-
-// Simplified event listeners for tenant dropdown only
-function setupEventListeners() {
-    console.log('Setting up event listeners...');
-    
-    // Tenant dropdown change event
-    const tenantDropdown = document.getElementById('tenantDropdown');
-    if (tenantDropdown) {
-        console.log('Found tenant dropdown, adding change listener');
-        tenantDropdown.addEventListener('change', function() {
-            const selectedTenant = this.value;
-            if (selectedTenant) {
-                sessionStorage.setItem('TenantId', selectedTenant);
-                console.log('Selected tenant:', selectedTenant);
-                // Auto-load actions when tenant is selected
-                loadActions();
-            } else {
-                sessionStorage.removeItem('TenantId');
-            }
-        });
-    } else {
-        console.log('Tenant dropdown not found');
-    }
-}
-
-// Simplified tenant loading for dropdown only
-async function loadTenants() {
-    try {
-        console.log('Loading tenants from backend...');
+// Global error handler for GridJS issues
+window.addEventListener('error', function(event) {
+    if (event.error && event.error.message && event.error.message.includes('__k')) {
+        console.warn('GridJS internal error detected, attempting to clean up:', event.error);
         
-        // Update platform loading progress
-        if (typeof window.updatePlatformLoadingProgress === 'function') {
-            window.updatePlatformLoadingProgress('Loading tenants for Hunt Manager...', 30);
-        }
-        
-        // Add timeout to handle Azure Function cold starts
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
-        
-        const response = await fetch('/api/tenants', {
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            console.error('HTTP error response:', response.status, response.statusText);
-            // Mark tenants as loaded even on error
-            if (typeof window.markTenantsLoaded === 'function') {
-                window.markTenantsLoaded();
-            }
-            return;
-        }
-        
-        const data = await response.json();
-        console.log('Tenant API response data:', data);
-        
-        // Handle both response formats for backward compatibility
-        let tenants = [];
-        if (data.Status === 'Success') {
-            tenants = data.TenantIds || [];
-            console.log(`Loaded ${data.Count || 0} tenants`);
-        } else if (Array.isArray(data)) {
-            tenants = data;
-            console.log(`Loaded ${data.length} tenants`);
-        } else {
-            const errorMessage = data.Message || data.error || 'Unknown error occurred';
-            console.error('Error loading tenants:', errorMessage);
-            // Mark tenants as loaded even on error
-            if (typeof window.markTenantsLoaded === 'function') {
-                window.markTenantsLoaded();
-            }
-            return;
-        }
-        
-        populateTenantDropdown(tenants);
-        
-        // Mark tenants as loaded for platform loading system
-        if (typeof window.markTenantsLoaded === 'function') {
-            window.markTenantsLoaded();
-        }
-        
-    } catch (error) {
-        console.error('Error fetching tenants:', error);
-        // Mark tenants as loaded even on error
-        if (typeof window.markTenantsLoaded === 'function') {
-            window.markTenantsLoaded();
-        }
-    }
-}
-
-function populateTenantDropdown(tenants) {
-    const tenantDropdown = document.getElementById('tenantDropdown');
-    if (!tenantDropdown) {
-        console.error('Tenant dropdown not found');
-        return;
-    }
-    
-    // Clear existing options
-    tenantDropdown.innerHTML = '';
-    
-    // Add tenant options - Client Name first, then Tenant ID in parentheses
-    tenants.forEach(tenant => {
-        const option = document.createElement('option');
-        option.value = tenant.TenantId;
-        option.textContent = `${tenant.ClientName} (${tenant.TenantId})`;
-        tenantDropdown.appendChild(option);
-    });
-}
-
-// ==================== KQL AI ANALYSIS FUNCTIONALITY ====================
-
-// Global variable to store current analysis data
-let currentHuntKqlAnalysisData = null;
-
-// Function to analyze KQL query with AI - HuntManager version
-window.analyzeHuntKqlQuery = async function() {
-    console.log('=== analyzeHuntKqlQuery called ===');
-      // Clear any existing analysis data first
-    currentHuntKqlAnalysisData = null;
-    console.log('Cleared existing hunt analysis data');
-    
-    // Get KQL query from CodeMirror editor
-    let kqlQuery = '';
-    if (window.codeMirrorKqlEditor && typeof window.codeMirrorKqlEditor.getValue === 'function') {
-        kqlQuery = window.codeMirrorKqlEditor.getValue().trim();
-    } else {
-        console.error('CodeMirror KQL editor not available');
-        alert('KQL editor not available. Please try again.');
-        return;
-    }
-    
-    if (!kqlQuery) {
-        alert('Please enter a KQL query to analyze.');
-        return;
-    }
-    
-    console.log('Analyzing Hunt KQL query:', kqlQuery.substring(0, 100) + '...');
-    
-    // Show KQL analysis modal
-    console.log('About to call showHuntKqlAnalysisModal()...');
-    try {
-        showHuntKqlAnalysisModal();
-        console.log('showHuntKqlAnalysisModal() call completed successfully');
-    } catch (modalError) {
-        console.error('Error calling showHuntKqlAnalysisModal():', modalError);
-    }
-      try {
-        // Call the new Flask route for AI analysis
-        const chatUrl = '/api/hunt/analyze';
-        
-        // Prepare context with the KQL query - specific for threat hunting
-        const context = `KQL HUNT QUERY TO ANALYZE:\n\n${kqlQuery}\n\nPLEASE ANALYZE:\n- Query purpose and hunting logic\n- Data sources and tables used\n- Filtering, joins, and aggregation techniques\n- Threat hunting value and detection capabilities\n- Security insights and IOCs\n- Performance considerations for large datasets\n- Potential improvements and optimizations\n- Similar threat hunting scenarios`;
-        
-        // Simplified payload for Flask route
-        const chatPayload = {
-            query: kqlQuery,
-            message: "Analyze this KQL (Kusto Query Language) threat hunting query and provide a comprehensive explanation of its hunting methodology, detection capabilities, and security value.",
-            system_prompt: "You are an expert in KQL (Kusto Query Language) and cybersecurity threat hunting. Analyze the provided KQL hunt query and explain: 1) What threats or behaviors the query hunts for, 2) Step-by-step breakdown of the hunting logic, 3) Data sources and security tables used, 4) Filtering criteria and detection techniques, 5) Security insights and threat indicators, 6) Hunting effectiveness and coverage, 7) Performance considerations for enterprise environments, 8) Potential improvements or variants for better detection. Focus on the security and threat hunting aspects, providing practical insights for SOC analysts and threat hunters.",
-            context: context
-        };
-
-        console.log('Calling MDEAutoChat API for Hunt KQL analysis...');
-        const chatResponse = await fetch(chatUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(chatPayload)
-        });
-
-        if (!chatResponse.ok) {
-            throw new Error(`HTTP error! status: ${chatResponse.status}`);
-        }
-
-        const chatResult = await chatResponse.json();
-        console.log('Hunt KQL analysis completed');
-        console.log('Chat result:', chatResult);
-
-        // Extract analysis text - focus on "Response" field only
-        let analysisText = '';
-        
-        console.log('Processing chatResult for Hunt KQL:', typeof chatResult, chatResult);
-        
-        // If the result is a string that looks like JSON, try to parse it
-        if (typeof chatResult === 'string') {
-            try {
-                const parsedResult = JSON.parse(chatResult);
-                console.log('Parsed JSON from string:', parsedResult);
-                chatResult = parsedResult;
-            } catch (e) {
-                console.log('String is not valid JSON, using as-is');
-                analysisText = chatResult;
-            }
-        }
-        
-        // Now extract the Response field specifically
-        if (chatResult && typeof chatResult === 'object') {
-            if (chatResult.Response && typeof chatResult.Response === 'string') {
-                analysisText = chatResult.Response;
-                console.log('Extracted Response field from Hunt KQL chatResult');
-            } else if (chatResult.response && typeof chatResult.response === 'string') {
-                analysisText = chatResult.response;
-                console.log('Extracted response field from Hunt KQL chatResult');
-            } else if (chatResult.message && typeof chatResult.message === 'string') {
-                analysisText = chatResult.message;
-                console.log('Extracted message field from Hunt KQL chatResult');
-            } else if (chatResult.analysis && typeof chatResult.analysis === 'string') {
-                analysisText = chatResult.analysis;
-                console.log('Extracted analysis field from Hunt KQL chatResult');
-            } else {
-                console.warn('No recognizable response field found in Hunt KQL chatResult:', chatResult);
-                console.warn('Available fields:', Object.keys(chatResult || {}));
-                analysisText = 'Analysis completed but no readable response field was found. Please check the console for details.';
-            }
-        } else if (typeof chatResult === 'string' && analysisText === '') {
-            analysisText = chatResult;
-            console.log('Using Hunt KQL chatResult as string directly');
-        } else {
-            console.warn('Unexpected Hunt KQL chatResult type:', typeof chatResult, chatResult);
-            analysisText = 'Analysis completed but response format was unexpected. Please check the console for details.';
-        }
-
-        // Store the analysis data
-        currentHuntKqlAnalysisData = {
-            query: kqlQuery,
-            analysis: analysisText,
-            timestamp: new Date().toISOString()
-        };
-
-        // Display the results
-        displayHuntKqlAnalysisResults(currentHuntKqlAnalysisData);
-
-    } catch (error) {
-        console.error('Error performing Hunt KQL analysis:', error);
-        displayHuntKqlAnalysisError(error.message);
-    }
-}
-
-// Function to show Hunt KQL analysis modal - DYNAMIC APPROACH
-function showHuntKqlAnalysisModal() {
-    console.log('=== showHuntKqlAnalysisModal called - DYNAMIC APPROACH ===');
-    
-    // Remove any existing modal
-    const existingModal = document.getElementById('dynamicHuntKqlModal');
-    if (existingModal) {
-        existingModal.remove();
-    }
-    
-    // Create modal dynamically
-    const modal = document.createElement('div');
-    modal.id = 'dynamicHuntKqlModal';
-    modal.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.8);
-        z-index: 999999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
-        box-sizing: border-box;
-    `;
-    
-    const container = document.createElement('div');
-    container.style.cssText = `
-        background: #1a2f1a;
-        border: 2px solid #00ff41;
-        border-radius: 8px;
-        width: 1200px;
-        max-width: 95vw;
-        max-height: 80vh;
-        display: flex;
-        flex-direction: column;
-        box-shadow: 0 10px 30px rgba(0, 255, 65, 0.3);
-        color: #7fff7f;
-        font-family: Consolas, monospace;
-    `;
-    
-    container.innerHTML = `
-        <div style="padding: 20px 25px 15px 25px; border-bottom: 1px solid #00ff41; display: flex; justify-content: space-between; align-items: center;">
-            <h3 style="margin: 0; color: #00ff41; font-size: 1.3rem;">🤖 Hunt KQL Query Analysis</h3>
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <button id="dynamicHuntDownloadBtn" style="display: none; background: #00ff41; color: #101c11; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">📥 Download</button>
-                <span id="dynamicHuntCloseBtn" style="color: #00ff41; font-size: 28px; font-weight: bold; cursor: pointer; padding: 0 5px;">&times;</span>
-            </div>
-        </div>
-        <div style="flex: 1; overflow-y: auto; padding: 20px 25px;">
-            <div id="dynamicHuntLoadingDiv" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px;">
-                <div style="border: 3px solid #00ff41; border-radius: 50%; border-top: 3px solid transparent; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
-                <p style="margin-top: 20px; color: #7fff7f;">Analyzing hunt query...</p>
-            </div>
-            <div id="dynamicHuntDataDiv" style="display: none; line-height: 1.6;"></div>
-            <div id="dynamicHuntErrorDiv" style="display: none; color: #ff6b6b; padding: 20px; background: rgba(255, 0, 0, 0.1); border-radius: 4px;"></div>
-        </div>
-        <div style="padding: 15px 25px; border-top: 1px solid #00ff41; text-align: right;">
-            <button id="dynamicHuntCloseBtn2" style="background: #666; color: #fff; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Close</button>
-        </div>
-    `;
-    
-    // Add spinner animation if not already present
-    if (!document.querySelector('style[data-hunt-spinner]')) {
-        const style = document.createElement('style');
-        style.setAttribute('data-hunt-spinner', 'true');
-        style.textContent = `
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
-        `;
-        document.head.appendChild(style);
-    }
-    
-    modal.appendChild(container);
-    document.body.appendChild(modal);
-    
-    // Add event listeners
-    const closeModal = () => {
-        modal.remove();
-        document.body.style.overflow = '';
-    };
-    
-    document.getElementById('dynamicHuntCloseBtn').onclick = closeModal;
-    document.getElementById('dynamicHuntCloseBtn2').onclick = closeModal;
-    modal.onclick = (e) => {
-        if (e.target === modal) closeModal();
-    };
-    
-    // Prevent body scroll
-    document.body.style.overflow = 'hidden';
-    
-    console.log('Dynamic Hunt modal created and displayed');
-    return modal;
-}
-
-// Function to display Hunt KQL analysis results
-function displayHuntKqlAnalysisResults(analysisData) {
-    console.log('=== displayHuntKqlAnalysisResults called ===');
-    console.log('Hunt Analysis data:', analysisData);
-    
-    const loadingDiv = document.getElementById('dynamicHuntLoadingDiv');
-    const dataDiv = document.getElementById('dynamicHuntDataDiv');
-    const errorDiv = document.getElementById('dynamicHuntErrorDiv');
-    const downloadBtn = document.getElementById('dynamicHuntDownloadBtn');
-    
-    console.log('Dynamic Hunt modal elements found:', {
-        loadingDiv: !!loadingDiv,
-        dataDiv: !!dataDiv,
-        errorDiv: !!errorDiv,
-        downloadBtn: !!downloadBtn
-    });
-    
-    if (loadingDiv) {
-        loadingDiv.style.display = 'none';
-        console.log('Hidden hunt loading div');
-    }
-    if (errorDiv) {
-        errorDiv.style.display = 'none';
-        console.log('Hidden hunt error div');
-    }
-    
-    if (dataDiv) {
-        console.log('Formatting hunt analysis text...');
-        // Format the analysis text with better structure
-        const formattedAnalysis = formatHuntKqlAnalysisText(analysisData.analysis, analysisData.query);
-        console.log('Formatted hunt analysis length:', formattedAnalysis.length);
-        dataDiv.innerHTML = formattedAnalysis;
-        dataDiv.style.display = 'block';
-        console.log('Displayed hunt analysis in data div');
-    } else {
-        console.error('Hunt data div not found!');
-    }
-    
-    if (downloadBtn) {
-        downloadBtn.style.display = 'inline-block';
-        downloadBtn.onclick = () => downloadHuntKqlAnalysis();
-        console.log('Showed hunt download button');
-    }
-    
-    console.log('=== displayHuntKqlAnalysisResults completed ===');
-}
-
-// Function to display Hunt KQL analysis error
-function displayHuntKqlAnalysisError(errorMessage) {
-    console.log('=== displayHuntKqlAnalysisError called ===');
-    console.log('Hunt Error message:', errorMessage);
-    
-    const loadingDiv = document.getElementById('dynamicHuntLoadingDiv');
-    const dataDiv = document.getElementById('dynamicHuntDataDiv');
-    const errorDiv = document.getElementById('dynamicHuntErrorDiv');
-    
-    if (loadingDiv) {
-        loadingDiv.style.display = 'none';
-        console.log('Hidden hunt loading div');
-    }
-    if (dataDiv) {
-        dataDiv.style.display = 'none';
-        console.log('Hidden hunt data div');
-    }
-    if (errorDiv) {
-        errorDiv.innerHTML = `<strong>Error analyzing hunt query:</strong><br>${errorMessage}`;
-        errorDiv.style.display = 'block';
-        console.log('Displayed hunt error message');
-    }
-}
-
-// Function to format Hunt KQL analysis text with better HTML structure
-function formatHuntKqlAnalysisText(analysisText, originalQuery) {
-    // Ensure analysisText is a string
-    if (typeof analysisText !== 'string') {
-        analysisText = String(analysisText || '');
-    }
-
-    // Convert markdown-style formatting to HTML
-    let formattedText = analysisText
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/`([^`]+)`/g, '<code style="background: #2a4a2a; padding: 2px 4px; border-radius: 3px; color: #7fff7f;">$1</code>')
-        .replace(/```([\s\S]*?)```/g, '<pre style="background: #2a4a2a; padding: 15px; border-radius: 5px; border-left: 4px solid #00ff41; margin: 10px 0; overflow-x: auto; color: #7fff7f;"><code>$1</code></pre>')
-        .replace(/^#{1,3}\s+(.+)$/gm, '<h3 style="color: #00ff41; margin: 20px 0 10px 0; border-bottom: 1px solid #00ff41; padding-bottom: 5px;">$1</h3>')
-        .replace(/^-\s+(.+)$/gm, '<li style="margin: 5px 0; color: #7fff7f;">$1</li>')
-        .replace(/(\n|^)(\d+\.)\s+(.+)/g, '$1<div style="margin: 8px 0;"><strong style="color: #00ff41;">$2</strong> $3</div>')
-        .replace(/\n/g, '<br>');
-
-    // Wrap consecutive <li> elements in <ul>
-    formattedText = formattedText.replace(/(<li[^>]*>.*?<\/li>(?:\s*<br>\s*<li[^>]*>.*?<\/li>)*)/g, '<ul style="margin: 10px 0; padding-left: 20px;">$1</ul>');
-    
-    // Remove <br> tags inside <ul> elements
-    formattedText = formattedText.replace(/(<ul[^>]*>)(.*?)(<\/ul>)/g, function(match, openTag, content, closeTag) {
-        return openTag + content.replace(/<br>/g, '') + closeTag;
-    });
-
-    return `
-        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #7fff7f;">
-            <div style="background: #2a4a2a; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #00ff41;">
-                <h4 style="color: #00ff41; margin: 0 0 10px 0;">🎯 Hunt Query Analyzed</h4>
-                <pre style="background: #1a3a1a; padding: 10px; border-radius: 3px; margin: 0; overflow-x: auto; white-space: pre-wrap; color: #7fff7f;"><code>${originalQuery}</code></pre>
-                <span style="margin-left: 0.5rem; color: #00ff41;">${new Date(currentHuntKqlAnalysisData.timestamp).toLocaleString()}</span>
-            </div>
-            <div style="max-height: 400px; overflow-y: auto; padding-right: 10px;">
-                ${formattedText}
-            </div>
-        </div>
-    `;
-}
-
-// Function to download Hunt KQL analysis
-function downloadHuntKqlAnalysis() {
-    if (!currentHuntKqlAnalysisData) {
-        alert('No hunt analysis data available to download.');
-        return;
-    }
-
-    const content = `HUNT KQL QUERY ANALYSIS REPORT
-Generated: ${new Date(currentHuntKqlAnalysisData.timestamp).toLocaleString()}
-
-=== HUNT QUERY ===
-${currentHuntKqlAnalysisData.query}
-
-=== AI ANALYSIS ===
-${currentHuntKqlAnalysisData.analysis}
-
-=== METADATA ===
-Analysis Type: Threat Hunting KQL Query Analysis
-Timestamp: ${currentHuntKqlAnalysisData.timestamp}
-Generated by: MDEAutoApp Hunt Manager`;
-
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = url;
-    a.download = `hunt-kql-analysis-${new Date().getTime()}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-}
-
-// Global variable to track edit mode
-let isEditMode = false;
-let editingQueryName = null;
-
-window.editQuery = async function(queryName) {
-    const tenantId = getTenantId();
-    if (!tenantId || !queryName) {
-        console.error('Missing required parameters for editQuery:', { tenantId, queryName });
-        return;
-    }
-    
-    console.log('Editing query:', { queryName, tenantId });
-    window.showContentLoading('Loading Query...');
-    
-    try {        // Fetch the query content using GetQuery subfunction
-        const url = '/api/hunt/queries';
-        const payload = { TenantId: tenantId, Function: 'GetQuery', QueryName: queryName };
-        
-        console.log('Fetching query content with payload:', payload);
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000);
-        
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!res.ok) {
-            throw new Error(`HTTP error! status: ${res.status}`);
-        }
-        
-        const result = await res.json();
-        console.log('Query content result:', result);
-        
-        // Extract query content from the response
-        let queryContent = '';
-        if (result && typeof result.content === 'string') {
-            queryContent = result.content;
-        } else if (result && typeof result.Content === 'string') {
-            queryContent = result.Content;
-        } else if (result && typeof result.query === 'string') {
-            queryContent = result.query;
-        } else if (result && typeof result.Query === 'string') {
-            queryContent = result.Query;
-        } else if (typeof result === 'string') {
-            queryContent = result;
-        } else {
-            console.warn('Unknown query content format:', result);
-            queryContent = JSON.stringify(result, null, 2);
-        }
-        
-        // Set edit mode variables
-        isEditMode = true;
-        editingQueryName = queryName;
-        
-        // Show the modal in edit mode
-        showEditQueryModal(queryName, queryContent);
-        
-    } catch (error) {
-        console.error('Error fetching query for edit:', error);
-        alert('Error loading query for editing: ' + error.message);
-    } finally {
-        window.hideContentLoading();
-    }
-}
-
-function showEditQueryModal(queryName, queryContent) {
-    console.log('showEditQueryModal called with:', { queryName, queryContent: queryContent.substring(0, 100) + '...' });
-    
-    // Show the modal
-    const modal = document.getElementById('addQueryModal');
-    if (modal) {
-        modal.style.display = 'flex';
-        modal.classList.add('edit-mode'); // Add edit mode class
-        console.log('Modal displayed for editing');
-    } else {
-        console.error('Modal element not found');
-        return;
-    }
-    
-    // Update modal title for edit mode
-    const modalTitle = modal.querySelector('h3');
-    if (modalTitle) {
-        modalTitle.textContent = 'Edit Query';
-        modalTitle.style.color = '#ffa500'; // Orange color for edit mode
-    }
-    
-    // Populate the query name input and make it read-only
-    const queryNameInput = document.getElementById('newQueryName');
-    if (queryNameInput) {
-        queryNameInput.value = queryName;
-        queryNameInput.readOnly = true;
-        queryNameInput.style.backgroundColor = '#333';
-        queryNameInput.style.color = '#ccc';
-    }
-    
-    // Update save button text
-    const saveBtn = document.getElementById('saveQueryBtn');
-    const saveText = document.getElementById('saveQueryBtnText');
-    if (saveBtn && saveText) {
-        saveBtn.disabled = true;
-        saveText.textContent = 'Loading Editor...';
-    }
-      // Wait for modal to be visible before initializing CodeMirror
-    setTimeout(() => {
-        console.log('Initializing CodeMirror for edit mode...');
-        const editor = initCodeMirrorKqlEditor();
-        if (editor) {
-            // Set the query content in the editor
-            editor.setValue(queryContent);
-            console.log('Query content loaded in editor');
-            
-            // Update save button
-            if (saveBtn && saveText) {
-                saveBtn.disabled = false;
-                saveText.textContent = 'Update Query';
-            }
-              // Set up AI robot button event listener for edit mode
-            const robotBtn = document.getElementById('analyzeHuntKqlBtn');
-            if (robotBtn) {
-                // Remove any existing event listeners first
-                robotBtn.onclick = null;
-                
-                robotBtn.onclick = function(e) {
-                    console.log('Robot button clicked in edit mode!');
-                    e.preventDefault();
-                    e.stopPropagation();
-                    window.analyzeHuntKqlQuery();
-                };
-                console.log('Hunt AI robot button event listener attached for edit mode');
-            } else {
-                console.warn('Hunt AI robot button not found in edit mode');
-            }
-        } else {
-            console.error('Failed to initialize CodeMirror editor');
-            if (saveText) saveText.textContent = 'Editor Error';
-        }
-    }, 100);
-}
-
-// Debug function to test robot button functionality
-window.testRobotButton = function() {
-    console.log('=== Testing Robot Button ===');
-    
-    // Check if button exists
-    const robotBtn = document.getElementById('analyzeHuntKqlBtn');
-    console.log('Robot button found:', !!robotBtn);
-    if (robotBtn) {
-        console.log('Robot button onclick:', robotBtn.onclick);
-        console.log('Robot button style.display:', robotBtn.style.display);
-        console.log('Robot button visible:', robotBtn.offsetWidth > 0 && robotBtn.offsetHeight > 0);
-    }
-    
-    // Check if function exists
-    console.log('analyzeHuntKqlQuery function exists:', typeof window.analyzeHuntKqlQuery);
-    
-    // Check CodeMirror
-    console.log('CodeMirror editor exists:', !!window.codeMirrorKqlEditor);
-    if (window.codeMirrorKqlEditor) {
+        // Try to clean up the scheduled hunts grid
         try {
-            const content = window.codeMirrorKqlEditor.getValue();
-            console.log('CodeMirror content length:', content.length);
-            console.log('CodeMirror content preview:', content.substring(0, 50));
+            safelyDestroyScheduledHuntsGrid();
         } catch (e) {
-            console.error('Error getting CodeMirror content:', e);
+            console.warn('Error during emergency grid cleanup:', e);
         }
-    }
-    
-    // Check modal
-    const modal = document.getElementById('addQueryModal');
-    console.log('Modal found:', !!modal);
-    if (modal) {
-        console.log('Modal display:', modal.style.display);
-        console.log('Modal visible:', modal.offsetWidth > 0 && modal.offsetHeight > 0);
-    }
-    
-    // Try calling the function directly
-    if (typeof window.analyzeHuntKqlQuery === 'function') {
-        console.log('Attempting to call analyzeHuntKqlQuery directly...');
-        try {
-            window.analyzeHuntKqlQuery();
-        } catch (e) {
-            console.error('Error calling analyzeHuntKqlQuery:', e);
-        }
-    }
-}
-
-// Add event delegation for robot button as backup
-document.addEventListener('click', function(e) {
-    if (e.target && e.target.id === 'analyzeHuntKqlBtn') {
-        console.log('Robot button clicked via event delegation!');
-        e.preventDefault();
-        e.stopPropagation();
         
-        if (typeof window.analyzeHuntKqlQuery === 'function') {
-            console.log('Calling analyzeHuntKqlQuery via event delegation...');
-            window.analyzeHuntKqlQuery();
-        } else {
-            console.error('analyzeHuntKqlQuery function not available via event delegation');
-            alert('Robot button clicked but analysis function not available. Check console.');
-        }
+        // Prevent the error from propagating
+        event.preventDefault();
+        return false;
     }
 });
 
-// Update the hideAddQueryModal function to handle edit mode cleanup
-const originalHideAddQueryModal = window.hideAddQueryModal;
-window.hideAddQueryModal = function() {
-    // Call the original function
-    if (originalHideAddQueryModal) {
-        originalHideAddQueryModal();
-    } else {
-        // Fallback implementation
-        const modal = document.getElementById('addQueryModal');
-        if (modal) {
-            modal.style.display = 'none';
-        }
-        
-        const queryNameInput = document.getElementById('newQueryName');
-        if (queryNameInput) {
-            queryNameInput.value = '';
-        }
-        
-        if (window.codeMirrorKqlEditor && typeof window.codeMirrorKqlEditor.setValue === 'function') {
-            try {
-                window.codeMirrorKqlEditor.setValue('');
-            } catch (error) {
-                console.error('Error clearing CodeMirror:', error);
+// Wrap grid operations with debounce
+const debouncedLoadScheduledHunts = debounceGridOperation(loadScheduledHunts);
+const debouncedRefreshScheduledHunts = debounceGridOperation(refreshScheduledHunts);
+function safelyDestroyScheduledHuntsGrid() {
+    if (scheduledHuntsGrid) {
+        try {
+            if (typeof scheduledHuntsGrid.destroy === 'function') {
+                scheduledHuntsGrid.destroy();
             }
+        } catch (e) {
+            console.warn('Error destroying scheduled hunts grid:', e);
+        }
+        scheduledHuntsGrid = null;
+    }
+    
+    // Also clean up any leftover DOM elements
+    const tableContainer = document.getElementById('scheduled-hunts-table');
+    if (tableContainer) {
+        try {
+            const gridElements = tableContainer.querySelectorAll('.gridjs-wrapper, .gridjs-container, .gridjs-head, .gridjs-pagination');
+            gridElements.forEach(el => {
+                try {
+                    el.remove();
+                } catch (e) {
+                    console.warn('Error removing grid element:', e);
+                }
+            });
+        } catch (e) {
+            console.warn('Error cleaning up grid DOM elements:', e);
         }
     }
-    
-    // Reset edit mode state
-    isEditMode = false;
-    editingQueryName = null;
-    
-    // Reset modal appearance
-    const modal = document.getElementById('addQueryModal');
-    if (modal) {
-        modal.classList.remove('edit-mode'); // Remove edit mode class
+}
+
+// --- TIManager-style Scheduled Hunts Table ---
+// let scheduledHuntsSelection = new Set();
+
+// Scheduled Hunts Table Logic
+let scheduledHuntsGrid = null;
+
+// Patch: Debug log and force render scheduled hunts table
+function renderScheduledHuntsTable(schedules) {
+    const tableContainer = document.getElementById('scheduled-hunts-table');
+    if (!tableContainer) return;
+    tableContainer.innerHTML = '';
+
+    if (!Array.isArray(schedules) || schedules.length === 0) {
+        const emptyDiv = document.createElement('div');
+        emptyDiv.style.cssText = 'color:#aaa; text-align:center; padding:1rem;';
+        emptyDiv.textContent = 'No scheduled hunts found for this tenant.';
+        tableContainer.appendChild(emptyDiv);
+        return;
     }
-    
-    // Reset modal title
-    const modalTitle = modal ? modal.querySelector('h3') : null;
-    if (modalTitle) {
-        modalTitle.textContent = 'Add New Query';
-        modalTitle.style.color = '#7fff7f'; // Reset to default color
+
+    // Table with GridJS-like classes for consistent styling
+    const tableWrapper = document.createElement('div');
+    tableWrapper.className = 'gridjs-wrapper';
+    const table = document.createElement('table');
+    table.className = 'gridjs-table';
+    table.style.width = '100%';    table.innerHTML = `        <thead class="gridjs-thead">
+            <tr class="gridjs-tr">
+                <th class="gridjs-th"><input type="checkbox" id="scheduledHuntsSelectAll"></th>
+                <th class="gridjs-th">Schedule Name</th>
+                <th class="gridjs-th">Time</th>
+                <th class="gridjs-th">Days</th>
+                <th class="gridjs-th">Queries</th>
+                <th class="gridjs-th">Enabled</th>
+            </tr>
+        </thead>
+        <tbody>            ${schedules.map(s => {                const id = s.ScheduleId || s.scheduleId || s.id || '';
+                const checked = scheduledHuntsSelection.has(id) ? 'checked' : '';
+                  // ScheduleName and ScheduleTime should be top-level fields from the Azure Function response
+                const scheduleName = s.ScheduleName || s.scheduleName || 'Unnamed Schedule';
+                const scheduleTime = s.ScheduleTime || s.scheduleTime || '';
+                const timeDisplay = scheduleTime || 'Not set';
+                  // HuntSchedule contains only Days and Queries
+                const days = (s.HuntSchedule && s.HuntSchedule.Days) ? s.HuntSchedule.Days.join(', ') : '';
+                const queries = (s.HuntSchedule && s.HuntSchedule.QueryNames) ? s.HuntSchedule.QueryNames.slice(0,4).join(', ') + (s.HuntSchedule.QueryNames.length > 4 ? ` +${s.HuntSchedule.QueryNames.length-4} more` : '') : '';
+                const enabled = s.Enabled !== undefined ? !!s.Enabled : (s.enabled !== undefined ? !!s.enabled : false);
+                
+                return `
+                <tr class="gridjs-tr" data-id="${id}">
+                    <td class="gridjs-td"><input type="checkbox" class="scheduledHuntCheckbox" value="${id}" ${checked}></td>
+                    <td class="gridjs-td" style="font-weight: bold; color: #7fff7f;">${scheduleName}</td>
+                    <td class="gridjs-td" style="font-family: monospace;">${timeDisplay}</td>
+                    <td class="gridjs-td">${days}</td>
+                    <td class="gridjs-td">${queries}</td>
+                    <td class="gridjs-td" style="color:${enabled ? '#00ff41' : '#ff4400'};font-weight:bold;">${enabled ? 'Yes' : 'No'}</td>
+                </tr>`;
+            }).join('')}
+        </tbody>
+    `;
+    tableWrapper.appendChild(table);
+    tableContainer.appendChild(tableWrapper);
+
+    // Event listeners for checkboxes
+    table.querySelectorAll('.scheduledHuntCheckbox').forEach(cb => {
+        cb.addEventListener('change', function() {
+            if (this.checked) scheduledHuntsSelection.add(this.value);
+            else scheduledHuntsSelection.delete(this.value);
+            updateScheduledHuntsActionButtons();
+        });
+    });
+    // Select all
+    const selectAll = table.querySelector('#scheduledHuntsSelectAll');
+    if (selectAll) {
+        selectAll.checked = schedules.length > 0 && schedules.every(s => scheduledHuntsSelection.has(s.ScheduleId || s.scheduleId || s.id || ''));
+        selectAll.addEventListener('change', function() {
+            if (this.checked) {
+                schedules.forEach(s => scheduledHuntsSelection.add(s.ScheduleId || s.scheduleId || s.id || ''));
+            } else {
+                schedules.forEach(s => scheduledHuntsSelection.delete(s.ScheduleId || s.scheduleId || s.id || ''));
+            }
+            updateScheduledHuntsActionButtons();
+            // Re-check all checkboxes
+            table.querySelectorAll('.scheduledHuntCheckbox').forEach(cb => { cb.checked = selectAll.checked; });
+        });
     }
-    
-    // Reset query name input
-    const queryNameInput = document.getElementById('newQueryName');
-    if (queryNameInput) {
-        queryNameInput.readOnly = false;
-        queryNameInput.style.backgroundColor = '#101c11';
-        queryNameInput.style.color = '#7fff7f';
+    updateScheduledHuntsActionButtons();
+}
+
+function updateScheduledHuntsActionButtons() {
+    const enableBtn = document.getElementById('enableSelectedBtn');
+    const disableBtn = document.getElementById('disableSelectedBtn');
+    const deleteBtn = document.getElementById('deleteSelectedSchedulesBtn');
+    const selectedCount = scheduledHuntsSelection.size;
+    if (enableBtn) enableBtn.disabled = selectedCount === 0;
+    if (disableBtn) disableBtn.disabled = selectedCount === 0;
+    if (deleteBtn) deleteBtn.disabled = selectedCount === 0;
+}
+
+// --- BEGIN: Modern Batch Actions for Scheduled Hunts ---
+
+// Utility: Get selected schedule IDs
+function getSelectedScheduleIds() {
+    return Array.from(scheduledHuntsSelection || new Set());
+}
+
+// Utility: Show feedback (can be replaced with a better UI system)
+function showBatchActionFeedback(message, isError = false) {
+    if (window.showContentLoading) {
+        window.showContentLoading(message);
+    } else {
+        // fallback: alert for errors
+        if (isError) alert(message);
     }
-    
-    // Reset save button text
-    const saveText = document.getElementById('saveQueryBtnText');
-    if (saveText) {
-        saveText.textContent = 'Save';
+}
+function hideBatchActionFeedback() {
+    if (window.hideContentLoading) window.hideContentLoading();
+}
+
+// Batch Enable
+window.batchEnableScheduledHunts = async function() {
+    const selected = getSelectedScheduleIds();
+    if (selected.length === 0) {
+        alert('Select at least one schedule to enable.');
+        return;
+    }
+    if (!confirm(`Enable ${selected.length} scheduled hunt(s)?`)) return;
+    showBatchActionFeedback('Enabling selected schedules...');
+    let errors = [];
+    for (const id of selected) {
+        try {
+            const result = await window.enableDisableSchedule(id, true);
+            if (!result || result.error || result.Status === 'Failed') {
+                errors.push(`Failed to enable schedule ${id}: ${result && (result.Message || result.error || result.Status)}`);
+            }
+        } catch (err) {
+            errors.push(`Error enabling schedule ${id}: ${err.message}`);
+        }
+    }
+    scheduledHuntsSelection.clear();
+    await loadScheduledHunts();
+    hideBatchActionFeedback();
+    if (errors.length) {
+        alert('Some schedules failed to enable:\n' + errors.join('\n'));
+    } else {
+        alert('Selected schedules enabled successfully!');
     }
 };
 
-// Test function to verify hunt query save functionality
-window.testHuntSave = async function(tenantId = 'test-tenant-123', queryName = 'BrowserTestQuery', queryText = 'DeviceInfo | take 5') {
-    console.log('=== Testing Hunt Query Save Functionality ===');
-    
+// Batch Disable
+window.batchDisableScheduledHunts = async function() {
+    const selected = getSelectedScheduleIds();
+    if (selected.length === 0) {
+        alert('Select at least one schedule to disable.');
+        return;
+    }
+    if (!confirm(`Disable ${selected.length} scheduled hunt(s)?`)) return;
+    showBatchActionFeedback('Disabling selected schedules...');
+    let errors = [];
+    for (const id of selected) {
+        try {
+            const result = await window.enableDisableSchedule(id, false);
+            if (!result || result.error || result.Status === 'Failed') {
+                errors.push(`Failed to disable schedule ${id}: ${result && (result.Message || result.error || result.Status)}`);
+            }
+        } catch (err) {
+            errors.push(`Error disabling schedule ${id}: ${err.message}`);
+        }
+    }
+    scheduledHuntsSelection.clear();
+    await loadScheduledHunts();
+    hideBatchActionFeedback();
+    if (errors.length) {
+        alert('Some schedules failed to disable:\n' + errors.join('\n'));
+    } else {
+        alert('Selected schedules disabled successfully!');
+    }
+};
+
+// Batch Delete
+window.batchDeleteScheduledHunts = async function() {
+    const selected = getSelectedScheduleIds();
+    if (selected.length === 0) {
+        alert('Select at least one schedule to delete.');
+        return;
+    }
+    if (!confirm(`Delete ${selected.length} scheduled hunt(s)? This cannot be undone.`)) return;
+    showBatchActionFeedback('Deleting selected schedules...');
+    let errors = [];
+    for (const id of selected) {
+        try {
+            const result = await window.deleteSchedule(id);
+            if (!result || result.error || result.Status === 'Failed') {
+                errors.push(`Failed to delete schedule ${id}: ${result && (result.Message || result.error || result.Status)}`);
+            }
+        } catch (err) {
+            errors.push(`Error deleting schedule ${id}: ${err.message}`);
+        }
+    }
+    scheduledHuntsSelection.clear();
+    await loadScheduledHunts();
+    hideBatchActionFeedback();
+    if (errors.length) {
+        alert('Some schedules failed to delete:\n' + errors.join('\n'));
+    } else {
+        alert('Selected schedules deleted successfully!');
+    }
+};
+
+// Wire up batch action buttons after DOM is ready
+function setupScheduledHuntsBatchActionButtons() {
+    const enableBtn = document.getElementById('enableSelectedBtn');
+    const disableBtn = document.getElementById('disableSelectedBtn');
+    const deleteBtn = document.getElementById('deleteSelectedSchedulesBtn');
+    if (enableBtn) enableBtn.onclick = window.batchEnableScheduledHunts;
+    if (disableBtn) disableBtn.onclick = window.batchDisableScheduledHunts;
+    if (deleteBtn) deleteBtn.onclick = window.batchDeleteScheduledHunts;
+}
+document.addEventListener('DOMContentLoaded', setupScheduledHuntsBatchActionButtons);
+
+// --- Ensure critical functions are defined and globally available early ---
+
+// Load scheduled hunts data function
+async function loadScheduledHunts() {
+    const tenantId = getTenantId();
+    if (!tenantId) {
+        renderScheduledHuntsTable([]);
+        return;
+    }
+    window.showContentLoading && window.showContentLoading('Loading Scheduled Hunts...');
     try {
-        const url = '/api/hunt/queries';
-        const payload = { 
-            TenantId: tenantId, 
-            Function: 'AddQuery', 
-            QueryName: queryName, 
-            Query: queryText 
-        };
+        // Create an AbortController with a longer timeout since the API might take time to poll for results
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout to allow for polling
         
-        console.log('Test payload:', payload);
-        
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+        const res = await fetch(`/api/hunt/schedules?TenantId=${encodeURIComponent(tenantId)}`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenantId },
+            signal: controller.signal
         });
         
-        console.log('Response status:', res.status);
-        console.log('Response headers:', [...res.headers.entries()]);
+        clearTimeout(timeoutId);
         
         if (!res.ok) {
-            throw new Error(`HTTP error! status: ${res.status}`);
+            // Handle HTTP error status codes
+            const errorText = await res.text();
+            console.error('HTTP error loading scheduled hunts:', res.status, errorText);
+            if (res.status === 408) {
+                // Request timeout from server
+                console.warn('Server timeout loading scheduled hunts, will retry');
+                renderScheduledHuntsTable([]);
+                return;
+            }            throw new Error(`HTTP ${res.status}: ${errorText}`);
         }
         
         const result = await res.json();
-        console.log('Save result:', result);
-        console.log('Result type:', typeof result);
-        console.log('Result keys:', result ? Object.keys(result) : 'null/undefined');
+        console.log(`Scheduled hunts API response received with ${result.schedules ? result.schedules.length : 0} schedules`);
         
-        // Check success
-        if (result && result.Status === 'Success') {
-            console.log('✅ SUCCESS: Query saved successfully!');
-            console.log('File name:', result.FileName);
-            console.log('Message:', result.Message);
-            return true;
+        // Handle success response
+        if (result.success) {
+            const schedules = result.schedules || [];
+            console.log(`Successfully loaded ${schedules.length} scheduled hunts`);
+            renderScheduledHuntsTable(schedules);
         } else {
-            console.log('❌ FAILED: Unexpected response format');
-            return false;
+            // Handle error response from API - provide better error details
+            const errorMsg = result.error || result.message || result.Message || 'Unknown API error';
+            console.error('API error loading scheduled hunts:', errorMsg);
+            console.error('Full error response:', result);
+            renderScheduledHuntsTable([]);
+        }
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            console.warn('Request aborted due to timeout loading scheduled hunts');
+        } else {
+            console.error('Error loading scheduled hunts:', error);
+        }
+        renderScheduledHuntsTable([]);
+    } finally {
+        window.hideContentLoading && window.hideContentLoading();
+    }
+}
+window.loadScheduledHunts = loadScheduledHunts;
+
+// Define refreshScheduledHunts as an alias to loadScheduledHunts for consistency
+function refreshScheduledHunts() {
+    return window.loadScheduledHunts && window.loadScheduledHunts();
+}
+window.refreshScheduledHunts = refreshScheduledHunts;
+
+function showAddScheduleModal() {
+    console.log('showAddScheduleModal: Opening redesigned modal...');
+    const modal = document.getElementById('addScheduleModal');
+    if (!modal) {
+        console.error('Add Schedule modal not found');
+        return;
+    }
+    
+    // Reset form before showing
+    if (typeof resetAddScheduleForm === 'function') {
+        resetAddScheduleForm();
+    }
+    
+    // Load available queries for selection
+    if (typeof window.loadQueriesForSchedule === 'function') {
+        window.loadQueriesForSchedule();
+    }
+    
+    // Show modal with animation
+    modal.style.display = 'flex';
+    modal.style.opacity = '0';
+    
+    // Trigger animation after DOM update
+    setTimeout(() => {
+        modal.style.opacity = '1';
+    }, 10);
+    
+    console.log('showAddScheduleModal: Modal opened and queries loading...');
+}
+window.showAddScheduleModal = showAddScheduleModal;
+
+// Hide the Add Schedule modal with smooth animation
+function hideAddScheduleModal() {
+    const modal = document.getElementById('addScheduleModal');
+    if (modal) {
+        // Fade out animation
+        modal.style.opacity = '0';
+        
+        // Hide after animation completes
+        setTimeout(() => {
+            modal.style.display = 'none';
+            modal.style.opacity = '1'; // Reset for next time
+            
+            // Reset form after hiding
+            if (typeof resetAddScheduleForm === 'function') {
+                resetAddScheduleForm();
+            }
+        }, 300);
+        
+        console.log('Add Schedule modal hidden');
+    }
+}
+
+// Reset all fields in the Add Schedule modal form
+// Reset the redesigned Add Schedule modal form
+function resetAddScheduleForm() {
+    console.log('resetAddScheduleForm: Resetting modal form...');
+    
+    // Reset schedule name
+    const scheduleName = document.getElementById('scheduleName');
+    if (scheduleName) {
+        scheduleName.value = '';
+        scheduleName.style.borderColor = '#00ff41'; // Reset border color
+    }
+    
+    // Reset all day checkboxes
+    const dayCheckboxes = ['scheduleMonday', 'scheduleTuesday', 'scheduleWednesday', 'scheduleThursday', 'scheduleFriday', 'scheduleSaturday', 'scheduleSunday'];
+    dayCheckboxes.forEach(id => {
+        const checkbox = document.getElementById(id);
+        if (checkbox) {
+            checkbox.checked = false;
+            // Reset parent label styling
+            const label = checkbox.closest('.day-checkbox');
+            if (label) {
+                label.style.background = '';
+            }
+        }
+    });
+      // Reset time
+    const scheduleTime = document.getElementById('scheduleTime');
+    if (scheduleTime) scheduleTime.value = '09:00';
+    
+    // Reset all query checkboxes
+    const queryCheckboxes = document.querySelectorAll('#queryList input[type="checkbox"]');
+    queryCheckboxes.forEach(checkbox => {
+        checkbox.checked = false;
+        // Reset container styling
+        const container = checkbox.closest('.query-checkbox');
+        if (container) {
+            container.classList.remove('selected');
+        }
+    });
+    
+    // Reset validation message
+    const validationMessage = document.getElementById('scheduleValidationMessage');
+    if (validationMessage) {
+        validationMessage.style.display = 'none';
+        validationMessage.textContent = '';
+    }
+    
+    // Reset save button state
+    const saveBtn = document.getElementById('saveScheduleBtn');
+    const saveBtnText = document.getElementById('saveScheduleBtnText');
+    const saveSpinner = document.getElementById('saveScheduleSpinner');
+    if (saveBtn) saveBtn.disabled = false;
+    if (saveBtnText) saveBtnText.textContent = 'Create Schedule';
+    if (saveSpinner) saveSpinner.style.display = 'none';
+    
+    console.log('resetAddScheduleForm: Form reset complete');
+}
+
+// Validate and save the new schedule
+async function saveNewSchedule() {
+    const tenantId = getTenantId();
+    if (!tenantId) {
+        showValidationMessage('Please select a tenant first');
+        return;
+    }
+      // Get form values
+    const scheduleName = document.getElementById('scheduleName').value.trim();
+    const scheduleTime = document.getElementById('scheduleTime').value;
+    
+    // Get selected queries
+    const selectedQueries = [];
+    const queryCheckboxes = document.querySelectorAll('#queryList input[type="checkbox"]:checked');
+    queryCheckboxes.forEach(checkbox => {
+        selectedQueries.push({
+            name: checkbox.value,
+            content: decodeURIComponent(checkbox.dataset.queryContent || '')
+        });
+    });
+    
+    // Get selected days
+    const selectedDays = [];
+    const dayCheckboxes = ['scheduleMonday', 'scheduleTuesday', 'scheduleWednesday', 'scheduleThursday', 'scheduleFriday', 'scheduleSaturday', 'scheduleSunday'];
+    dayCheckboxes.forEach(id => {
+        const checkbox = document.getElementById(id);
+        if (checkbox && checkbox.checked) {
+            selectedDays.push(checkbox.value);
+        }
+    });
+    
+    // Validate form
+    if (!scheduleName) {
+        showValidationMessage('Please enter a schedule name');
+        return;
+    }
+    
+    if (selectedQueries.length === 0) {
+        showValidationMessage('Please select at least one query');
+        return;
+    }
+    
+    if (selectedDays.length === 0) {
+        showValidationMessage('Please select at least one day');
+        return;
+    }
+    
+    // Show loading state
+    setScheduleSaveLoading(true);
+      try {
+        // Get client name from tenant dropdown (extract from the display text)
+        const tenantDropdown = document.getElementById('tenantDropdown');        const selectedOption = tenantDropdown.options[tenantDropdown.selectedIndex];
+        const clientName = selectedOption ? selectedOption.textContent.split(' (')[0] : 'Unknown Client';
+        
+        // Build the HuntSchedule object (contains only days and queries)
+        const huntSchedule = {
+            Days: selectedDays,
+            QueryNames: selectedQueries.map(q => q.name),
+            Queries: selectedQueries
+        };
+          // Build the complete payload with ScheduleName and ScheduleTime as separate parameters
+        const scheduleData = {
+            TenantId: tenantId,
+            ClientName: clientName,
+            ScheduleName: scheduleName,
+            ScheduleTime: scheduleTime,
+            HuntSchedule: huntSchedule        };
+        
+        const response = await fetch('/api/hunt/schedules', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(scheduleData)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.error) {
+            throw new Error(result.error);
+        }
+        
+        // Success
+        hideAddScheduleModal();
+        
+        // Refresh the scheduled hunts table
+        if (typeof window.loadScheduledHunts === 'function') {
+            window.loadScheduledHunts();
         }
         
     } catch (error) {
-        console.error('❌ ERROR:', error);
-        return false;
+        console.error('Error saving schedule:', error);
+        showValidationMessage('Error saving schedule: ' + error.message);
+    } finally {
+        setScheduleSaveLoading(false);
+    }
+}
+
+// Show validation message
+function showValidationMessage(message) {
+    const validationMessage = document.getElementById('scheduleValidationMessage');
+    if (validationMessage) {
+        validationMessage.textContent = message;
+        validationMessage.style.display = 'block';
+        
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            validationMessage.style.display = 'none';
+        }, 5000);
+    }
+}
+
+// Set loading state for save button
+function setScheduleSaveLoading(isLoading) {
+    const saveBtn = document.getElementById('saveScheduleBtn');
+    const saveBtnText = document.getElementById('saveScheduleBtnText');
+    const saveSpinner = document.getElementById('saveScheduleSpinner');
+    
+    if (saveBtn) saveBtn.disabled = isLoading;
+    if (saveBtnText) saveBtnText.textContent = isLoading ? 'Saving...' : 'Create Schedule';
+    if (saveSpinner) saveSpinner.style.display = isLoading ? 'inline-block' : 'none';
+}
+
+// Provide a global enableDisableSchedule function for scheduled hunts
+window.enableDisableSchedule = async function(scheduleId, enable) {
+    const tenantId = getTenantId();
+    if (!tenantId || !scheduleId) {
+        return { error: 'Missing tenant or schedule ID' };
+    }
+    const url = `/api/hunt/schedules/${encodeURIComponent(scheduleId)}/${enable ? 'enable' : 'disable'}?TenantId=${encodeURIComponent(tenantId)}`;
+    try {
+        const res = await fetch(url, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        if (!res.ok) {
+            return { error: `HTTP error: ${res.status}` };
+        }
+        const result = await res.json();
+        return result;
+    } catch (error) {
+        return { error: error.message };
     }
 };
 
-// Fallback save function for button onclick (in case of event handler conflicts)
-window.saveNewQuery = saveNewQuery;
+// Provide a global deleteSchedule function for scheduled hunts
+window.deleteSchedule = async function(scheduleId) {
+    const tenantId = getTenantId();
+    if (!tenantId || !scheduleId) {
+        return { error: 'Missing tenant or schedule ID' };
+    }
+    const url = `/api/hunt/schedules/${encodeURIComponent(scheduleId)}?TenantId=${encodeURIComponent(tenantId)}`;
+    try {
+        const res = await fetch(url, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        if (!res.ok) {
+            return { error: `HTTP error: ${res.status}` };
+        }
+        const result = await res.json();
+        return result;
+    } catch (error) {
+        return { error: error.message };
+    }
+};
 
-// Debug function to test save button functionality
-window.testSaveButton = function() {
-    console.log('=== Testing Save Button ===');
+// --- BEGIN: Modern loadQueriesForSchedule for Redesigned Add Schedule Modal ---
+// Populates the query selection area in the redesigned Add Schedule modal with available queries as checkboxes
+window.loadQueriesForSchedule = async function() {
+    console.log('loadQueriesForSchedule: Starting to load queries for schedule modal...');
     
-    const saveBtn = document.getElementById('saveQueryBtn');
-    console.log('Save button found:', !!saveBtn);
-    if (saveBtn) {
-        console.log('Save button onclick:', saveBtn.onclick);
-        console.log('Save button addEventListener count:', saveBtn.getEventListeners ? saveBtn.getEventListeners().length : 'unknown');
+    const tenantId = getTenantId();
+    if (!tenantId) {
+        console.warn('loadQueriesForSchedule: No tenant ID available');
+        showQueryEmptyState('No tenant selected');
+        return;
     }
     
-    console.log('saveNewQuery function exists:', typeof saveNewQuery);
-    console.log('window.saveNewQuery exists:', typeof window.saveNewQuery);
+    // Show loading state
+    showQueryLoadingState();
     
-    console.log('showContentLoading exists:', typeof window.showContentLoading);
-    console.log('hideContentLoading exists:', typeof window.hideContentLoading);
+    try {
+        console.log('loadQueriesForSchedule: Fetching queries for tenant:', tenantId);
+        
+        const response = await fetch('/api/hunt/queries', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ TenantId: tenantId, Function: 'GetQueries' })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('loadQueriesForSchedule: Received response:', result);
+        
+        // Extract queries from various possible response formats
+        let queries = [];
+        if (Array.isArray(result.Queries)) {
+            queries = result.Queries;
+        } else if (Array.isArray(result.value)) {
+            queries = result.value;
+        } else if (Array.isArray(result.queries)) {
+            queries = result.queries;
+        } else if (Array.isArray(result)) {
+            queries = result;
+        }
+        
+        console.log('loadQueriesForSchedule: Extracted queries:', queries.length, 'items');
+        
+        if (!queries || queries.length === 0) {
+            showQueryEmptyState();
+            return;
+        }
+        
+        // Populate the query list
+        populateQueryList(queries);
+        
+    } catch (error) {
+        console.error('loadQueriesForSchedule: Error loading queries:', error);
+        showQueryEmptyState('Error loading queries: ' + error.message);
+    }
+};
+
+// Show loading state for queries
+function showQueryLoadingState() {
+    const loadingState = document.getElementById('queryLoadingState');
+    const emptyState = document.getElementById('queryEmptyState');
+    const queryList = document.getElementById('queryList');
     
-    // Try calling the function directly
-    if (typeof saveNewQuery === 'function') {
-        console.log('Attempting to call saveNewQuery directly...');
-        try {
-            saveNewQuery();
-        } catch (e) {
-            console.error('Error calling saveNewQuery:', e);
+    if (loadingState) loadingState.style.display = 'flex';
+    if (emptyState) emptyState.style.display = 'none';
+    if (queryList) queryList.style.display = 'none';
+}
+
+// Show empty state for queries
+function showQueryEmptyState(message = null) {
+    const loadingState = document.getElementById('queryLoadingState');
+    const emptyState = document.getElementById('queryEmptyState');
+    const queryList = document.getElementById('queryList');
+    
+    if (loadingState) loadingState.style.display = 'none';
+    if (emptyState) {
+        emptyState.style.display = 'block';
+        if (message) {
+            const messageDiv = emptyState.querySelector('div:last-child');
+            if (messageDiv) messageDiv.textContent = message;
         }
     }
-};
+    if (queryList) queryList.style.display = 'none';
+}
+
+// Populate the query list with checkboxes
+function populateQueryList(queries) {
+    const loadingState = document.getElementById('queryLoadingState');
+    const emptyState = document.getElementById('queryEmptyState');
+    const queryList = document.getElementById('queryList');
+    
+    if (loadingState) loadingState.style.display = 'none';
+    if (emptyState) emptyState.style.display = 'none';
+    if (!queryList) {
+        console.error('populateQueryList: Query list container not found');
+        return;
+    }
+    
+    // Clear existing content
+    queryList.innerHTML = '';
+    
+    // Create checkboxes for each query
+    queries.forEach((query, index) => {
+        const queryName = query.FileName || query.QueryName || query.name || `Query ${index + 1}`;
+        const queryContent = query.Content || query.content || '';
+        const queryPreview = queryContent.length > 60 ? queryContent.substring(0, 60) + '...' : queryContent;
+        
+        const checkboxContainer = document.createElement('div');
+        checkboxContainer.className = 'query-checkbox';
+        checkboxContainer.innerHTML = `
+            <input type="checkbox" id="query_${index}" value="${queryName}" data-query-content="${encodeURIComponent(queryContent)}">
+            <div style="flex: 1;">
+                <div class="query-name">${queryName}</div>
+                <div class="query-preview">${queryPreview}</div>
+            </div>
+        `;
+        
+        // Add click handler for the entire container
+        checkboxContainer.addEventListener('click', function(e) {
+            if (e.target.type !== 'checkbox') {
+                const checkbox = this.querySelector('input[type="checkbox"]');
+                checkbox.checked = !checkbox.checked;
+                updateQueryCheckboxStyle(checkbox.closest('.query-checkbox'), checkbox.checked);
+            } else {
+                updateQueryCheckboxStyle(this, e.target.checked);
+            }
+        });
+        
+        // Add change handler for checkbox
+        const checkbox = checkboxContainer.querySelector('input[type="checkbox"]');
+        checkbox.addEventListener('change', function() {
+            updateQueryCheckboxStyle(checkboxContainer, this.checked);
+        });
+        
+        queryList.appendChild(checkboxContainer);
+    });
+    
+    queryList.style.display = 'block';
+    console.log('populateQueryList: Successfully populated', queries.length, 'queries');
+}
+
+// Update query checkbox styling
+function updateQueryCheckboxStyle(container, isChecked) {
+    if (isChecked) {
+        container.classList.add('selected');
+    } else {
+        container.classList.remove('selected');
+    }
+}
+// --- END: Modern loadQueriesForSchedule for Redesigned Add Schedule Modal ---
+
+// --- Ensure CodeMirror initialization function exists globally ---
+

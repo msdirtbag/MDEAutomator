@@ -31,10 +31,10 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/gridjs/dist/gridjs.umd.js"></script>
-{% if FUNCURL and FUNCKEY %}
+{% if FUNCTION_APP_BASE_URL and FUNCTION_KEY %}
 <script>
-window.FUNCURL = "{{ FUNCURL }}";
-window.FUNCKEY = "{{ FUNCKEY }}";
+window.FUNCTION_APP_BASE_URL = "{{ FUNCTION_APP_BASE_URL }}";
+window.FUNCTION_KEY = "{{ FUNCTION_KEY }}";
 </script>
 {% endif %}
 <script src="{{ url_for('static', filename='js/ActionManager.js') }}"></script>

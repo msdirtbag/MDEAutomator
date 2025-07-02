@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.36.1.42791",
-      "templateHash": "1575080006668264214"
+      "templateHash": "10898154891159525626"
     }
   },
   "parameters": {
@@ -423,7 +423,7 @@
       },
       "kind": "OpenAI",
       "properties": {
-        "publicNetworkAccess": "Disabled",
+        "publicNetworkAccess": "Enabled",
         "networkAcls": {
           "defaultAction": "Deny",
           "virtualNetworkRules": [
@@ -1291,7 +1291,7 @@
       },
       "sku": {
         "tier": "Basic",
-        "name": "B1"
+        "name": "B2"
       },
       "kind": "linux"
     },
@@ -1389,7 +1389,7 @@
       "kind": "calappsettings",
       "properties": {
         "FUNCTION_KEY": "[listKeys(resourceId('Microsoft.Web/sites/host', format('funcmdeauto{0}', variables('environmentid')), 'default'), '2022-03-01').functionKeys.default]",
-        "FUNCTION_APP_BASE_URL": "[reference(resourceId('Microsoft.Web/sites', format('funcmdeauto{0}', variables('environmentid'))), '2023-12-01').defaultHostName]"
+        "FUNCTION_APP_BASE_URL": "[format('https://{0}', reference(resourceId('Microsoft.Web/sites', format('funcmdeauto{0}', variables('environmentid'))), '2023-12-01').defaultHostName)]"
       },
       "dependsOn": [
         "[resourceId('Microsoft.Web/sites', format('ase-mdeautomator-{0}', variables('environmentid')))]",

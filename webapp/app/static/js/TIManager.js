@@ -256,35 +256,6 @@ window.addEventListener('DOMContentLoaded', () => {
             });
         }
     }
-
-    // KQL Analysis Modal event listeners
-    const kqlAnalysisModal = document.getElementById('kqlAnalysisModal');
-    if (kqlAnalysisModal) {
-        // Close modal when clicking outside
-        kqlAnalysisModal.addEventListener('click', (e) => {
-            if (e.target === kqlAnalysisModal) {
-                closeKqlAnalysisModal();
-            }
-        });
-
-        // Close button (X)
-        const closeBtn = kqlAnalysisModal.querySelector('.kql-modal-close');
-        if (closeBtn) {
-            closeBtn.addEventListener('click', closeKqlAnalysisModal);
-        }
-
-        // Close button (bottom)
-        const closeBtnBottom = document.getElementById('closeKqlAnalysisBtn');
-        if (closeBtnBottom) {
-            closeBtnBottom.addEventListener('click', closeKqlAnalysisModal);
-        }
-
-        // Download button
-        const downloadBtn = document.getElementById('downloadKqlAnalysisBtn');
-        if (downloadBtn) {
-            downloadBtn.addEventListener('click', downloadKqlAnalysis);
-        }
-    }
 });
 
 // Helper: Wait for tenant dropdown to be populated, then auto-load data
@@ -1298,15 +1269,6 @@ function setupEventListeners() {
         });
     } else {
         console.log('Tenant dropdown not found');
-    }
-
-    // KQL Analysis button event listener
-    const analyzeKqlBtn = document.getElementById('analyzeKqlBtn');
-    if (analyzeKqlBtn) {
-        console.log('Found KQL analysis button, adding click listener');
-        analyzeKqlBtn.addEventListener('click', analyzeKqlQuery);
-    } else {
-        console.log('KQL analysis button not found');
     }
 }
 

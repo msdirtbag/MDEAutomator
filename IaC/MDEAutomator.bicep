@@ -372,7 +372,7 @@ resource aiaccount 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
   }
   kind: 'OpenAI'
   properties: {
-    publicNetworkAccess: 'Disabled'
+    publicNetworkAccess: 'Enabled'
     networkAcls: {
       defaultAction: 'Deny'
       virtualNetworkRules: [
@@ -627,6 +627,22 @@ resource huntquerycontainer 'Microsoft.Storage/storageAccounts/blobServices/cont
   parent: blobservice
   properties: {
     publicAccess: 'None'
+  }
+}
+
+// File Service
+resource fileservice 'Microsoft.Storage/storageAccounts/fileServices@2024-01-01' = {
+  name: 'default'
+  parent: storage01
+}
+
+// OpenWebUI File Share
+resource openwebuiFileShare 'Microsoft.Storage/storageAccounts/fileServices/shares@2024-01-01' = {
+  name: 'openwebui'
+  parent: fileservice
+  properties: {
+    shareQuota: 10240
+    enabledProtocols: 'SMB'
   }
 }
 
@@ -1089,7 +1105,7 @@ resource appserviceplan 'Microsoft.Web/serverfarms@2024-04-01' = {
   }
   sku: {
     tier: 'Basic'
-    name: 'B1'    
+    name: 'B2'    
   }
   kind: 'linux'
 }
@@ -1174,8 +1190,76 @@ resource appsettings 'Microsoft.Web/sites/config@2022-09-01' = {
   kind: 'calappsettings'
   parent: appservice
   properties: {
-    FUNCKEY: listKeys(resourceId('Microsoft.Web/sites/host', function01.name, 'default'), '2022-03-01').functionKeys.default
-    FUNCURL: function01.properties.defaultHostName
+    FUNCTION_KEY: listKeys(resourceId('Microsoft.Web/sites/host', function01.name, 'default'), '2022-03-01').functionKeys.default
+    FUNCTION_APP_BASE_URL: 'https://${function01.properties.defaultHostName}'
+  }
+}
+
+//This deploys the Azure App Service.
+resource openwebuiappservice 'Microsoft.Web/sites@2022-09-01' = {
+  name: 'ase-openwebui-${environmentid}'
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${managedidentity.id}': {}
+    }
+  }
+  location: location
+  kind: 'container'
+  properties: {
+    serverFarmId: appserviceplan.id
+    publicNetworkAccess: 'Enabled'
+    virtualNetworkSubnetId: virtualnetwork.properties.subnets[1].id
+    httpsOnly: true
+    siteConfig: {
+      linuxFxVersion: 'DOCKER|ghcr.io/open-webui/open-webui:main'
+      numberOfWorkers: 1
+      requestTracingEnabled: false
+      remoteDebuggingEnabled: false
+      httpLoggingEnabled: true
+      logsDirectorySizeLimit: 35
+      detailedErrorLoggingEnabled: true
+      webSocketsEnabled: true
+      alwaysOn: true
+      autoHealEnabled: true
+      ipSecurityRestrictionsDefaultAction:'Allow'
+      scmIpSecurityRestrictionsDefaultAction: 'Deny'
+      http20Enabled: true
+      minTlsVersion: '1.2'
+      scmMinTlsVersion: '1.2'
+      ftpsState: 'Disabled'
+      minimumElasticInstanceCount: 1
+      azureStorageAccounts: {
+        openwebui: {
+          type: 'AzureFiles'
+          accountName: storage01.name
+          shareName: 'openwebui'
+          mountPath: '/app/backend/data'
+          accessKey: storage01.listKeys().keys[0].value
+        }
+      }
+    }
+  }
+}
+
+//Diagnostic settings for App Service.
+resource openwebuiappservicediagweb 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'Monitor-AppService-OpenWebUI'
+  scope: openwebuiappservice
+  properties: {
+    logs: [
+      {
+        categoryGroup: 'allLogs'
+        enabled: true
+      }
+    ]
+    metrics: [
+      {
+        category: 'allMetrics'
+        enabled: true
+      }
+    ]
+    workspaceId: useExistingWorkspace ? existingWorkspaceResourceId : logAnalyticsWorkspace.id
   }
 }
 

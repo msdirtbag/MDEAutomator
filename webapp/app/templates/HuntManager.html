@@ -13,18 +13,12 @@
         </div>
     </div>
 </div>
-<div class="toolbar" style="border-top: none; border-bottom: 2px solid #00ff41; background: #101c11; margin-bottom: 0.5rem;">
-    <div class="toolbar-left">
-        <button id="refreshQueriesBtn" class="cta-button">Refresh Queries</button>
-        <button id="addQueryBtn" class="cta-button">Add Query</button>
-    </div>
-</div>
 <div class="index-container">
-    <!-- Query Results Table Container -->
-    <div id="results-container" style="display: none; margin-top: 1rem; margin-bottom: 2rem;">
-        <div style="background: #142a17; border: 1px solid #00ff41; border-radius: 8px; padding: 1rem;">
+    <!-- Query Results Table Container (dynamic, shown when queries are run) -->
+    <div id="results-container" style="display: none; margin-bottom: 2rem;">
+        <div style="background: #142a17; border: 1px solid #00ff41; border-radius: 8px; padding: 1.5rem;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <h3 style="color: #7fff7f; margin: 0;">Query Results</h3>
+                <h2 style="color: #7fff7f; margin: 0;">Query Results</h2>
                 <div>
                     <span id="results-info" style="color: #7fff7f; margin-right: 1rem; font-size: 0.9em;"></span>
                     <button id="closeResultsBtn" class="cta-button undo-button" style="padding: 0.3rem 0.8rem; font-size: 0.9em;">Close</button>
@@ -36,7 +30,40 @@
         </div>
     </div>
     
-    <div id="queries-table" style="margin-top:2rem;"></div>
+    <!-- Hunt Queries Table Container -->
+    <div id="queries-container" style="margin-bottom: 2rem;">
+        <div style="background: #142a17; border: 1px solid #00ff41; border-radius: 8px; padding: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2 style="color: #7fff7f; margin: 0;">Hunt Queries</h2>
+                <div style="display: flex; gap: 1rem;">
+                    <button id="refreshQueriesBtn" class="cta-button">Refresh</button>
+                    <button id="addQueryBtn2" class="cta-button">Add Query</button>
+                </div>
+            </div>
+            <div id="queries-table"></div>
+        </div>
+    </div>
+    
+    <!-- Scheduled Hunts Table Container -->
+    <div id="scheduled-hunts-container" style="margin-bottom: 2rem;">
+        <div style="background: #142a17; border: 1px solid #00ff41; border-radius: 8px; padding: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2 style="color: #7fff7f; margin: 0;">Scheduled Hunts</h2>
+                <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: center;">
+                    <button id="refreshScheduledHuntsBtn" class="cta-button">Refresh</button>
+                    <button id="addScheduleBtn2" class="cta-button">Add Schedule</button>
+                    <button id="enableSelectedBtn" class="cta-button" disabled>Enable Selected</button>
+                    <button id="disableSelectedBtn" class="cta-button" disabled>Disable Selected</button>
+                    <button id="deleteSelectedSchedulesBtn" class="cta-button" disabled>Delete Selected</button>
+                </div>
+            </div>
+            <div id="scheduled-hunts-loading" style="display: none; text-align: center; padding: 1rem; color: #7fff7f;">
+                <div style="display: inline-block; width: 20px; height: 20px; border: 2px solid #00ff41; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                <span style="margin-left: 0.5rem;">Loading scheduled hunts...</span>
+            </div>
+            <div id="scheduled-hunts-table"></div>
+        </div>
+    </div>
 </div>
 
 <!-- Add Query Modal -->
@@ -49,15 +76,12 @@
       <input id="newQueryName" type="text" style="width:100%; padding: 0.5rem; background: #101c11; color: #7fff7f; border: 1px solid #00ff41; border-radius: 4px;" />
     </div>
       <div style="margin-bottom: 1rem; flex: 1; display: flex; flex-direction: column;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+      <div style="margin-bottom: 0.5rem;">
         <label style="color:#7fff7f;">Query (KQL):</label>
-        <button id="analyzeHuntKqlBtn" class="ai-robot-btn" title="Analyze KQL Query with AI" style="background: linear-gradient(135deg, #00ff41, #1aff5c); border: 1px solid #00ff41; color: #101c11; font-size: 1.2em; padding: 0.3em 0.6em; border-radius: 50%; cursor: pointer;">
-          🤖
-        </button>
       </div>
       <div id="kqlEditor" style="width:100%; height:300px; border:1px solid #00ff41; border-radius:4px; overflow: hidden;"></div>
       <div style="margin-top: 5px; color: #aaa; font-size: 0.85em;">
-        💡 Write your KQL hunt query here. Use Ctrl+Space for autocomplete. Click 🤖 to get AI analysis and explanation.
+        💡 Write your KQL hunt query here. Use Ctrl+Space for autocomplete.
       </div>
     </div>
     
@@ -65,8 +89,139 @@
       <button id="saveQueryBtn" class="cta-button">
         <span id="saveQueryBtnText">Save</span>
         <span id="saveQuerySpinner" style="display:none;margin-left:8px;width:18px;height:18px;vertical-align:middle;"></span>
-      </button>
-      <button id="cancelQueryBtn" class="cta-button undo-button" style="margin-left:0.5rem;">Cancel</button>
+      </button>      <button id="cancelQueryBtn" class="cta-button undo-button" style="margin-left:0.5rem;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Scheduled Hunt Modal -->
+<div id="addScheduleModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.8); z-index:10000; align-items:center; justify-content:center;">
+  <div style="background:linear-gradient(135deg, #142a17, #0f1f12); border: 2px solid #00ff41; box-shadow: 0 10px 30px rgba(0,255,65,0.3); padding:2.5rem; border-radius:12px; min-width:1400px; max-width:95vw; max-height:90vh; overflow-y:auto; display: flex; flex-direction: column;">
+    
+    <!-- Modal Header -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 1px solid #00ff41; padding-bottom: 1rem;">
+      <div>
+        <h3 style="color:#00ff41; margin: 0; font-size: 1.8rem; font-weight: 600; text-shadow: 0 0 10px rgba(0,255,65,0.5);">Schedule Hunt Queries</h3>
+        <p style="color:#7fff7f; margin: 0.5rem 0 0 0; font-size: 0.95rem; opacity: 0.9;">Create automated schedules for your threat hunting queries</p>
+      </div>      <button id="closeScheduleModalBtn" style="background: transparent; border: 1px solid #ff4444; color: #ff4444; border-radius: 50%; width: 35px; height: 35px; cursor: pointer; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; transition: all 0.3s ease;" title="Close">×</button>
+    </div>
+    
+    <!-- Main Content Area - 2 Column Layout -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+      
+      <!-- Left Column: Schedule Name and Query Selection -->
+      <div>
+        <!-- Schedule Name -->
+        <div style="margin-bottom: 1.5rem;">
+          <label style="color:#00ff41; display: block; margin-bottom: 0.7rem; font-weight: 600; font-size: 1.1rem;">
+            <i style="margin-right: 0.5rem;">📝</i>Schedule Name
+          </label>
+          <input id="scheduleName" type="text" placeholder="Enter a descriptive name for this schedule..." 
+                 style="width:100%; padding: 0.8rem; background: linear-gradient(135deg, #101c11, #0a140b); color: #7fff7f; border: 2px solid #00ff41; border-radius: 8px; font-size: 1rem; transition: all 0.3s ease;" />
+          <div style="margin-top: 0.3rem; color: #aaa; font-size: 0.85em;">💡 Use a clear, descriptive name to identify this schedule later</div>
+        </div>        
+        <label style="color:#00ff41; display: block; margin-bottom: 0.7rem; font-weight: 600; font-size: 1.1rem;">
+          <i style="margin-right: 0.5rem;">🔍</i>Select Hunt Queries
+        </label>
+        <div id="querySelectionContainer" style="background: linear-gradient(135deg, #101c11, #0a140b); border: 2px solid #00ff41; border-radius: 8px; min-height: 300px; max-height: 400px; overflow-y: auto; position: relative;">
+          <!-- Loading state -->
+          <div id="queryLoadingState" style="display: flex; align-items: center; justify-content: center; padding: 2rem; color: #7fff7f;">
+            <div style="display: inline-block; width: 20px; height: 20px; border: 2px solid #00ff41; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 0.8rem;"></div>
+            <span>Loading available queries...</span>
+          </div>
+          
+          <!-- Empty state -->
+          <div id="queryEmptyState" style="display: none; text-align: center; padding: 2rem; color: #aaa;">
+            <div style="font-size: 2rem; margin-bottom: 0.5rem;">📭</div>
+            <div>No hunt queries available</div>
+            <div style="font-size: 0.85rem; margin-top: 0.5rem;">Create some hunt queries first to schedule them</div>
+          </div>
+          
+          <!-- Query list will be populated here -->
+          <div id="queryList" style="display: none; padding: 1rem;">
+            <!-- Checkboxes will be dynamically added here -->
+          </div>
+        </div>
+        <div style="margin-top: 0.5rem; color: #aaa; font-size: 0.85em; display: flex; align-items: center;">
+          <span>💡 Select one or more queries to include in this schedule</span>
+          <button id="selectAllQueriesBtn" style="margin-left: auto; background: transparent; border: 1px solid #00ff41; color: #00ff41; padding: 0.3rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">Select All</button>
+          <button id="clearAllQueriesBtn" style="margin-left: 0.5rem; background: transparent; border: 1px solid #ff4444; color: #ff4444; padding: 0.3rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">Clear All</button>
+        </div>
+      </div>
+      
+      <!-- Right Column: Schedule Days and Time -->
+      <div>
+        <!-- Schedule Days -->
+        <div style="margin-bottom: 2rem;">
+          <label style="color:#00ff41; display: block; margin-bottom: 0.7rem; font-weight: 600; font-size: 1.1rem;">
+            <i style="margin-right: 0.5rem;">📅</i>Schedule Days
+          </label>
+          <div style="background: linear-gradient(135deg, #101c11, #0a140b); border: 2px solid #00ff41; border-radius: 8px; padding: 1rem;">
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.8rem;">
+              <label class="day-checkbox" style="color:#7fff7f; display: flex; align-items: center; cursor: pointer; padding: 0.5rem; border-radius: 6px; transition: all 0.3s ease;">
+                <input type="checkbox" id="scheduleMonday" value="Monday" style="margin-right: 0.5rem; accent-color: #00ff41; transform: scale(1.2);"> 
+                <span style="font-weight: 500;">Monday</span>
+              </label>
+              <label class="day-checkbox" style="color:#7fff7f; display: flex; align-items: center; cursor: pointer; padding: 0.5rem; border-radius: 6px; transition: all 0.3s ease;">
+                <input type="checkbox" id="scheduleTuesday" value="Tuesday" style="margin-right: 0.5rem; accent-color: #00ff41; transform: scale(1.2);"> 
+                <span style="font-weight: 500;">Tuesday</span>
+              </label>
+              <label class="day-checkbox" style="color:#7fff7f; display: flex; align-items: center; cursor: pointer; padding: 0.5rem; border-radius: 6px; transition: all 0.3s ease;">
+                <input type="checkbox" id="scheduleWednesday" value="Wednesday" style="margin-right: 0.5rem; accent-color: #00ff41; transform: scale(1.2);"> 
+                <span style="font-weight: 500;">Wednesday</span>
+              </label>
+              <label class="day-checkbox" style="color:#7fff7f; display: flex; align-items: center; cursor: pointer; padding: 0.5rem; border-radius: 6px; transition: all 0.3s ease;">
+                <input type="checkbox" id="scheduleThursday" value="Thursday" style="margin-right: 0.5rem; accent-color: #00ff41; transform: scale(1.2);"> 
+                <span style="font-weight: 500;">Thursday</span>
+              </label>
+              <label class="day-checkbox" style="color:#7fff7f; display: flex; align-items: center; cursor: pointer; padding: 0.5rem; border-radius: 6px; transition: all 0.3s ease;">
+                <input type="checkbox" id="scheduleFriday" value="Friday" style="margin-right: 0.5rem; accent-color: #00ff41; transform: scale(1.2);"> 
+                <span style="font-weight: 500;">Friday</span>
+              </label>
+              <label class="day-checkbox" style="color:#7fff7f; display: flex; align-items: center; cursor: pointer; padding: 0.5rem; border-radius: 6px; transition: all 0.3s ease;">
+                <input type="checkbox" id="scheduleSaturday" value="Saturday" style="margin-right: 0.5rem; accent-color: #00ff41; transform: scale(1.2);"> 
+                <span style="font-weight: 500;">Saturday</span>
+              </label>
+              <label class="day-checkbox" style="color:#7fff7f; display: flex; align-items: center; cursor: pointer; padding: 0.5rem; border-radius: 6px; transition: all 0.3s ease;">
+                <input type="checkbox" id="scheduleSunday" value="Sunday" style="margin-right: 0.5rem; accent-color: #00ff41; transform: scale(1.2);"> 
+                <span style="font-weight: 500;">Sunday</span>
+              </label>
+            </div>
+            <div style="margin-top: 1rem; display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem;">
+              <button id="selectWeekdaysBtn" style="background: transparent; border: 1px solid #00ff41; color: #00ff41; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">Weekdays</button>
+              <button id="selectWeekendsBtn" style="background: transparent; border: 1px solid #00ff41; color: #00ff41; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">Weekends</button>
+              <button id="selectAllDaysBtn" style="background: transparent; border: 1px solid #00ff41; color: #00ff41; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">Every Day</button>
+              <button id="clearAllDaysBtn" style="background: transparent; border: 1px solid #ff4444; color: #ff4444; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">Clear All</button>
+            </div>
+          </div>
+          <div style="margin-top: 0.5rem; color: #aaa; font-size: 0.85em;">💡 Select the days when this hunt should run automatically</div>
+        </div>
+          <!-- Schedule Time -->
+        <div>
+          <label style="color:#00ff41; display: block; margin-bottom: 0.7rem; font-weight: 600; font-size: 1.1rem;">
+            <i style="margin-right: 0.5rem;">⏰</i>Execution Time (UTC)
+          </label>
+          <input id="scheduleTime" type="time" value="09:00" 
+                 style="padding: 0.8rem; background: linear-gradient(135deg, #101c11, #0a140b); color: #7fff7f; border: 2px solid #00ff41; border-radius: 8px; font-size: 1rem;" />
+          <div style="margin-top: 0.5rem; color: #aaa; font-size: 0.85em;">💡 Choose when the scheduled hunt should execute on the selected days (all times in UTC)</div>
+        </div>
+      </div>
+      
+    </div>
+    
+    <!-- Action Buttons -->
+    <div style="border-top: 1px solid #00ff41; padding-top: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+      <div style="color: #aaa; font-size: 0.9em;">
+        <span id="scheduleValidationMessage" style="color: #ff4444; display: none;"></span>
+      </div>      <div style="display: flex; gap: 1rem;">
+        <button id="cancelScheduleBtn" class="cta-button undo-button" style="padding: 0.8rem 1.5rem; font-size: 1rem; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;">
+          <span>Cancel</span>
+        </button>
+        <button id="saveScheduleBtn" class="cta-button" style="padding: 0.8rem 2rem; font-size: 1rem; border-radius: 8px; background: linear-gradient(135deg, #00ff41, #1aff5c); box-shadow: 0 4px 15px rgba(0,255,65,0.3); display: inline-flex; align-items: center; justify-content: center;">
+          <span id="saveScheduleBtnText">Create Schedule</span>
+          <div id="saveScheduleSpinner" style="display:none; margin-left:8px; width:18px; height:18px; border: 2px solid #142a17; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -87,10 +242,10 @@
 <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/lint/lint.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/hint/show-hint.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/lint/lint.css">
-{% if FUNCURL and FUNCKEY %}
+{% if FUNCTION_APP_BASE_URL and FUNCTION_KEY %}
 <script>
-window.FUNCURL = "{{ FUNCURL }}";
-window.FUNCKEY = "{{ FUNCKEY }}";
+window.FUNCTION_APP_BASE_URL = "{{ FUNCTION_APP_BASE_URL }}";
+window.FUNCTION_KEY = "{{ FUNCTION_KEY }}";
 </script>
 {% endif %}
 <script src="{{ url_for('static', filename='js/HuntManager.js') }}?v=20250620173500&t={{ range(1000, 9999) | random }}"></script>
@@ -366,26 +521,6 @@ window.showAddQueryModal = function() {
         saveBtn.disabled = false;
         const saveText = document.getElementById('saveQueryBtnText');
         if (saveText) saveText.textContent = 'Save';
-      }
-        // Set up AI robot button event listener
-      const robotBtn = document.getElementById('analyzeHuntKqlBtn');
-      if (robotBtn) {
-        // Remove any existing event listeners first
-        robotBtn.onclick = null;
-        
-        robotBtn.onclick = function(e) {
-          console.log('Robot button clicked in add mode!');
-          e.preventDefault();
-          e.stopPropagation();
-          if (typeof window.analyzeHuntKqlQuery === 'function') {
-            window.analyzeHuntKqlQuery();
-          } else {
-            console.error('analyzeHuntKqlQuery function not available');
-          }
-        };
-        console.log('Hunt AI robot button event listener attached');
-      } else {
-        console.warn('Hunt AI robot button not found');
       }
     } else {
       console.error('Failed to initialize CodeMirror');
@@ -854,5 +989,571 @@ window.showQueryResults = function(data, queryName) {
     resultsContainer.scrollIntoView();
   }
 };
+
+// Scheduled Hunts functionality
+document.getElementById('showScheduledHuntsBtn').addEventListener('click', function() {
+  const container = document.getElementById('scheduled-hunts-container');
+  const tableContainer = document.getElementById('scheduled-hunts-table');
+  const isVisible = container.style.display === 'flex';
+  
+  // Hide all containers first
+  document.getElementById('results-container').style.display = 'none';
+  container.style.display = 'none';
+  
+  if (!isVisible) {
+    // Show scheduled hunts container
+    container.style.display = 'flex';
+    
+    // Always destroy existing grid first and clear container
+    if (window.scheduledHuntsGrid) {
+      try {
+        window.scheduledHuntsGrid.destroy();
+      } catch (e) {
+        console.warn('Error destroying scheduled hunts grid:', e);
+      }
+      window.scheduledHuntsGrid = null;
+    }
+    
+    // Clear the container completely
+    if (tableContainer) {
+      tableContainer.innerHTML = '';
+    }
+    
+    // Create new grid for scheduled hunts
+    window.scheduledHuntsGrid = new gridjs.Grid({      columns: [
+        { 
+          id: 'queryName', 
+          name: 'Query Names', 
+          width: '350px', 
+          sort: true,          formatter: (cell, row) => {
+            return window.formatQueryNames(cell, 4);
+          }
+        },
+        { id: 'schedule', name: 'Schedule', width: '250px', sort: true },
+        { id: 'status', name: 'Status', width: '120px', sort: true }
+      ],
+      data: [], // Initially empty, will be populated by server
+      search: true,
+      sort: true,
+      resizable: true,
+      pagination: { 
+        enabled: true, 
+        limit: 25, 
+        summary: true 
+      },
+      autoWidth: false,
+      width: '100%',
+      style: {
+        table: { width: '100%' }
+      }
+    });
+    
+    // Render with timeout to ensure container is ready
+    setTimeout(() => {
+      try {
+        window.scheduledHuntsGrid.render(tableContainer);
+        console.log('Scheduled hunts grid created and rendered');
+        
+        // Fetch and populate scheduled hunts data after render
+        fetchScheduledHuntsData();
+      } catch (renderError) {
+        console.error('Scheduled hunts grid render error:', renderError);
+        tableContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #ff6b6b;">Error rendering scheduled hunts table</div>';
+      }
+    }, 100);
+  }
+});
+
+// Close button for scheduled hunts container
+document.getElementById('closeScheduledHuntsBtn').addEventListener('click', function() {
+  const container = document.getElementById('scheduled-hunts-container');
+  container.style.display = 'none';
+  
+  // Destroy the grid instance
+  if (window.scheduledHuntsGrid) {
+    try {
+      window.scheduledHuntsGrid.destroy();
+    } catch (e) {
+      console.warn('Error destroying scheduled hunts grid:', e);
+    }
+    window.scheduledHuntsGrid = null;
+    console.log('Scheduled hunts grid destroyed');
+  }
+  
+  // Clear the container
+  const tableContainer = document.getElementById('scheduled-hunts-table');
+  if (tableContainer) {
+    tableContainer.innerHTML = '';
+  }
+});
+
+// Function to fetch scheduled hunts data from the server
+async function fetchScheduledHuntsData() {
+  // Get tenant ID from dropdown
+  function getTenantId() {
+    const tenantDropdown = document.getElementById('tenantDropdown');
+    return tenantDropdown ? tenantDropdown.value.trim() : '';
+  }
+  
+  const tenantId = getTenantId();
+  if (!tenantId) {
+    console.error('No tenant selected for scheduled hunts');
+    const tableContainer = document.getElementById('scheduled-hunts-table');
+    if (tableContainer) {
+      tableContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #ff6b6b;">Please select a tenant first</div>';
+    }
+    return;
+  }
+  
+  console.log('Fetching scheduled hunts for tenant:', tenantId);
+  
+  try {
+    // Show loading state
+    if (typeof window.showContentLoading === 'function') {
+      window.showContentLoading('Loading scheduled hunts...');
+    }
+    
+    // Call the Flask backend API
+    const response = await fetch('/api/hunt/schedules', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Tenant-ID': tenantId
+      }
+    });
+    
+    const result = await response.json();
+    console.log('Scheduled hunts API response:', result);
+    
+    if (!response.ok) {
+      throw new Error(result.error || `HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    if (result.success && result.schedules && Array.isArray(result.schedules)) {
+      // Transform the API response to grid format
+      const gridData = result.schedules.map(schedule => {
+        // Extract data from the schedule object
+        const scheduleId = schedule.ScheduleId || 'N/A';
+        const clientName = schedule.ClientName || 'N/A';
+        const enabled = schedule.Enabled ? 'Enabled' : 'Disabled';
+        const createdDate = schedule.CreatedDate ? new Date(schedule.CreatedDate).toLocaleDateString() : 'N/A';
+          // Extract query names if available - keep as array for better formatting
+        let queryNames = [];
+        if (schedule.HuntSchedule && schedule.HuntSchedule.QueryNames && Array.isArray(schedule.HuntSchedule.QueryNames)) {
+          queryNames = schedule.HuntSchedule.QueryNames;
+        }
+        
+        // Extract schedule days if available
+        let scheduleDays = 'N/A';
+        if (schedule.HuntSchedule && schedule.HuntSchedule.Days && Array.isArray(schedule.HuntSchedule.Days)) {
+          scheduleDays = schedule.HuntSchedule.Days.join(', ');
+        }
+        
+        return [scheduleId, queryNames, scheduleDays, enabled];
+      });
+      
+      // Update the grid columns to match the new data structure
+      if (window.scheduledHuntsGrid) {
+        try {
+          window.scheduledHuntsGrid.updateConfig({            columns: [
+              { name: 'Schedule ID', width: '200px', sort: true },
+              { name: 'Query Names', width: '350px', sort: true },
+              { name: 'Schedule Days', width: '250px', sort: true },
+              { name: 'Status', width: '120px', sort: true }
+            ],
+            data: gridData
+          }).forceRender();
+          
+          console.log('Scheduled hunts data updated with', gridData.length, 'records');
+        } catch (error) {
+          console.error('Error updating scheduled hunts grid:', error);
+          const tableContainer = document.getElementById('scheduled-hunts-table');
+          if (tableContainer) {
+            tableContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #ff6b6b;">Error updating scheduled hunts table</div>';
+          }
+        }
+      } else {
+        console.error('Scheduled hunts grid not available');
+      }
+    } else {
+      // Handle empty results
+      if (window.scheduledHuntsGrid) {
+        try {
+          window.scheduledHuntsGrid.updateConfig({
+            data: []
+          }).forceRender();
+        } catch (error) {
+          console.warn('Error clearing grid data:', error);
+        }
+      }
+      console.log('No scheduled hunts found for tenant:', tenantId);
+    }
+    
+  } catch (error) {
+    console.error('Error fetching scheduled hunts:', error);
+    
+    // Show error in the table container
+    const tableContainer = document.getElementById('scheduled-hunts-table');
+    if (tableContainer) {
+      tableContainer.innerHTML = `<div style="padding: 20px; text-align: center; color: #ff6b6b;">Error loading scheduled hunts: ${error.message}</div>`;
+    }
+    
+    // Show user-friendly error
+    if (typeof window.showErrorMessage === 'function') {
+      window.showErrorMessage('Failed to load scheduled hunts: ' + error.message);
+    } else {
+      alert('Failed to load scheduled hunts: ' + error.message);
+    }
+  } finally {
+    // Hide loading state
+    if (typeof window.hideContentLoading === 'function') {
+      window.hideContentLoading();
+    }
+  }
+}
+
+// Action handlers for enable/disable/delete
+window.enableDisableSchedule = async function(scheduleId, enable) {
+  // Get tenant ID from dropdown
+  function getTenantId() {
+    const tenantDropdown = document.getElementById('tenantDropdown');
+    return tenantDropdown ? tenantDropdown.value.trim() : '';
+  }
+  
+  const action = enable ? 'enable' : 'disable';
+  console.log(`${action} schedule:`, scheduleId);
+  
+  const tenantId = getTenantId();
+  if (!tenantId) {
+    alert('Please select a tenant first');
+    return;
+  }
+  
+  if (!confirm(`${enable ? 'Enable' : 'Disable'} scheduled hunt "${scheduleId}"?`)) {
+    return;
+  }
+  
+  try {
+    if (typeof window.showContentLoading === 'function') {
+      window.showContentLoading(`${enable ? 'Enabling' : 'Disabling'} scheduled hunt...`);
+    }
+    
+    const response = await fetch(`/api/hunt/schedules/${encodeURIComponent(scheduleId)}/${action}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        TenantId: tenantId
+      })
+    });
+    
+    const result = await response.json();
+    console.log(`Schedule ${action} response:`, result);
+    
+    if (response.ok && (result.Status === 'Success' || result.success)) {
+      console.log(`Schedule ${action}d successfully:`, result);
+      // Refresh the scheduled hunts table
+      await fetchScheduledHuntsData();
+      
+      // Show success message
+      if (typeof window.showSuccessMessage === 'function') {
+        window.showSuccessMessage(`Scheduled hunt ${enable ? 'enabled' : 'disabled'} successfully`);
+      }
+    } else {
+      const errorMsg = result.error || result.Message || 'Unknown error';
+      console.error(`Error ${action}ing schedule:`, result);
+      alert(`Failed to ${action} scheduled hunt: ${errorMsg}`);
+    }
+  } catch (error) {
+    console.error(`Error ${action}ing schedule:`, error);
+    alert(`Error ${action}ing scheduled hunt: ${error.message}`);
+  } finally {
+    if (typeof window.hideContentLoading === 'function') {
+      window.hideContentLoading();
+    }
+  }
+};
+
+window.deleteSchedule = async function(scheduleId) {
+  // Get tenant ID from dropdown
+  function getTenantId() {
+    const tenantDropdown = document.getElementById('tenantDropdown');
+    return tenantDropdown ? tenantDropdown.value.trim() : '';
+  }
+  
+  console.log('Delete schedule:', scheduleId);
+  
+  const tenantId = getTenantId();
+  if (!tenantId) {
+    alert('Please select a tenant first');
+    return;
+  }
+  
+  if (!confirm(`Delete scheduled hunt "${scheduleId}"? This action cannot be undone.`)) {
+    return;
+  }
+  
+  try {
+    if (typeof window.showContentLoading === 'function') {
+      window.showContentLoading('Deleting scheduled hunt...');
+    }
+    
+    const response = await fetch(`/api/hunt/schedules/${encodeURIComponent(scheduleId)}?TenantId=${encodeURIComponent(tenantId)}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+    
+    const result = await response.json();
+    console.log('Schedule delete response:', result);
+    
+    if (response.ok && (result.Status === 'Success' || result.success)) {
+      console.log('Schedule deleted successfully:', result);
+      // Refresh the scheduled hunts table
+      await fetchScheduledHuntsData();
+      
+      // Show success message
+      if (typeof window.showSuccessMessage === 'function') {
+        window.showSuccessMessage('Scheduled hunt deleted successfully');
+      }
+    } else {
+      const errorMsg = result.error || result.Message || 'Unknown error';
+      console.error('Error deleting schedule:', result);
+      alert(`Failed to delete scheduled hunt: ${errorMsg}`);
+    }
+  } catch (error) {
+    console.error('Error deleting schedule:', error);
+    alert(`Error deleting scheduled hunt: ${error.message}`);
+  } finally {
+    if (typeof window.hideContentLoading === 'function') {
+      window.hideContentLoading();
+    }
+  }
+};
+
+// Query Names Display Enhancement Functions
+window.formatQueryNames = function(queryNames, maxVisible = 4) {
+    if (!queryNames || (Array.isArray(queryNames) && queryNames.length === 0)) {
+        return gridjs.html('<span class="query-names-truncated">No queries</span>');
+    }
+    
+    // Handle both string (comma-separated) and array formats
+    let names = [];
+    if (typeof queryNames === 'string') {
+        names = queryNames.split(',').map(name => name.trim()).filter(name => name.length > 0);
+    } else if (Array.isArray(queryNames)) {
+        names = queryNames.filter(name => name && name.length > 0);
+    } else {
+        return gridjs.html('<span class="query-names-truncated">Invalid format</span>');
+    }
+    
+    if (names.length === 0) {
+        return gridjs.html('<span class="query-names-truncated">No queries</span>');
+    }
+    
+    const cellId = 'query-names-' + Math.random().toString(36).substr(2, 9);
+    
+    if (names.length <= maxVisible) {
+        // Short list - show all as tags
+        const tags = names.map(name => 
+            `<span class="query-name-tag" title="${escapeHtml(name)}">${escapeHtml(truncateText(name, 15))}</span>`
+        ).join('');
+        
+        return gridjs.html(`
+            <div class="query-names-cell" id="${cellId}">
+                <div class="query-names-content">
+                    ${tags}
+                </div>
+            </div>
+        `);
+    } else {
+        // Long list - show first 4 with tooltip for the rest
+        const visibleNames = names.slice(0, maxVisible);
+        const hiddenNames = names.slice(maxVisible);
+        const hiddenCount = hiddenNames.length;
+        
+        const visibleTags = visibleNames.map(name => 
+            `<span class="query-name-tag" title="${escapeHtml(name)}">${escapeHtml(truncateText(name, 15))}</span>`
+        ).join('');
+        
+        // Create tooltip content with all hidden names
+        const tooltipContent = hiddenNames.map(name => escapeHtml(name)).join('\n');
+        
+        return gridjs.html(`
+            <div class="query-names-cell" id="${cellId}">
+                <div class="query-names-content">
+                    ${visibleTags}
+                    <span class="query-names-more" 
+                          title="${tooltipContent}"
+                          onmouseenter="showQueryTooltip(event, ${JSON.stringify(hiddenNames).replace(/"/g, '&quot;')})"
+                          onmouseleave="hideQueryTooltip()">
+                        +${hiddenCount} more
+                    </span>
+                </div>
+            </div>
+        `);
+    }
+};
+
+window.showQueryTooltip = function(event, hiddenNames) {
+    // Remove existing tooltip
+    hideQueryTooltip();
+    
+    const tooltip = document.createElement('div');
+    tooltip.id = 'query-names-tooltip';
+    tooltip.className = 'query-names-tooltip visible';
+    
+    const tags = hiddenNames.map(name => 
+        `<span class="query-name-tag">${escapeHtml(name)}</span>`
+    ).join('');
+    
+    tooltip.innerHTML = `
+        <div style="font-weight: bold; color: #00ff41; margin-bottom: 8px; border-bottom: 1px solid #00ff41; padding-bottom: 4px;">
+            Additional Queries (${hiddenNames.length})
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+            ${tags}
+        </div>
+    `;
+    
+    document.body.appendChild(tooltip);
+    
+    // Position tooltip near the mouse
+    const rect = event.target.getBoundingClientRect();
+    tooltip.style.left = Math.min(rect.left, window.innerWidth - tooltip.offsetWidth - 20) + 'px';
+    tooltip.style.top = (rect.bottom + 5) + 'px';
+    
+    // Adjust if tooltip goes off screen
+    if (parseInt(tooltip.style.top) + tooltip.offsetHeight > window.innerHeight) {
+        tooltip.style.top = (rect.top - tooltip.offsetHeight - 5) + 'px';
+    }
+};
+
+window.hideQueryTooltip = function() {
+    const tooltip = document.getElementById('query-names-tooltip');
+    if (tooltip) {
+        tooltip.remove();
+    }
+};
+
+window.toggleQueryNames = function(cellId, allNames) {
+    const contentDiv = document.getElementById(cellId + '-content');
+    if (!contentDiv) return;
+    
+    const isExpanded = contentDiv.classList.contains('expanded');
+    
+    if (isExpanded) {
+        // Collapse - show truncated version
+        const maxVisible = 3;
+        const visibleNames = allNames.slice(0, maxVisible);
+        const hiddenCount = allNames.length - maxVisible;
+        
+        const visibleTags = visibleNames.map(name => 
+            `<span class="query-name-tag" title="${escapeHtml(name)}">${escapeHtml(truncateText(name, 20))}</span>`
+        ).join('');
+        
+        contentDiv.innerHTML = `
+            ${visibleTags}
+            <span class="query-names-toggle" onclick="toggleQueryNames('${cellId}', ${JSON.stringify(allNames).replace(/"/g, '&quot;')})">
+                +${hiddenCount} more
+            </span>
+        `;
+        contentDiv.classList.remove('expanded');
+    } else {
+        // Expand - show all names
+        if (allNames.length > 15) {
+            // For very long lists, use modal instead
+            showQueryNamesModal(allNames);
+            return;
+        }
+        
+        const allTags = allNames.map(name => 
+            `<span class="query-name-tag" title="${escapeHtml(name)}">${escapeHtml(name)}</span>`
+        ).join('');
+        
+        contentDiv.innerHTML = `
+            ${allTags}
+            <span class="query-names-toggle" onclick="toggleQueryNames('${cellId}', ${JSON.stringify(allNames).replace(/"/g, '&quot;')})">
+                Show less
+            </span>
+        `;
+        contentDiv.classList.add('expanded');
+    }
+};
+
+window.showQueryNamesModal = function(queryNames) {
+    // Remove existing modal if any
+    const existingModal = document.getElementById('queryNamesModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    const tags = queryNames.map(name => 
+        `<span class="query-name-tag">${escapeHtml(name)}</span>`
+    ).join('');
+    
+    const modal = document.createElement('div');
+    modal.id = 'queryNamesModal';
+    modal.className = 'query-names-modal';
+    modal.style.display = 'flex';
+    
+    modal.innerHTML = `
+        <div class="query-names-modal-content">
+            <h3>Query Names (${queryNames.length} total)</h3>
+            <div class="query-names-list">
+                ${tags}
+            </div>
+            <button class="query-names-modal-close" onclick="closeQueryNamesModal()">Close</button>
+            <div style="clear: both;"></div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Close on background click
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            closeQueryNamesModal();
+        }
+    });
+};
+
+window.closeQueryNamesModal = function() {
+    const modal = document.getElementById('queryNamesModal');
+    if (modal) {
+        modal.remove();
+    }
+};
+
+// Utility functions
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function truncateText(text, maxLength) {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength - 3) + '...';
+}
+
+// Ensure scheduled hunts table loads on page load and tenant change
+window.addEventListener('DOMContentLoaded', function() {
+    // Initial load
+    if (typeof fetchScheduledHuntsData === 'function') {
+        fetchScheduledHuntsData();
+    }
+    // Refresh on tenant change
+    var tenantDropdown = document.getElementById('tenantDropdown');
+    if (tenantDropdown) {
+        tenantDropdown.addEventListener('change', function() {
+            if (typeof fetchScheduledHuntsData === 'function') {
+                fetchScheduledHuntsData();
+            }
+        });
+    }
+});
 </script>
 {% endblock %}

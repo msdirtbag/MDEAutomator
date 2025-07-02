@@ -178,15 +178,12 @@
             </div>
               <!-- KQL Query Section -->
             <div style="margin-bottom: 20px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div style="margin-bottom: 10px;">
                     <h3 style="color: #00ff41; margin: 0; border-bottom: 1px solid #00ff41; padding-bottom: 5px;">Detection Query</h3>
-                    <button id="analyzeKqlBtn" class="ai-robot-btn" title="Analyze KQL Query with AI" style="background: linear-gradient(135deg, #00ff41, #1aff5c); border: 1px solid #00ff41; color: #101c11; font-size: 1.2em; padding: 0.3em 0.6em; border-radius: 50%; cursor: pointer; margin-left: 10px;">
-                        🤖
-                    </button>
                 </div>
                 <div id="kqlEditor" style="width: 100%; height: 300px; border: 1px solid #00ff41; border-radius: 4px; overflow: hidden;"></div>
                 <div style="margin-top: 5px; color: #aaa; font-size: 0.85em;">
-                    💡 Write your KQL query here. Use Ctrl+Space for autocomplete. Click 🤖 to get AI analysis and explanation.
+                    💡 Write your KQL query here. Use Ctrl+Space for autocomplete.
                 </div>
             </div>
             
@@ -320,8 +317,8 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/hint/show-hint.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/lint/lint.css">
 <script>
-window.FUNCURL = "{{ FUNCURL|default('') }}";
-window.FUNCKEY = "{{ FUNCKEY|default('') }}";
+window.FUNCTION_APP_BASE_URL = "{{ FUNCTION_APP_BASE_URL|default('') }}";
+window.FUNCTION_KEY = "{{ FUNCTION_KEY|default('') }}";
 
 // CodeMirror Editor integration for KQL
 window.codeMirrorKqlEditor = null;

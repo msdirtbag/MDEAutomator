@@ -919,33 +919,6 @@ div[class*="summary"] {
     color: #0f1f0f;
 }
 
-/* AI Robot Button for KQL */
-.ai-robot-btn {
-    background: linear-gradient(135deg, #00ff41, #1aff5c);
-    border: 1px solid #00ff41;
-    color: #101c11;
-    font-size: 1.2em;
-    padding: 0.3em 0.6em;
-    border-radius: 50%;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 2em;
-    min-height: 2em;
-}
-
-.ai-robot-btn:hover {
-    background: linear-gradient(135deg, #1aff5c, #33ff66);
-    transform: scale(1.1) rotate(5deg);
-    box-shadow: 0 4px 12px rgba(0, 255, 65, 0.3);
-}
-
-.ai-robot-btn:active {
-    transform: scale(0.95) rotate(-2deg);
-}
-
 /* Spinner animation */
 @keyframes spin {
     0% { transform: rotate(0deg); }

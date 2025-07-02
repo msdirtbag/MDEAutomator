@@ -23,8 +23,13 @@ class Config:
     MAIL_PASSWORD = None
 
     # Function app configuration
-    FUNCURL = os.environ.get('FUNCURL')
-    FUNCKEY = os.environ.get('FUNCKEY')
+    FUNCTION_APP_BASE_URL = os.environ.get('FUNCTION_APP_BASE_URL')
+    FUNCTION_KEY = os.environ.get('FUNCTION_KEY')
+    
+    # WebUI sidecar configuration
+    # The sidecar container is always named "OpenWebUI"
+    OPENWEBUI_HOST = os.environ.get('OPENWEBUI_HOST', 'OpenWebUI')
+    OPENWEBUI_PORT = int(os.environ.get('OPENWEBUI_PORT', '8080'))
 
     @classmethod
     def init_app(cls, app):
@@ -52,11 +57,15 @@ class Config:
             if value is not None:
                 app.config[config] = value
 
-        # Add FUNCURL and FUNCKEY to app config if present
-        if cls.FUNCURL:
-            app.config['FUNCURL'] = cls.FUNCURL
-        if cls.FUNCKEY:
-            app.config['FUNCKEY'] = cls.FUNCKEY
+        # Add FUNCTION_APP_BASE_URL and FUNCTION_KEY to app config if present
+        if cls.FUNCTION_APP_BASE_URL:
+            app.config['FUNCTION_APP_BASE_URL'] = cls.FUNCTION_APP_BASE_URL
+        if cls.FUNCTION_KEY:
+            app.config['FUNCTION_KEY'] = cls.FUNCTION_KEY
+            
+        # Add WebUI sidecar configuration
+        app.config['OPENWEBUI_HOST'] = cls.OPENWEBUI_HOST
+        app.config['OPENWEBUI_PORT'] = cls.OPENWEBUI_PORT
 
         return app
 

@@ -100,3 +100,8 @@ body {
     background-color: var(--primary-color);
     color: #101c11;
 }
+
+
+/* Responsive styles */
+@media (max-width: 768px) {
+}
