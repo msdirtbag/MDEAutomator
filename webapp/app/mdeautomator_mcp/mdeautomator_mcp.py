@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Fixed Hybrid MCP server that properly handles initialization timing
+MDEAutomator MCP server
 """
 
 import asyncio
@@ -32,8 +32,8 @@ server_state = {
     "initialization_error": None
 }
 
-class FixedMCPHttpBridge(BaseHTTPRequestHandler):
-    """Fixed HTTP bridge that waits for proper MCP initialization"""
+class MCPHttpBridge(BaseHTTPRequestHandler):
+    """HTTP bridge that waits for proper MCP initialization"""
     
     def do_GET(self):
         """Handle GET requests"""
@@ -71,25 +71,6 @@ class FixedMCPHttpBridge(BaseHTTPRequestHandler):
         }
         self.wfile.write(json.dumps(response).encode())
     
-    def _handle_debug(self):
-        """Debug endpoint"""
-        debug_info = {
-            "server_state": {
-                "initialized": server_state["initialized"],
-                "mcp_server_exists": server_state["mcp_server"] is not None,
-                "initialization_error": server_state["initialization_error"]
-            },
-            "environment": {
-                "FUNCTION_APP_BASE_URL": os.getenv("FUNCTION_APP_BASE_URL", "NOT SET"),
-                "FUNCTION_KEY": "SET" if os.getenv("FUNCTION_KEY") else "NOT SET"
-            }
-        }
-        
-        self.send_response(200)
-        self.send_header('Content-Type', 'application/json')
-        self.end_headers()
-        self.wfile.write(json.dumps(debug_info, indent=2).encode())
-    
     def _handle_discover(self):
         """MCP discovery endpoint"""
         if not server_state["initialized"]:
@@ -102,7 +83,7 @@ class FixedMCPHttpBridge(BaseHTTPRequestHandler):
             
             discovery_response = {
                 "protocol": "mcp",
-                "version": "2024-11-05",
+                "version": "2025-03-26",
                 "capabilities": {
                     "tools": {"listChanged": True},
                     "logging": {}
@@ -301,7 +282,7 @@ class FixedMCPHttpBridge(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(error_response).encode())
     
     def log_message(self, format, *args):
-        pass  # Reduce HTTP server log noise
+        pass  
 
 
 async def initialize_mcp_server():
@@ -342,7 +323,7 @@ def start_http_server():
 
 async def main():
     """Main entry point"""
-    logger.info("🚀 Starting Fixed Hybrid MCP Server...")
+    logger.info("🚀 Starting MDEAutomator MCP Server...")
     
     # Start HTTP server in background thread
     http_thread = threading.Thread(target=start_http_server, daemon=True)
@@ -355,13 +336,11 @@ async def main():
         logger.info("🎉 Server ready!")
         logger.info("📡 Available endpoints:")
         logger.info("  - GET  /health - Health check")
-        logger.info("  - GET  /debug - Debug information")
         logger.info("  - GET  /mcp/discover - MCP discovery")
         logger.info("  - POST /mcp/execute - MCP execution")
         logger.info("  - POST /mcp - Standard MCP JSON-RPC")
     else:
         logger.error("❌ Server initialization failed")
-        logger.error("🔧 Use /debug endpoint for details")
     
     # Keep alive
     try:

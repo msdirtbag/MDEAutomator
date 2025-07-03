@@ -26,11 +26,6 @@ class Config:
     FUNCTION_APP_BASE_URL = os.environ.get('FUNCTION_APP_BASE_URL')
     FUNCTION_KEY = os.environ.get('FUNCTION_KEY')
     
-    # WebUI sidecar configuration
-    # The sidecar container is always named "OpenWebUI"
-    OPENWEBUI_HOST = os.environ.get('OPENWEBUI_HOST', 'OpenWebUI')
-    OPENWEBUI_PORT = int(os.environ.get('OPENWEBUI_PORT', '8080'))
-
     @classmethod
     def init_app(cls, app):
         """
@@ -62,10 +57,6 @@ class Config:
             app.config['FUNCTION_APP_BASE_URL'] = cls.FUNCTION_APP_BASE_URL
         if cls.FUNCTION_KEY:
             app.config['FUNCTION_KEY'] = cls.FUNCTION_KEY
-            
-        # Add WebUI sidecar configuration
-        app.config['OPENWEBUI_HOST'] = cls.OPENWEBUI_HOST
-        app.config['OPENWEBUI_PORT'] = cls.OPENWEBUI_PORT
 
         return app
 

@@ -97,7 +97,7 @@ EXPOSE 8080
 
 # Set entrypoint and default command - use fixed hybrid server
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["python", "hybrid_mcp_server_fixed.py"]
+CMD ["python", "mdeautomator_mcp.py"]
 
 # Container metadata
 ENV CONTAINER_VERSION="${VERSION}"

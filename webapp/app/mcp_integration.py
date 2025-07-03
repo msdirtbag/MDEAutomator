@@ -1,5 +1,5 @@
 """
-MCP Integration Module for MDEAutomator Flask Web App
+MCP Integration Module for MDEAutomator
 
 This module integrates all MCP components into the Flask web application,
 ensuring no functionality is lost while providing a clean interface.
@@ -18,10 +18,11 @@ from .mdeautomator_mcp.function_client import FunctionAppClient
 from .mdeautomator_mcp.tools import get_all_tools
 from .mdeautomator_mcp.models import (
     DeviceActionRequest,
-    DeviceIsolationRequest,
+    DeviceIsolationRequest, ## This should be removed because its the same as DeviceActionRequest
     HuntingRequest,
     IncidentRequest,
     ThreatIndicatorRequest,
+    CustomDetectionRequest, # This needs to be added to the imports everywhere
 )
 
 # Configure logging
@@ -176,36 +177,21 @@ class FlaskMCPBridge:
             logger.error(f"MCP execute failed: {e}")
             return {"error": str(e)}
     
-    def handle_ai_chat(self, message: str, context: str = "", execute_actions: bool = False, 
-                      tenant_id: str = "") -> Dict[str, Any]:
-        """Handle AI chat requests with optional automation"""
-        try:
-            arguments = {
-                "message": message,
-                "context": context,
-                "execute_actions": execute_actions,
-                "tenant_id": tenant_id
-            }
-            
-            result = self.call_tool_sync("mde_ai_chat", arguments)
-            return result
-            
-        except Exception as e:
-            logger.error(f"AI chat failed: {e}")
-            return {"error": str(e)}
-    
     def get_device_management_tools(self) -> List[str]:
         """Get list of device management tool names"""
         device_tools = [
             "mde_get_machines",
             "mde_isolate_device", 
             "mde_unisolate_device",
-            "mde_contain_device",
             "mde_restrict_app_execution",
+            "mde_unrestrict_app_execution",
             "mde_collect_investigation_package",
             "mde_run_antivirus_scan",
             "mde_stop_and_quarantine_file",
-            "mde_offboard_device"
+            "mde_run_live_response_script",
+            "mde_run_live_response_putfile",
+            "mde_run_live_response_getfile",
+            "mde_upload_live_response_file",
         ]
         return device_tools
     
@@ -221,11 +207,27 @@ class FlaskMCPBridge:
         ]
         return ti_tools
     
+    def get_custom_detections(self) -> List[str]:
+        """Get list of custom detection tool names"""
+        custom_detections = [
+            "mde_create_custom_detection",
+            "mde_update_custom_detection",
+            "mde_delete_custom_detection",
+            "mde_sync_custom_detections",
+            "mde_get_custom_detections",
+            "mde_get_custom_detection_by_id"
+        ]
+        return custom_detections
+    
+    
     def get_hunting_tools(self) -> List[str]:
         """Get list of hunting tool names"""
         hunting_tools = [
             "mde_run_hunting_query",
-            "mde_schedule_hunt",
+            "mde_create_scheduled_hunt",
+            "mde_enable_scheduled_hunt",
+            "mde_disable_scheduled_hunt",
+            "mde_delete_scheduled_hunt",
             "mde_get_hunt_results"
         ]
         return hunting_tools

@@ -60,6 +60,7 @@ try:
         HuntingRequest,
         IncidentRequest,
         ThreatIndicatorRequest,
+        CustomDetectionRequest,
     )
     from .tools import get_all_tools
 except ImportError:
@@ -71,6 +72,7 @@ except ImportError:
         HuntingRequest,
         IncidentRequest,
         ThreatIndicatorRequest,
+        CustomDetectionRequest,
     )
     from tools import get_all_tools
 
@@ -296,10 +298,18 @@ class MDEAutomatorMCPServer:
             return await self._handle_put_file(arguments)
         elif tool_name.startswith("mde_get_file"):
             return await self._handle_get_file(arguments)
+        elif tool_name.startswith("mde_run_live_response_putfile"):
+            return await self._handle_run_live_response_putfile(arguments)
+        elif tool_name.startswith("mde_run_live_response_getfile"):
+            return await self._handle_run_live_response_getfile(arguments)
+        elif tool_name.startswith("mde_upload_live_response_file"):
+            return await self._handle_upload_live_response_file(arguments)
               # Action Management Tools        elif tool_name.startswith("mde_get_actions"):
             return await self._handle_get_actions(arguments)
         elif tool_name.startswith("mde_cancel_actions"):
             return await self._handle_cancel_actions(arguments)
+        elif tool_name.startswith("mde_undo_actions"):
+            return await self._handle_undo_actions(arguments)
         elif tool_name.startswith("mde_get_action_status"):
             return await self._handle_get_action_status(arguments)
         elif tool_name.startswith("mde_get_live_response_output"):
@@ -322,10 +332,26 @@ class MDEAutomatorMCPServer:
         # Hunting Tools
         elif tool_name.startswith("mde_run_hunting_query"):
             return await self._handle_run_hunting_query(arguments)
-        elif tool_name.startswith("mde_schedule_hunt"):
-            return await self._handle_schedule_hunt(arguments)
+        elif tool_name.startswith("mde_create_scheduled_hunt"):
+            return await self._handle_create_scheduled_hunt(arguments)
+        elif tool_name.startswith("mde_enable_scheduled_hunt"):
+            return await self._handle_enable_scheduled_hunt(arguments)
+        elif tool_name.startswith("mde_disable_scheduled_hunt"):
+            return await self._handle_disable_scheduled_hunt(arguments)
+        elif tool_name.startswith("mde_delete_scheduled_hunt"):
+            return await self._handle_delete_scheduled_hunt(arguments)
         elif tool_name.startswith("mde_get_hunt_results"):
             return await self._handle_get_hunt_results(arguments)
+        elif tool_name.startswith("mde_get_queries"):
+            return await self._handle_get_queries(arguments)
+        elif tool_name.startswith("mde_get_query"):
+            return await self._handle_get_query(arguments)
+        elif tool_name.startswith("mde_add_query"):
+            return await self._handle_add_query(arguments)
+        elif tool_name.startswith("mde_update_query"):
+            return await self._handle_update_query(arguments)
+        elif tool_name.startswith("mde_undo_query"):
+            return await self._handle_undo_query(arguments)
             
         # Incident Management Tools
         elif tool_name.startswith("mde_get_incidents"):
@@ -338,14 +364,18 @@ class MDEAutomatorMCPServer:
             return await self._handle_add_incident_comment(arguments)
             
         # Custom Detection Tools
-        elif tool_name.startswith("mde_get_detection_rules"):
-            return await self._handle_get_detection_rules(arguments)
-        elif tool_name.startswith("mde_create_detection_rule"):
-            return await self._handle_create_detection_rule(arguments)
-        elif tool_name.startswith("mde_update_detection_rule"):
-            return await self._handle_update_detection_rule(arguments)
-        elif tool_name.startswith("mde_delete_detection_rule"):
-            return await self._handle_delete_detection_rule(arguments)
+        elif tool_name.startswith("mde_get_custom_detections"):
+            return await self._handle_get_custom_detections(arguments)
+        elif tool_name.startswith("mde_get_custom_detection_by_id"):
+            return await self._handle_get_custom_detection_by_id(arguments)
+        elif tool_name.startswith("mde_create_custom_detection"):
+            return await self._handle_create_custom_detection(arguments)
+        elif tool_name.startswith("mde_update_custom_detection"):
+            return await self._handle_update_custom_detection(arguments)
+        elif tool_name.startswith("mde_delete_custom_detection"):
+            return await self._handle_delete_custom_detection(arguments)
+        elif tool_name.startswith("mde_sync_custom_detections"):
+            return await self._handle_sync_custom_detections(arguments)
             
         # Information Gathering Tools
         elif tool_name.startswith("mde_get_file_info"):
@@ -360,6 +390,10 @@ class MDEAutomatorMCPServer:
         # AI Chat Integration Tool
         elif tool_name.startswith("mde_ai_chat"):
             return await self._handle_ai_chat(arguments)
+            
+        # Tenant Management Tools
+        elif tool_name.startswith("mde_get_tenant_ids"):
+            return await self._handle_get_tenant_ids(arguments)
             
         else:
             raise ValueError(f"Unknown tool: {tool_name}")
@@ -514,6 +548,42 @@ class MDEAutomatorMCPServer:
         }
         return await self.function_client.call_function("MDEOrchestrator", payload)
 
+    async def _handle_run_live_response_putfile(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle Live Response PutFile command."""
+        payload = {
+            "TenantId": arguments.get("tenant_id", ""),
+            "Function": "InvokePutFile",
+            "DeviceIds": arguments.get("device_ids", []),
+            "fileName": arguments.get("file_name", "")
+        }
+        return await self.function_client.call_function("MDEOrchestrator", payload)
+
+    async def _handle_run_live_response_getfile(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle Live Response GetFile command."""
+        payload = {
+            "TenantId": arguments.get("tenant_id", ""),
+            "Function": "InvokeGetFile",
+            "DeviceIds": arguments.get("device_ids", []),
+            "filePath": arguments.get("file_path", "")
+        }
+        return await self.function_client.call_function("MDEOrchestrator", payload)
+
+    async def _handle_upload_live_response_file(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle uploading file to Live Response library."""
+        payload = {
+            "TenantId": arguments.get("tenant_id", ""),
+            "Function": "UploadToLibrary"
+        }
+        
+        # Handle different input methods
+        if arguments.get("file_content") and arguments.get("file_name"):
+            payload["fileContent"] = arguments.get("file_content")
+            payload["fileName"] = arguments.get("file_name")
+        elif arguments.get("file_path"):
+            payload["filePath"] = arguments.get("file_path")
+        
+        return await self.function_client.call_function("MDEOrchestrator", payload)
+
     # Action Management Handlers
     async def _handle_get_actions(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Handle get actions requests."""
@@ -525,6 +595,14 @@ class MDEAutomatorMCPServer:
 
     async def _handle_cancel_actions(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Handle cancel actions requests."""
+        payload = {
+            "TenantId": arguments.get("tenant_id", ""),
+            "Function": "UndoActions"
+        }
+        return await self.function_client.call_function("MDEAutomator", payload)
+
+    async def _handle_undo_actions(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle undo completed actions requests."""
         payload = {
             "TenantId": arguments.get("tenant_id", ""),
             "Function": "UndoActions"
@@ -662,6 +740,94 @@ class MDEAutomatorMCPServer:
         }
         return await self.function_client.call_function("MDEHuntManager", payload)
 
+    async def _handle_create_scheduled_hunt(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle creating scheduled hunt operations."""
+        payload = {
+            "TenantId": arguments.get("tenant_id", ""),
+            "Function": "CreateScheduledHunt",
+            "huntName": arguments.get("hunt_name", ""),
+            "query": arguments.get("query", ""),
+            "schedule": arguments.get("schedule", ""),
+            "description": arguments.get("description", "")
+        }
+        return await self.function_client.call_function("MDEHuntScheduler", payload)
+
+    async def _handle_enable_scheduled_hunt(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle enabling scheduled hunt operations."""
+        payload = {
+            "TenantId": arguments.get("tenant_id", ""),
+            "Function": "EnableScheduledHunt",
+            "huntId": arguments.get("hunt_id", "")
+        }
+        return await self.function_client.call_function("MDEHuntScheduler", payload)
+
+    async def _handle_disable_scheduled_hunt(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle disabling scheduled hunt operations."""
+        payload = {
+            "TenantId": arguments.get("tenant_id", ""),
+            "Function": "DisableScheduledHunt",
+            "huntId": arguments.get("hunt_id", "")
+        }
+        return await self.function_client.call_function("MDEHuntScheduler", payload)
+
+    async def _handle_delete_scheduled_hunt(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle deleting scheduled hunt operations."""
+        payload = {
+            "TenantId": arguments.get("tenant_id", ""),
+            "Function": "DeleteScheduledHunt",
+            "huntId": arguments.get("hunt_id", "")
+        }
+        return await self.function_client.call_function("MDEHuntScheduler", payload)
+
+    async def _handle_get_queries(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle getting all saved queries."""
+        payload = {
+            "TenantId": arguments.get("tenant_id", ""),
+            "Function": "GetQueries"
+        }
+        return await self.function_client.call_function("MDEAutomator", payload)
+
+    async def _handle_get_query(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle getting a specific saved query."""
+        payload = {
+            "TenantId": arguments.get("tenant_id", ""),
+            "Function": "GetQuery",
+            "QueryId": arguments.get("query_id", "")
+        }
+        return await self.function_client.call_function("MDEAutomator", payload)
+
+    async def _handle_add_query(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle adding a new saved query."""
+        payload = {
+            "TenantId": arguments.get("tenant_id", ""),
+            "Function": "AddQuery",
+            "queryName": arguments.get("query_name", ""),
+            "query": arguments.get("query", ""),
+            "description": arguments.get("description", "")
+        }
+        return await self.function_client.call_function("MDEAutomator", payload)
+
+    async def _handle_update_query(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle updating an existing saved query."""
+        payload = {
+            "TenantId": arguments.get("tenant_id", ""),
+            "Function": "UpdateQuery",
+            "QueryId": arguments.get("query_id", ""),
+            "queryName": arguments.get("query_name", ""),
+            "query": arguments.get("query", ""),
+            "description": arguments.get("description", "")
+        }
+        return await self.function_client.call_function("MDEAutomator", payload)
+
+    async def _handle_undo_query(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle undoing changes to a saved query."""
+        payload = {
+            "TenantId": arguments.get("tenant_id", ""),
+            "Function": "UndoQuery",
+            "QueryId": arguments.get("query_id", "")
+        }
+        return await self.function_client.call_function("MDEAutomator", payload)
+
     # Incident Management Handlers
     async def _handle_get_incidents(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Handle get incidents requests."""
@@ -710,16 +876,25 @@ class MDEAutomatorMCPServer:
         return await self.function_client.call_function("MDEIncidentManager", payload)
 
     # Custom Detection Handlers
-    async def _handle_get_detection_rules(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle get detection rules requests."""
+    async def _handle_get_custom_detections(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle get custom detections requests."""
         payload = {
             "TenantId": arguments.get("tenant_id", ""),
             "Function": "GetDetectionRules"
         }
         return await self.function_client.call_function("MDECDManager", payload)
 
-    async def _handle_create_detection_rule(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle create detection rule requests."""
+    async def _handle_get_custom_detection_by_id(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle get specific custom detection by ID requests."""
+        payload = {
+            "TenantId": arguments.get("tenant_id", ""),
+            "Function": "GetDetectionRule",
+            "RuleId": arguments.get("rule_id", "")
+        }
+        return await self.function_client.call_function("MDECDManager", payload)
+
+    async def _handle_create_custom_detection(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle create custom detection requests."""
         payload = {
             "TenantId": arguments.get("tenant_id", ""),
             "Function": "InstallDetectionRule",
@@ -727,8 +902,8 @@ class MDEAutomatorMCPServer:
         }
         return await self.function_client.call_function("MDECDManager", payload)
 
-    async def _handle_update_detection_rule(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle update detection rule requests."""
+    async def _handle_update_custom_detection(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle update custom detection requests."""
         payload = {
             "TenantId": arguments.get("tenant_id", ""),
             "Function": "UpdateDetectionRule",
@@ -737,12 +912,21 @@ class MDEAutomatorMCPServer:
         }
         return await self.function_client.call_function("MDECDManager", payload)
 
-    async def _handle_delete_detection_rule(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle delete detection rule requests."""
+    async def _handle_delete_custom_detection(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle delete custom detection requests."""
         payload = {
             "TenantId": arguments.get("tenant_id", ""),
             "Function": "UndoDetectionRule",
             "RuleId": arguments.get("rule_id", "")
+        }
+        return await self.function_client.call_function("MDECDManager", payload)
+
+    async def _handle_sync_custom_detections(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle sync custom detections requests."""
+        payload = {
+            "TenantId": arguments.get("tenant_id", ""),
+            "Function": "SyncDetectionRules",
+            "syncSource": arguments.get("sync_source", "")
         }
         return await self.function_client.call_function("MDECDManager", payload)
 
@@ -780,6 +964,14 @@ class MDEAutomatorMCPServer:
             "TenantId": arguments.get("tenant_id", ""),
             "Function": "GetLoggedInUsers",
             "DeviceIds": arguments.get("device_ids", [])
+        }
+        return await self.function_client.call_function("MDEAutomator", payload)
+
+    # Tenant Management Handlers
+    async def _handle_get_tenant_ids(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle get tenant IDs requests."""
+        payload = {
+            "Function": "GetTenantIds"
         }
         return await self.function_client.call_function("MDEAutomator", payload)
 

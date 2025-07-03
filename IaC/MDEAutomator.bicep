@@ -1192,6 +1192,9 @@ resource appsettings 'Microsoft.Web/sites/config@2022-09-01' = {
   properties: {
     FUNCTION_KEY: listKeys(resourceId('Microsoft.Web/sites/host', function01.name, 'default'), '2022-03-01').functionKeys.default
     FUNCTION_APP_BASE_URL: 'https://${function01.properties.defaultHostName}'
+    AZURE_AI_FOUNDRY_PROJECT_ENDPOINT: aiaccount.properties.endpoint
+    API_VERSION: '2025-05-15-preview'
+    AGENT_TOKEN: 'your_agent_token_here'
   }
 }
 

@@ -9,6 +9,21 @@ from typing import List
 from mcp.types import Tool
 
 
+def get_tenant_management_tools() -> List[Tool]:
+    """Get tenant management tools."""
+    return [
+        Tool(
+            name="mde_get_tenant_ids",
+            description="Retrieve all available tenant IDs configured for this MDEAutomator instance.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        )
+    ]
+
+
 def get_all_tools() -> List[Tool]:
     """Get all available MCP tools for MDEAutomator operations."""
     tools = []
@@ -39,6 +54,9 @@ def get_all_tools() -> List[Tool]:
     
     # AI Integration Tools
     tools.extend(get_ai_integration_tools())
+    
+    # Tenant Management Tools
+    tools.extend(get_tenant_management_tools())
     
     return tools
 
@@ -140,6 +158,25 @@ def get_device_management_tools() -> List[Tool]:
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "Array of device IDs to restrict"
+                    }
+                },
+                "required": ["tenant_id", "device_ids"]
+            }
+        ),
+        Tool(
+            name="mde_unrestrict_app_execution",
+            description="Remove application execution restrictions from devices, allowing all applications to run normally.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tenant_id": {
+                        "type": "string",
+                        "description": "Tenant ID for the operation"
+                    },
+                    "device_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Array of device IDs to unrestrict"
                     }
                 },
                 "required": ["tenant_id", "device_ids"]
@@ -330,6 +367,82 @@ def get_live_response_tools() -> List[Tool]:
             }
         ),
         Tool(
+            name="mde_run_live_response_putfile",
+            description="Push a file from the Live Response library to specified devices using the PutFile command.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tenant_id": {
+                        "type": "string",
+                        "description": "Tenant ID for the operation"
+                    },
+                    "device_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Array of device IDs to receive the file"
+                    },
+                    "file_name": {
+                        "type": "string",
+                        "description": "Name of the file in the Live Response library"
+                    }
+                },
+                "required": ["tenant_id", "device_ids", "file_name"]
+            }
+        ),
+        Tool(
+            name="mde_run_live_response_getfile",
+            description="Retrieve a file from specified devices using the GetFile Live Response command.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tenant_id": {
+                        "type": "string",
+                        "description": "Tenant ID for the operation"
+                    },
+                    "device_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Array of device IDs to retrieve file from"
+                    },
+                    "file_path": {
+                        "type": "string",
+                        "description": "Full path to the file on the device (e.g., 'C:\\Temp\\error.log')"
+                    }
+                },
+                "required": ["tenant_id", "device_ids", "file_path"]
+            }
+        ),
+        Tool(
+            name="mde_upload_live_response_file",
+            description="Upload a file to the Live Response library for use in Live Response sessions.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tenant_id": {
+                        "type": "string",
+                        "description": "Tenant ID for the operation"
+                    },
+                    "file_content": {
+                        "type": "string",
+                        "description": "Base64 encoded file content"
+                    },
+                    "file_name": {
+                        "type": "string",
+                        "description": "Name for the file in the library"
+                    },
+                    "file_path": {
+                        "type": "string",
+                        "description": "Local file path to upload (alternative to file_content)"
+                    }
+                },
+                "required": ["tenant_id"],
+                "anyOf": [
+                    {"required": ["file_content", "file_name"]},
+                    {"required": ["file_path"]}
+                ]
+            }
+        ),
+        Tool(
             name="mde_get_live_response_output",
             description="Retrieve the output of live response actions. Use this to get results from previously executed live response commands or scripts.",
             inputSchema={
@@ -402,6 +515,20 @@ def get_action_management_tools() -> List[Tool]:
                     }
                 },
                 "required": ["action_id"]
+            }
+        ),
+        Tool(
+            name="mde_undo_actions",
+            description="Undo all completed machine actions in the tenant. This reverses actions that have already been executed (e.g., unisolate previously isolated devices).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tenant_id": {
+                        "type": "string",
+                        "description": "Tenant ID for the operation"
+                    }
+                },
+                "required": []
             }
         )
     ]
@@ -579,8 +706,8 @@ def get_hunting_tools() -> List[Tool]:
             }
         ),
         Tool(
-            name="mde_schedule_hunt",
-            description="Schedule a hunting operation to run periodically with specified queries and schedule.",
+            name="mde_create_scheduled_hunt",
+            description="Create a new scheduled hunting operation to run periodically with specified queries and schedule.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -599,9 +726,67 @@ def get_hunting_tools() -> List[Tool]:
                     "schedule": {
                         "type": "string",
                         "description": "Schedule expression (e.g., cron format)"
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Description of the hunt operation"
                     }
                 },
                 "required": ["hunt_name", "query", "schedule"]
+            }
+        ),
+        Tool(
+            name="mde_enable_scheduled_hunt",
+            description="Enable a previously created scheduled hunt operation.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tenant_id": {
+                        "type": "string",
+                        "description": "Tenant ID for the operation"
+                    },
+                    "hunt_id": {
+                        "type": "string",
+                        "description": "Hunt ID to enable"
+                    }
+                },
+                "required": ["hunt_id"]
+            }
+        ),
+        Tool(
+            name="mde_disable_scheduled_hunt",
+            description="Disable a scheduled hunt operation.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tenant_id": {
+                        "type": "string",
+                        "description": "Tenant ID for the operation"
+                    },
+                    "hunt_id": {
+                        "type": "string",
+                        "description": "Hunt ID to disable"
+                    }
+                },
+                "required": ["hunt_id"]
+            }
+        ),
+        Tool(
+            name="mde_delete_scheduled_hunt",
+            description="Delete a scheduled hunt operation.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tenant_id": {
+                        "type": "string",
+                        "description": "Tenant ID for the operation"
+                    },
+                    "hunt_id": {
+                        "type": "string",
+                        "description": "Hunt ID to delete"
+                    }
+                },
+                "required": ["hunt_id"]
             }
         ),
         Tool(
@@ -620,6 +805,112 @@ def get_hunting_tools() -> List[Tool]:
                     }
                 },
                 "required": ["hunt_id"]
+            }
+        ),
+        Tool(
+            name="mde_get_queries",
+            description="Retrieve all saved hunting queries available in the tenant.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tenant_id": {
+                        "type": "string",
+                        "description": "Tenant ID for the operation"
+                    }
+                },
+                "required": []
+            }
+        ),
+        Tool(
+            name="mde_get_query",
+            description="Retrieve a specific saved hunting query by its ID.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tenant_id": {
+                        "type": "string",
+                        "description": "Tenant ID for the operation"
+                    },
+                    "query_id": {
+                        "type": "string",
+                        "description": "Query ID to retrieve"
+                    }
+                },
+                "required": ["query_id"]
+            }
+        ),
+        Tool(
+            name="mde_add_query",
+            description="Save a new hunting query for future use.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tenant_id": {
+                        "type": "string",
+                        "description": "Tenant ID for the operation"
+                    },
+                    "query_name": {
+                        "type": "string",
+                        "description": "Name for the query"
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "KQL query to save"
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Description of the query"
+                    }
+                },
+                "required": ["query_name", "query"]
+            }
+        ),
+        Tool(
+            name="mde_update_query",
+            description="Update an existing saved hunting query.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tenant_id": {
+                        "type": "string",
+                        "description": "Tenant ID for the operation"
+                    },
+                    "query_id": {
+                        "type": "string",
+                        "description": "Query ID to update"
+                    },
+                    "query_name": {
+                        "type": "string",
+                        "description": "Updated name for the query"
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Updated KQL query"
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Updated description of the query"
+                    }
+                },
+                "required": ["query_id"]
+            }
+        ),
+        Tool(
+            name="mde_undo_query",
+            description="Undo or revert changes to a saved hunting query.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tenant_id": {
+                        "type": "string",
+                        "description": "Tenant ID for the operation"
+                    },
+                    "query_id": {
+                        "type": "string",
+                        "description": "Query ID to undo changes for"
+                    }
+                },
+                "required": ["query_id"]
             }
         )
     ]
@@ -752,7 +1043,7 @@ def get_custom_detection_tools() -> List[Tool]:
     """Get custom detection tools."""
     return [
         Tool(
-            name="mde_get_detection_rules",
+            name="mde_get_custom_detections",
             description="Retrieve all custom detection rules from Microsoft Defender for Endpoint.",
             inputSchema={
                 "type": "object",
@@ -766,7 +1057,25 @@ def get_custom_detection_tools() -> List[Tool]:
             }
         ),
         Tool(
-            name="mde_create_detection_rule",
+            name="mde_get_custom_detection_by_id",
+            description="Retrieve a specific custom detection rule by ID from Microsoft Defender for Endpoint.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tenant_id": {
+                        "type": "string",
+                        "description": "Tenant ID for the operation"
+                    },
+                    "rule_id": {
+                        "type": "string",
+                        "description": "ID of the detection rule to retrieve"
+                    }
+                },
+                "required": ["rule_id"]
+            }
+        ),
+        Tool(
+            name="mde_create_custom_detection",
             description="Create a new custom detection rule in Microsoft Defender for Endpoint using a rule definition.",
             inputSchema={
                 "type": "object",
@@ -784,7 +1093,7 @@ def get_custom_detection_tools() -> List[Tool]:
             }
         ),
         Tool(
-            name="mde_update_detection_rule",
+            name="mde_update_custom_detection",
             description="Update an existing custom detection rule in Microsoft Defender for Endpoint.",
             inputSchema={
                 "type": "object",
@@ -806,7 +1115,7 @@ def get_custom_detection_tools() -> List[Tool]:
             }
         ),
         Tool(
-            name="mde_delete_detection_rule",
+            name="mde_delete_custom_detection",
             description="Delete a custom detection rule from Microsoft Defender for Endpoint.",
             inputSchema={
                 "type": "object",
@@ -821,6 +1130,28 @@ def get_custom_detection_tools() -> List[Tool]:
                     }
                 },
                 "required": ["rule_id"]
+            }
+        ),
+        Tool(
+            name="mde_sync_custom_detections",
+            description="Synchronize custom detection rules between environments or with external sources.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tenant_id": {
+                        "type": "string",
+                        "description": "Tenant ID for the operation"
+                    },
+                    "sync_source": {
+                        "type": "string",
+                        "description": "Source to sync from (e.g., 'storage', 'template', 'another_tenant')"
+                    },
+                    "sync_options": {
+                        "type": "object",
+                        "description": "Additional sync options and parameters"
+                    }
+                },
+                "required": ["sync_source"]
             }
         )
     ]
